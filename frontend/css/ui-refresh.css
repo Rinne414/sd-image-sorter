@@ -13480,3 +13480,16 @@ html:lang(zh) {
 html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
     max-width: 30em;
 }
+
+/* A right-click row that opens a page of more rows (pro look's Tools). */
+.context-menu-more {
+    display: inline-flex;
+    margin-left: auto;
+    padding-left: 12px;
+    color: var(--text-muted);
+}
+
+.context-menu-more .icon {
+    width: 14px;
+    height: 14px;
+}

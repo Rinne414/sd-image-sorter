@@ -464,6 +464,8 @@ window.I18nLang_en = {
     'gallery.aestheticStatusFailed': 'Could not check aesthetic scoring status',
     'gallery.aestheticProgressFailed': 'Failed to read aesthetic progress',
     'gallery.aestheticStartFailed': 'Failed to start aesthetic scoring',
+    'gallery.contextTools': 'Tools',
+    'gallery.contextBack': 'Back',
     'gallery.contextPreview': 'Preview',
     'gallery.contextSelectImage': 'Select Image',
     'gallery.contextDeselectImage': 'Deselect Image',

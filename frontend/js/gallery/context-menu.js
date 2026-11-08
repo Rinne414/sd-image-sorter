@@ -92,26 +92,26 @@ Object.assign(window.Gallery, {
             { label: labelWithScope('gallery.contextMoveImage', 'Move...'), icon: 'i-arrow-right', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'move', { source: 'context' }) },
             { label: labelWithScope('gallery.contextCopyImage', 'Copy...'), icon: 'i-file', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'copy', { source: 'context' }) },
             { type: 'separator' },
-            { pictureOnly: true, label: labelWithScope('gallery.contextSendToCensor', 'Send to Censor'), icon: 'i-grid', action: () => {
+            { tool: true, pictureOnly: true, label: labelWithScope('gallery.contextSendToCensor', 'Send to Censor'), icon: 'i-grid', action: () => {
                 if (typeof app.addToCensorQueue === 'function') {
                     app.addToCensorQueue(actionImageIds);
                 } else {
                     app.showToast?.(t('gallery.contextSendToCensorFailed', 'Failed to send image to Edit'), 'error');
                 }
             }},
-            { pictureOnly: true, label: labelWithScope('modal.addToDataset', 'Add to dataset'), icon: 'i-package', action: () => app.addToDatasetMaker?.(actionImageIds, { switchView: true, showToast: true }) },
-            { pictureOnly: true, label: t('gallery.contextFindSimilar', 'Find Similar'), icon: 'i-images', action: () => app.openSimilarFromImage?.(image.id) },
-            { pictureOnly: true, label: t('gallery.contextViewOnStyleMap', 'View on the Style Map'), icon: 'i-compass', action: () => window.StyleMap?.locateImage?.(image.id) },
-            { pictureOnly: true, label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: 'i-layers', action: () => window.ClipTools?.near?.(image.id) },
+            { tool: true, pictureOnly: true, label: labelWithScope('modal.addToDataset', 'Add to dataset'), icon: 'i-package', action: () => app.addToDatasetMaker?.(actionImageIds, { switchView: true, showToast: true }) },
+            { tool: true, pictureOnly: true, label: t('gallery.contextFindSimilar', 'Find Similar'), icon: 'i-images', action: () => app.openSimilarFromImage?.(image.id) },
+            { tool: true, pictureOnly: true, label: t('gallery.contextViewOnStyleMap', 'View on the Style Map'), icon: 'i-compass', action: () => window.StyleMap?.locateImage?.(image.id) },
+            { tool: true, pictureOnly: true, label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: 'i-layers', action: () => window.ClipTools?.near?.(image.id) },
             actionCount === 2
-                ? { pictureOnly: true, label: t('gallery.contextCompareTwo', 'Compare 2 images (CLIP)'), icon: 'i-scale', action: () => window.ClipTools?.compare?.(actionImageIds[0], actionImageIds[1]) }
+                ? { tool: true, pictureOnly: true, label: t('gallery.contextCompareTwo', 'Compare 2 images (CLIP)'), icon: 'i-scale', action: () => window.ClipTools?.compare?.(actionImageIds[0], actionImageIds[1]) }
                 : null,
-            { label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: 'i-flask', action: () => app.openPromptBuildFromImage?.(image.id) },
-            { label: t('gallery.contextSendToGenerator', 'Send to generator…'), icon: 'i-upload', action: () => window.SendToGenerator?.open?.(image.id, { x: e.clientX, y: e.clientY }) },
-            { label: t('gallery.contextReadMetadata', 'Metadata / Info'), icon: 'i-info', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
-            { pictureOnly: true, label: t('gallery.contextReversePrompt', 'Send to Reverse Prompt'), icon: 'i-refresh', action: () => app.openReversePromptFromImage?.(image.id, image.filename || '') },
-            { pictureOnly: true, label: labelWithScope('gallery.contextPrivacy', 'Send to Privacy Tools'), icon: 'i-shield', action: () => app.openPrivacyFromImages?.(actionImageIds) },
-            checkpointFilterValue ? { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: 'i-filter', action: () => {
+            { tool: true, label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: 'i-flask', action: () => app.openPromptBuildFromImage?.(image.id) },
+            { tool: true, label: t('gallery.contextSendToGenerator', 'Send to generator…'), icon: 'i-upload', action: () => window.SendToGenerator?.open?.(image.id, { x: e.clientX, y: e.clientY }) },
+            { tool: true, label: t('gallery.contextReadMetadata', 'Metadata / Info'), icon: 'i-info', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
+            { tool: true, pictureOnly: true, label: t('gallery.contextReversePrompt', 'Send to Reverse Prompt'), icon: 'i-refresh', action: () => app.openReversePromptFromImage?.(image.id, image.filename || '') },
+            { tool: true, pictureOnly: true, label: labelWithScope('gallery.contextPrivacy', 'Send to Privacy Tools'), icon: 'i-shield', action: () => app.openPrivacyFromImages?.(actionImageIds) },
+            checkpointFilterValue ? { tool: true, label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: 'i-filter', action: () => {
                 if (app.AppState) {
                     app.updateFilters?.((filters) => {
                         if (!filters.checkpoints.includes(checkpointFilterValue)) {
@@ -139,7 +139,8 @@ Object.assign(window.Gallery, {
             { label: labelWithScope('gallery.contextMoveToTrash', 'Move to Trash...'), icon: 'i-trash', danger: true, action: () => app.deleteGalleryImagesByIds?.(actionImageIds) },
         ].filter(Boolean);
 
-        items.forEach((item) => {
+        const anchorEl = e.currentTarget || e.target?.closest?.('.gallery-item');
+        const renderItem = (item) => {
             if (item.type === 'separator') {
                 const separator = document.createElement('div');
                 separator.className = 'context-menu-separator';
@@ -163,11 +164,26 @@ Object.assign(window.Gallery, {
             label.textContent = item.label;
 
             button.append(icon, label);
+            if (item.opensPage) {
+                const more = document.createElement('span');
+                more.className = 'context-menu-more';
+                more.setAttribute('aria-hidden', 'true');
+                window.UiIcon?.fill(more, 'i-arrow-right');
+                button.append(more);
+                button.setAttribute('aria-haspopup', 'menu');
+            }
             if (item.pictureOnly && image?.media_type === 'video') {
                 button.disabled = true;
                 button.title = t('video.pictureOnly', 'Works on pictures only, not videos');
             }
             button.addEventListener('click', (event) => {
+                if (item.keepOpen) {
+                    // Turns the page inside the menu; the outside-click
+                    // listener must not close it.
+                    event.stopPropagation();
+                    item.action(event, menu);
+                    return;
+                }
                 Promise.resolve(item.action(event, menu)).catch((error) => {
                     const message = typeof formatUserError === 'function'
                         ? formatUserError(error, t('modal.copyFailed', 'Failed to copy text'))
@@ -177,10 +193,39 @@ Object.assign(window.Gallery, {
                 menu.remove();
             });
             menu.appendChild(button);
-        });
+        };
+
+        // Pro look: the tool rows (another page or tool) sit behind one Tools
+        // row that opens them in the same menu, about 12 rows instead of 23
+        // (blind judges 2026-11-08); today's look lists every row.
+        const toolItems = items.filter((item) => item.tool);
+        let mainItems = items;
+        const showPage = (list) => {
+            menu.replaceChildren();
+            list.forEach(renderItem);
+            this._positionContextMenu(menu, e.clientX, e.clientY, anchorEl);
+            menu.querySelector('.context-menu-item:not(:disabled)')?.focus?.();
+        };
+        if (document.documentElement.dataset.look === 'pro' && toolItems.length) {
+            const firstTool = items.indexOf(toolItems[0]);
+            const toolsPage = [
+                { label: t('gallery.contextBack', 'Back'), icon: 'i-arrow-left', keepOpen: true, action: () => showPage(mainItems) },
+                { type: 'separator' },
+                ...toolItems,
+            ];
+            mainItems = items.filter((item) => !item.tool);
+            mainItems.splice(firstTool, 0, {
+                label: t('gallery.contextTools', 'Tools'),
+                icon: 'i-wand',
+                keepOpen: true,
+                opensPage: true,
+                action: () => showPage(toolsPage),
+            });
+        }
+        mainItems.forEach(renderItem);
 
         document.body.appendChild(menu);
-        this._positionContextMenu(menu, e.clientX, e.clientY, e.currentTarget || e.target?.closest?.('.gallery-item'));
+        this._positionContextMenu(menu, e.clientX, e.clientY, anchorEl);
 
         // Scroll affordance: fade cue at the bottom while more items remain
         // below the fold (short windows), cleared when scrolled to the end.

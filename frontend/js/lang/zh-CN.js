@@ -466,6 +466,8 @@ window.I18nLang_zhCN = {
     'gallery.aestheticStatusFailed': '暂时无法检查美学评分状态',
     'gallery.aestheticProgressFailed': '读取美学评分进度失败',
     'gallery.aestheticStartFailed': '启动美学评分失败',
+    'gallery.contextTools': '工具',
+    'gallery.contextBack': '返回',
     'gallery.contextPreview': '预览',
     'gallery.contextSelectImage': '选中图片',
     'gallery.contextDeselectImage': '取消选中',

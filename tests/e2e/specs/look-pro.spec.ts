@@ -201,3 +201,28 @@ test('pro look: the gallery toolbar has one control height and the grid starts w
   expect(look.heights).toEqual([32])
   expect(look.edgeGap).toBeLessThanOrEqual(1)
 })
+
+test('pro look: the right-click menu keeps its tools behind one Tools row; today\'s look lists them all', async ({ page }) => {
+  await open(page, 'pro')
+  const tile = page.locator('#gallery-grid .gallery-item').first()
+  await expect(tile).toBeVisible()
+  const menu = page.locator('.gallery-context-menu')
+  await tile.click({ button: 'right' })
+  const tools = menu.locator('.context-menu-item').filter({ has: page.locator('.context-menu-label', { hasText: /^Tools$/ }) })
+  await expect(tools).toBeVisible()
+  await expect(menu.locator('.context-menu-item', { hasText: 'Find Similar' })).toHaveCount(0)
+  expect(await menu.evaluate((m) => m.scrollHeight <= m.clientHeight + 1)).toBe(true)
+
+  await tools.click()
+  await expect(menu).toBeVisible()
+  await expect(menu.locator('.context-menu-item', { hasText: 'Find Similar' })).toBeVisible()
+  await menu.locator('.context-menu-item', { hasText: 'Back' }).click()
+  await expect(menu.locator('.context-menu-item').filter({ has: page.locator('.context-menu-label', { hasText: /^Tools$/ }) })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+
+  await page.evaluate(() => (window as any).SdLook.set(null))
+  await tile.click({ button: 'right' })
+  await expect(menu.locator('.context-menu-item', { hasText: 'Find Similar' })).toBeVisible()
+  await expect(menu.locator('.context-menu-item').filter({ has: page.locator('.context-menu-label', { hasText: /^Tools$/ }) })).toHaveCount(0)
+})
