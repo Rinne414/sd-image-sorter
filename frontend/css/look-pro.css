@@ -971,3 +971,51 @@ html[data-look="pro"] .modal-file-subfolder {
 html[data-look="pro"] .tag-category-copy-icon {
     color: var(--text-secondary);
 }
+
+/* ---- Boxes in boxes on the analysis pages (UI audit #8, rest) ----
+   A panel is the only frame; what sits inside it is separated by space and
+   hairlines, not by more cards. */
+html[data-look="pro"] .promptlab-stats-col {
+    border-color: var(--hairline-2);
+    border-radius: var(--pro-r-panel);
+}
+
+html[data-look="pro"] .promptlab-stats-col .promptlab-empty-note,
+html[data-look="pro"] .promptlab-stats-col .promptlab-action-card {
+    border: 0;
+    background: transparent;
+}
+
+html[data-look="pro"] .promptlab-stat-card {
+    border-color: var(--hairline-2);
+    border-radius: var(--pro-r-panel);
+}
+
+html[data-look="pro"] #view-artist .artist-stats .stat-card {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: inset 1px 0 0 var(--hairline-2);
+}
+
+html[data-look="pro"] #view-artist .artist-stats .stat-card:first-child {
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-artist .artist-controls .control-section {
+    border: 0;
+    border-top: 1px solid var(--hairline-2);
+    border-radius: 0;
+    background: transparent;
+}
+
+html[data-look="pro"] #view-artist .artist-controls .control-section:first-child {
+    border-top: 0;
+}
+
+html[data-look="pro"] #view-artist .artist-results .empty-state,
+html[data-look="pro"] #view-artist .artist-detail-content,
+html[data-look="pro"] #view-artist .artist-images-preview {
+    border: 0;
+    background: transparent;
+}
