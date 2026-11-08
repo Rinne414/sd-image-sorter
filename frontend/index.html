@@ -1183,7 +1183,7 @@
                             <button type="button" id="btn-search-help" class="gallery-search-side-btn"
                                     title="Search syntax help" aria-label="Search syntax help"
                                     data-i18n-title="gallerySearch.helpTooltip" data-i18n-aria="gallerySearch.helpTooltip">
-                                <span aria-hidden="true">?</span>
+                                <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></span>
                             </button>
                             <button type="button" id="btn-toolbar-filters" class="gallery-search-side-btn"
                                     title="Open the filter editor" aria-label="Open the filter editor"
@@ -2927,7 +2927,7 @@
                                     </select>
                                     <button type="button" class="censor-help-toggle" aria-controls="censor-model-type-help" aria-expanded="false"
                                             title="About the detectors" aria-label="About the detectors"
-                                            data-i18n-title="censor.modelTypeHelpToggle" data-i18n-aria="censor.modelTypeHelpToggle"><span aria-hidden="true">?</span></button>
+                                            data-i18n-title="censor.modelTypeHelpToggle" data-i18n-aria="censor.modelTypeHelpToggle"><span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></span></button>
                                 </div>
                                 <small class="helper-text" id="censor-model-type-help" hidden data-i18n="censor.modelTypeHelp">Both (recommended) runs privacy YOLO and NudeNet together for the widest coverage. YOLO alone uses the local file below; NudeNet and SAM3 need their own models. The app picks the best detector you have installed.</small>
                                 <small class="helper-text" id="censor-model-type-status" aria-live="polite"></small>
@@ -2961,7 +2961,7 @@
                                 </select>
                                 <button type="button" class="censor-help-toggle" aria-controls="censor-mask-shape-help" aria-expanded="false"
                                         title="About mask shape" aria-label="About mask shape"
-                                        data-i18n-title="censor.maskShapeHelpToggle" data-i18n-aria="censor.maskShapeHelpToggle"><span aria-hidden="true">?</span></button>
+                                        data-i18n-title="censor.maskShapeHelpToggle" data-i18n-aria="censor.maskShapeHelpToggle"><span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></span></button>
                             </div>
                             <div class="censor-side-row" id="censor-expand-row">
                                 <label class="censor-side-inline-label"><span data-i18n="censor.expandEdge">Grow edge</span>: <span class="censor-side-value" id="censor-expand-percent-value">0%</span></label>
@@ -2974,7 +2974,7 @@
                                 </label>
                                 <button type="button" class="censor-help-toggle" aria-controls="censor-face-guard-help" aria-expanded="false"
                                         title="About face guard" aria-label="About face guard"
-                                        data-i18n-title="censor.faceGuardHelpToggle" data-i18n-aria="censor.faceGuardHelpToggle"><span aria-hidden="true">?</span></button>
+                                        data-i18n-title="censor.faceGuardHelpToggle" data-i18n-aria="censor.faceGuardHelpToggle"><span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></span></button>
                             </div>
                             <small class="helper-text" id="censor-face-guard-help" hidden data-i18n="censor.faceGuardHelp">With the anime face model (Model Center, "Anime Censor + Face Guard"), detections that are really a face, such as a mouth read as a private part, are skipped. A penis or cum on a face is never skipped.</small>
                             <small class="helper-text" id="censor-mask-shape-help" hidden data-i18n="censor.maskShapeHelp">Precise follows the exact shape from the model mask (YOLO-seg / SAM3); Box censors a rectangle. Takes effect on the next detect.</small>
@@ -2982,7 +2982,7 @@
                                 <button class="btn btn-secondary btn-small" id="btn-sam3-refine-all-sidebar" style="flex:1;"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg> <span data-i18n="censor.sam3RefineAllSidebar">Refine all with SAM3</span></button>
                                 <button type="button" class="censor-help-toggle" aria-controls="censor-sam3-refine-help" aria-expanded="false"
                                         title="About SAM3 refine" aria-label="About SAM3 refine"
-                                        data-i18n-title="censor.sam3RefineHelpToggle" data-i18n-aria="censor.sam3RefineHelpToggle"><span aria-hidden="true">?</span></button>
+                                        data-i18n-title="censor.sam3RefineHelpToggle" data-i18n-aria="censor.sam3RefineHelpToggle"><span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></span></button>
                             </div>
                             <small class="helper-text" id="censor-sam3-refine-help" hidden data-i18n="censor.sam3RefineAllHelp">After detecting, re-segment every box with SAM3. It runs once per box, so it's slow and GPU-heavy, and not always sharper than YOLO. Use it when a shape needs fixing.</small>
                             <div class="censor-side-row" id="sam3-confidence-group" style="display:none;">

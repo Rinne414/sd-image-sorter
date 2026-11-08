@@ -21,7 +21,9 @@ FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
 GLYPHS = re.compile("[▲▴▶▸▼▾◀◂■▬▮▦◼◥◫▣⌕⌖⟳↻↺＋⋯⚙⏹☁◎◇✕]")
 
 # A multiplication sign is a fine "960 × 1440", but not a close or remove button.
-BUTTON_CROSS = re.compile(r">\s*×\s*<|textContent\s*=\s*'×'|,\s*'×'\)")
+BUTTON_CROSS = re.compile(
+    r">\s*×\s*<|textContent\s*=\s*'×'|,\s*'×'\)|aria-hidden=\"true\">\?</span>"
+)
 
 # The same glyphs written as HTML entities (a close button's &times;, a
 # folder arrow's &#9654;) slipped past the character check (2026-11-09).
