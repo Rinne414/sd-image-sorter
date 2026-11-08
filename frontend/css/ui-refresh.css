@@ -13533,8 +13533,10 @@ html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
     display: none;
 }
 
-/* Proposal B's View menu button (js/modules/pro-view-popover.js); hidden elsewhere. */
+/* Proposal B's View and More menus (js/modules/pro-fold-menu.js); hidden elsewhere. */
 .pro-view-btn,
+.pro-more-btn,
+.pro-menu-label,
 .pro-view-popover[hidden] {
     display: none;
 }
@@ -13542,4 +13544,9 @@ html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
 .gallery-search-icon {
     display: inline-flex;
     line-height: 0;
+}
+
+/* Text labels of the top bar's tools: shown only by proposal B (look-pro-b.css). */
+.nav-action-label {
+    display: none;
 }

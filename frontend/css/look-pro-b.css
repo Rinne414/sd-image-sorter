@@ -8,8 +8,8 @@
    those three and nothing else, so A and B can be compared side by side:
    - a type scale with real steps (title 20/700, library 16/700, labels
      12/700, items 14/400);
-   - the top bar's tools as one grouped capsule, icons 18 px at a 1.75
-     stroke, the main actions set apart;
+   - the top bar's tools with words (All features, Settings, the language),
+     icons at a 1.75 stroke, the main actions set apart;
    - a tighter, more photographic grid (8 px gaps, 6 px corners).
    Every rule is scoped to html[data-look-variant="b"]; proposal A (the pro
    look) and today's look are untouched. Picks are unconfirmed: the owner
@@ -44,45 +44,10 @@ html[data-look-variant="b"] .pro-inspector-name {
     font-weight: 700;
 }
 
-/* ---- The top bar's tools as one grouped capsule ---- */
-
-html[data-look-variant="b"] .nav-actions {
-    gap: 0;
-}
+/* ---- The top bar: the main actions set apart, thinner icons ---- */
 
 html[data-look-variant="b"] .nav-actions .nav-actions-divider {
     display: none;
-}
-
-html[data-look-variant="b"] #btn-open-model-manager,
-html[data-look-variant="b"] #btn-language-toggle,
-html[data-look-variant="b"] #btn-app-update,
-html[data-look-variant="b"] #btn-all-features,
-html[data-look-variant="b"] #btn-help {
-    height: 34px;
-    min-height: 34px;
-    margin: 0;
-    border: 0;
-    border-radius: 0;
-    background: rgba(255, 255, 255, 0.06);
-}
-
-html[data-look-variant="b"] #btn-open-model-manager {
-    border-radius: 10px 0 0 10px;
-    padding-left: 10px;
-}
-
-html[data-look-variant="b"] #btn-help {
-    border-radius: 0 10px 10px 0;
-    padding-right: 10px;
-}
-
-html[data-look-variant="b"] #btn-open-model-manager:hover,
-html[data-look-variant="b"] #btn-language-toggle:hover,
-html[data-look-variant="b"] #btn-app-update:hover,
-html[data-look-variant="b"] #btn-all-features:hover,
-html[data-look-variant="b"] #btn-help:hover {
-    background: rgba(255, 255, 255, 0.12);
 }
 
 html[data-look-variant="b"] #btn-scan {
@@ -139,7 +104,7 @@ html[data-look-variant="b"] .pro-view-popover-body {
     min-width: 200px;
 }
 
-html[data-look-variant="b"] .pro-view-popover-body > .view-btn {
+html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) > button {
     justify-content: flex-start;
     width: 100%;
     height: 34px;
@@ -150,22 +115,175 @@ html[data-look-variant="b"] .pro-view-popover-body > .view-btn {
     color: var(--text);
 }
 
-html[data-look-variant="b"] .pro-view-popover-body > .view-btn:hover {
+html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) > button:hover {
     background: var(--surface-3);
 }
 
-html[data-look-variant="b"] .pro-view-popover-body > .view-btn[aria-pressed="true"] {
+html[data-look-variant="b"] #pro-view-popover-body > button[aria-pressed="true"] {
     background: var(--pro-chosen-bg);
 }
 
-html[data-look-variant="b"] .pro-view-popover-body > .view-btn[data-size]::after,
-html[data-look-variant="b"] .pro-view-popover-body > #btn-pro-inspector::after {
+html[data-look-variant="b"] .pro-view-popover-body > .view-btn[data-size]::after {
     content: attr(aria-label);
-    margin-left: 10px;
     font-size: 13px;
 }
 
 html[data-look-variant="b"] .pro-view-popover-body > #btn-pro-inspector {
     display: inline-flex;
     align-items: center;
+}
+
+/* ---- A labelled top bar (round 13 judges: "six unlabelled icons", "the box
+   reads like a developer toolbar") ----
+   All features, Settings and the language say what they are; the language
+   button names the language it switches to. Help keeps its "?" alone. The
+   update button steps out of the way until an update exists, then shows its
+   version in words; Settings > About and the feature list still check by
+   hand. It keeps a zero-width place so the update popup opens under the top
+   bar's right end. When the bar runs out of room the labels go first (the nav
+   ladder's compact-labels rung), before any tab moves into More. */
+/* The tools keep their width: when the bar is short of room the tabs feel it,
+   and the nav ladder folds the labels (a squeezed group let its buttons spill
+   over each other at 1366 in Chinese). */
+html[data-look-variant="b"] .nav-actions {
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+html[data-look-variant="b"] .nav-actions > * {
+    flex-shrink: 0;
+}
+
+html[data-look-variant="b"] #btn-open-model-manager,
+html[data-look-variant="b"] #btn-language-toggle,
+html[data-look-variant="b"] #btn-app-update,
+html[data-look-variant="b"] #btn-all-features,
+html[data-look-variant="b"] #btn-help {
+    width: auto;
+    min-width: 34px;
+    /* ui-refresh.css caps icon buttons in the top bar at 42 px. */
+    max-width: none;
+    height: 34px;
+    min-height: 34px;
+    margin: 0;
+    padding: 0 9px;
+    gap: 6px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+html[data-look-variant="b"] #btn-open-model-manager:hover,
+html[data-look-variant="b"] #btn-language-toggle:hover,
+html[data-look-variant="b"] #btn-app-update:hover,
+html[data-look-variant="b"] #btn-all-features:hover,
+html[data-look-variant="b"] #btn-help:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+html[data-look-variant="b"] .nav-bar:not(.nav-tabs-compact-labels) .nav-actions .nav-action-label {
+    display: inline;
+    white-space: nowrap;
+}
+
+/* The language button is its word alone while the labels show. */
+html[data-look-variant="b"] .nav-bar:not(.nav-tabs-compact-labels) #btn-language-toggle > span[aria-hidden="true"] {
+    display: none;
+}
+
+html[data-look-variant="b"] #btn-all-features kbd {
+    margin-left: 2px;
+    padding: 1px 6px;
+    border: 1px solid var(--hairline-2);
+    border-radius: 5px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 11px;
+}
+
+/* Order: what to find, how to set it up, the language, help, then the main actions. */
+html[data-look-variant="b"] .nav-actions > * { order: 5; }
+html[data-look-variant="b"] #btn-all-features { order: 1; }
+html[data-look-variant="b"] #btn-open-model-manager { order: 2; }
+html[data-look-variant="b"] #btn-language-toggle { order: 3; }
+html[data-look-variant="b"] #btn-help { order: 4; }
+html[data-look-variant="b"] #btn-app-update { order: 6; }
+html[data-look-variant="b"] #btn-scan { order: 7; }
+html[data-look-variant="b"] #btn-tag { order: 8; }
+
+html[data-look-variant="b"] #btn-app-update:not([data-update-state="available"]) {
+    visibility: hidden;
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+html[data-look-variant="b"] #btn-app-update[data-update-state="available"] {
+    border: 1px solid var(--hairline-2);
+}
+
+/* ---- The sidebar uses its width (round 13: counts stopped ~57 px short of
+   the edge; two paddings of 16 and 20 px left 216 of 300 px for the rows).
+   Empty collections show no "0". */
+html[data-look-variant="b"] .filter-sidebar .filter-sidebar-scroll {
+    padding-left: 10px;
+    padding-right: 6px;
+}
+
+html[data-look-variant="b"] .filter-sidebar .sidebar-section {
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
+html[data-look-variant="b"] #collections-list .collection-row-count.is-zero {
+    visibility: hidden;
+}
+
+/* ---- One More menu beside the count (round 13: "two unlabelled icons right
+   of the count"): random picture and find moved images, each with its name. */
+html[data-look-variant="b"] #view-gallery .pro-more-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: var(--pro-control-h);
+    height: var(--pro-control-h);
+    padding: 0;
+    border: 0;
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+}
+
+html[data-look-variant="b"] #view-gallery .pro-more-btn:hover,
+html[data-look-variant="b"] #view-gallery .pro-more-btn[aria-expanded="true"] {
+    background: var(--surface-3);
+}
+
+html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) > button {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    max-width: none;
+    overflow: visible;
+    font-size: 13px;
+}
+
+/* An id in the selector: ui-refresh.css hides #btn-reconnect-missing's words
+   from 1800 px (an id rule) for the toolbar's icon-only form. */
+html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) .pro-menu-label {
+    display: inline;
+    white-space: nowrap;
+}
+
+/* Group runs is a word-only toggle (its data-i18n sits on the button, so it
+   cannot hold an icon): it lines up with the rows that have one. */
+html[data-look-variant="b"] #pro-view-popover-body > #btn-group-runs {
+    padding-left: 36px;
 }

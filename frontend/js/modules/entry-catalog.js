@@ -102,6 +102,7 @@
                 { icon: '#i-monitor', nameKey: 'network.proxy.title', name: 'Network proxy', descKey: 'catalog.networkProxy', desc: 'Enter a proxy port once for model downloads, package installs and update checks', run: () => { openSettingsTab('models'); window.requestAnimationFrame(() => { window.ModelNetworkSettings?.reveal(); document.getElementById('network-proxy-section')?.scrollIntoView({ block: 'nearest' }); }); } },
                 { icon: '#i-package', nameKey: 'entry.tileModels', name: 'Model Center', descKey: 'catalog.models', desc: 'Download and manage the AI models used by tagging, similarity, artist, censor, and captions', run: () => openSettingsTab('models') },
                 { icon: '#i-layers', nameKey: 'catalog.vopusName', name: 'Vopus interface', descKey: 'catalog.vopus', desc: 'A second interface on the same library; the one you pick opens at every start (its Settings switches back)', run: () => window.InterfaceSwitch?.useVopus() },
+                { icon: '#i-arrow-up', nameKey: 'update.check', name: 'Check Updates', descKey: 'catalog.update', desc: 'See whether a new version is out; nothing changes until you press Install Update', run: () => document.getElementById('btn-app-update')?.click() },
                 { icon: '#i-settings', nameKey: 'settings.tabGeneral', name: 'Settings', descKey: 'catalog.settings', desc: 'Sound, entry page, UI scale, language, disk cache, updates', run: () => openSettingsTab('general') },
             ],
         },

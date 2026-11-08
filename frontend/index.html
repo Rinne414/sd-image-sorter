@@ -54,7 +54,7 @@
     <script src="/static/js/modules/pro-filter-popover.js"></script>
     <script src="/static/js/modules/pro-toolbar.js"></script>
     <script src="/static/js/modules/pro-inspector.js"></script>
-    <script src="/static/js/modules/pro-view-popover.js"></script>
+    <script src="/static/js/modules/pro-fold-menu.js"></script>
     <!-- First: an error nothing else caught is said on screen, never silent (error-fallback.js). -->
     <script src="/static/js/error-fallback.js"></script>
 </head>
@@ -682,17 +682,23 @@
                 <!-- Group 1: Config & meta (least frequent) -->
                 <button id="btn-open-model-manager" class="btn btn-ghost btn-icon-only" type="button" title="Settings" aria-label="Settings" data-i18n-title="models.managerTooltip" data-i18n-aria="models.title">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span>
+                    <span class="nav-action-label" data-i18n="models.title">Settings</span>
                 </button>
                 <button id="btn-language-toggle" class="btn btn-ghost btn-icon-only btn-language" title="Switch language" aria-label="Switch language" data-i18n-title="lang.switchTooltip" data-i18n-aria="lang.switchLabel">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg></span>
+                    <!-- Names the language a press switches to. -->
+                    <span class="nav-action-label" data-i18n="lang.toggle">EN</span>
                 </button>
                 <button id="btn-app-update" class="btn btn-ghost btn-icon-only" type="button" title="Check for application updates" aria-label="Check for application updates" data-i18n-aria="update.checkTitle" data-i18n-title="update.checkTitle">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-arrow-up"/></svg></span>
+                    <!-- Written by setUpdateButtonState (update-popup.js); no data-i18n, so a re-translation cannot reset it. -->
+                    <span class="nav-action-label nav-update-label"></span>
                 </button>
                 <span class="nav-actions-divider" aria-hidden="true"></span>
                 <!-- Group 2: Content tools (frequent) -->
                 <button id="btn-all-features" class="btn btn-ghost btn-icon-only nav-catalog-key" type="button" title="All features (Ctrl K)" aria-label="All features" aria-keyshortcuts="Control+K" data-i18n-title="catalog.openTooltip" data-i18n-aria="catalog.openLabel">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span>
+                    <span class="nav-action-label" data-i18n="catalog.openLabel">All features</span>
                     <kbd aria-hidden="true">Ctrl K</kbd>
                 </button>
                 <button id="btn-tags-library" class="btn btn-ghost btn-icon-only" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.libraryTooltip" data-i18n-aria="action.library">
@@ -1060,10 +1066,19 @@
                             <span class="image-count" id="image-count" aria-live="polite">0</span>
                             <button id="btn-random" class="btn btn-ghost btn-small btn-icon-only" title="Show a random image from current filter" aria-label="Show random image" data-i18n-title="gallery.randomTooltip" data-i18n-aria="gallery.random">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-dice"/></svg></span>
+                                <span class="pro-menu-label" data-i18n="gallery.randomMenu">Random picture</span>
                             </button>
                             <button id="btn-reconnect-missing" class="btn btn-ghost btn-small btn-icon-only" title="Find images that were moved or renamed (your files are not touched)" aria-label="Find images that were moved or renamed (your files are not touched)" data-i18n-title="reconnect.openTitle" data-i18n-aria="reconnect.openTitle">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg></span>
+                                <span class="pro-menu-label" data-i18n="reconnect.openButton">Find Moved Files</span>
                             </button>
+                            <!-- Proposal B: random picture and find moved images in one More menu (js/modules/pro-fold-menu.js). -->
+                            <button type="button" class="pro-more-btn" id="btn-pro-more" aria-haspopup="dialog" aria-expanded="false" aria-controls="pro-more-popover" title="More actions" aria-label="More actions" data-i18n-title="gallery.moreMenu" data-i18n-aria="gallery.moreMenu">
+                                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                            </button>
+                            <div class="pro-filter-popover pro-view-popover pro-more-popover" id="pro-more-popover" role="dialog" aria-label="More actions" data-i18n-aria="gallery.moreMenu" hidden>
+                                <div class="pro-filter-popover-body pro-view-popover-body" id="pro-more-popover-body"></div>
+                            </div>
                             <div class="divider-v" aria-hidden="true"></div>
                             <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator" data-i18n-aria="a11y.filterByGenerator">
                                 <div class="generator-tabs-pinned">
@@ -1081,7 +1096,7 @@
                             </div>
                         </div>
                         <div class="view-options">
-                            <!-- Proposal B: one View menu for the view modes, Group runs and the details panel (js/modules/pro-view-popover.js). -->
+                            <!-- Proposal B: one View menu for the view modes, Group runs and the details panel (js/modules/pro-fold-menu.js). -->
                             <button type="button" class="pro-view-btn" id="btn-pro-view" aria-haspopup="dialog" aria-expanded="false" aria-controls="pro-view-popover">
                                 <svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>
                                 <span data-i18n="gallery.viewMenu">View</span>
@@ -1108,6 +1123,7 @@
                                     title="Show or hide the details panel" aria-label="Show or hide the details panel"
                                     data-i18n-title="inspector.toggle" data-i18n-aria="inspector.toggle">
                                 <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+                                <span class="pro-menu-label" data-i18n="inspector.title">Picture details</span>
                             </button>
                             <aside class="pro-inspector" id="pro-inspector" aria-label="Picture details" data-i18n-aria="inspector.title">
                                 <div class="pro-inspector-body" id="pro-inspector-body"></div>

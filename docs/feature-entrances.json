@@ -377,6 +377,7 @@
       "zh": "找回移动或改名的文件",
       "classic": [
         "#btn-reconnect-missing",
+        "#btn-pro-more",
         "#gallery-unreadable-banner-cta",
         "#btn-start-reconnect",
         "#btn-browse-reconnect-folder"
@@ -873,7 +874,8 @@
       "en": "Jump to a random image",
       "zh": "随机跳到一张图",
       "classic": [
-        "#btn-random"
+        "#btn-random",
+        "#btn-pro-more"
       ],
       "vopus": {
         "at": "#/library",

@@ -14,7 +14,7 @@ test.use({ viewport: { width: 1366, height: 768 } })
 test.beforeAll(() => seedImages({ prefix: 'lookpro-', token: 'lookprotoken', count: 3, dir: 'look-pro' }))
 test.afterAll(() => cleanupImages('lookpro-', ['look-pro']))
 
-async function open(page: import('@playwright/test').Page, look: 'pro' | null, lang = 'en') {
+async function open(page: import('@playwright/test').Page, look: 'pro' | 'pro-b' | null, lang = 'en') {
   await page.addInitScript(([l, language]) => {
     localStorage.setItem('sd-image-sorter-lang', language as string)
     localStorage.setItem('aurora-entry-skip', '1')
@@ -361,4 +361,50 @@ test('pro look: the details panel speaks the chosen language from the first load
   await expect(note).toHaveText(await expected('zh-CN'))
   await page.evaluate(() => (window as any).I18n.setLang('en'))
   await expect(note).toHaveText(await expected('en'))
+})
+
+test('proposal B: the View and More menus hold their buttons, which still work; proposal A keeps them in the toolbar', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await open(page, 'pro-b')
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+
+  // View: the three view modes, Group runs and the details toggle.
+  const view = page.locator('#btn-pro-view')
+  await expect(view).toBeVisible()
+  await expect(page.locator('#btn-group-runs')).toBeHidden()
+  await view.click()
+  await expect(page.locator('#pro-view-popover')).toBeVisible()
+  const large = page.locator('#pro-view-popover .view-btn[data-size="large"]')
+  await expect(large).toBeVisible()
+  await large.click()
+  await expect(page.locator('#pro-view-popover')).toBeHidden()
+  await expect(large).toHaveAttribute('aria-pressed', 'true')
+  await view.click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#pro-view-popover')).toBeHidden()
+  await expect(view).toBeFocused()
+
+  // More: random picture and find moved images, each with its name.
+  const more = page.locator('#btn-pro-more')
+  await expect(page.locator('#btn-reconnect-missing')).toBeHidden()
+  await more.click()
+  await expect(page.locator('#pro-more-popover #btn-random')).toHaveText('Random picture')
+  await expect(page.locator('#pro-more-popover #btn-reconnect-missing')).toHaveText('Find Moved Files')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#pro-more-popover')).toBeHidden()
+
+  // The top bar's tools say what they are; the update button waits for an update.
+  await expect(page.locator('#btn-open-model-manager .nav-action-label')).toHaveText('Settings')
+  await expect(page.locator('#btn-all-features .nav-action-label')).toHaveText('All features')
+  await expect(page.locator('#btn-language-toggle .nav-action-label')).toHaveText('中文')
+  await expect(page.locator('#btn-app-update')).toBeHidden()
+
+  // Proposal A: everything back in the toolbar, no labels in the top bar.
+  await page.evaluate(() => (window as any).SdLook.set('pro'))
+  await expect(view).toBeHidden()
+  await expect(more).toBeHidden()
+  await expect(page.locator('#btn-group-runs')).toBeVisible()
+  await expect(page.locator('#btn-random')).toBeVisible()
+  await expect(page.locator('#view-gallery .view-btn[data-size="large"]')).toBeVisible()
+  await expect(page.locator('#btn-open-model-manager .nav-action-label')).toBeHidden()
 })

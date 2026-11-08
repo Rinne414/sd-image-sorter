@@ -50,6 +50,8 @@ function setUpdateButtonState(status = AppState.update.status, checking = false)
 
     buttons.forEach((button) => {
         button.dataset.updateState = state;
+        const stateLabel = button.querySelector('.nav-update-label');
+        if (stateLabel) stateLabel.textContent = label;
         button.disabled = Boolean(checking);
         button.title = title;
         button.setAttribute('aria-label', title);
