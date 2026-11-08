@@ -1787,3 +1787,8 @@ html[data-look="pro"] .pro-inspector-open {
     justify-content: center;
     margin-top: 4px;
 }
+
+/* Round 10: the panel's facts read at the body size, not label size. */
+html[data-look="pro"] .pro-inspector-fact {
+    font-size: 13px;
+}

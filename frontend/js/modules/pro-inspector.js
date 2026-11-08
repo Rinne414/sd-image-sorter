@@ -52,12 +52,20 @@
         if (on) placeBelowToolbar();
     }
 
-    /** The panel starts under the (sticky) gallery toolbar, whatever its height. */
+    /**
+     * The panel starts under the (sticky) gallery toolbar, whatever its height;
+     * measured after layout settles (the toolbar may just have become one row).
+     */
     function placeBelowToolbar() {
-        const toolbar = el('gallery-toolbar');
-        if (!toolbar) return;
-        const bottom = Math.max(0, Math.round(toolbar.getBoundingClientRect().bottom));
-        document.documentElement.style.setProperty('--pro-inspector-top', `${bottom}px`);
+        requestAnimationFrame(() => {
+            const toolbar = el('gallery-toolbar');
+            if (!toolbar) return;
+            // Bounding boxes are in screen pixels; the interface zoom would scale a
+            // CSS length again (148 px became 192 at the 1.3 zoom).
+            const screenBottom = Math.max(0, toolbar.getBoundingClientRect().bottom);
+            const bottom = window.PopupPosition?.toCssPx ? window.PopupPosition.toCssPx(screenBottom) : screenBottom;
+            document.documentElement.style.setProperty('--pro-inspector-top', `${Math.round(bottom)}px`);
+        });
     }
 
     function formatDate(seconds) {
@@ -224,6 +232,8 @@
         const toolbar = el('gallery-toolbar');
         if (toolbar) new ResizeObserver(placeBelowToolbar).observe(toolbar);
         window.addEventListener('resize', placeBelowToolbar);
+        // The one-row toolbar switches by a class on <html>: measure again then.
+        new MutationObserver(placeBelowToolbar).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
         // A look switch or a page change re-applies the current choice.
         const observer = new MutationObserver(() => applyOpen(button.getAttribute('aria-pressed') === 'true'));
         observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-look'] });
