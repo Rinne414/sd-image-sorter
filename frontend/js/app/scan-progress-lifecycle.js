@@ -400,15 +400,15 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
             showToast(completionMessage, 'success');
         } else {
             const _scanCtaActions = [
-                { icon: '🏷️', label: appT('flow.ctaTag', 'Tag with AI'), action: 'modal:tag-modal' },
-                { icon: '🗂️', label: appT('nav.sorting', 'Organize'), action: 'view:sorting' },
+                { icon: '#i-tag', label: appT('flow.ctaTag', 'Tag with AI'), action: 'modal:tag-modal' },
+                { icon: '#i-folders', label: appT('nav.sorting', 'Organize'), action: 'view:sorting' },
             ];
             // v3.4.3: one-click "collection per imported dataset" so scans
             // of separate datasets don't blur together in the gallery.
             if (_scanNewCount > 0 && _scanLastFolderPath) {
                 const ctaFolder = _scanLastFolderPath;
                 _scanCtaActions.push({
-                    icon: '📚',
+                    icon: '#i-folders',
                     label: appT('flow.ctaCreateCollection', 'Create collection'),
                     action: () => createCollectionFromScanFolder(ctaFolder),
                 });

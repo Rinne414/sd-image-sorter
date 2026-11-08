@@ -7,7 +7,7 @@
         { id: 'clothing', labelKey: 'tagCategory.clothing', fallback: 'Clothing', icon: '▣', categories: ['outfit'], saveCategory: 'outfit' },
         { id: 'pose', labelKey: 'tagCategory.pose', fallback: 'Pose', icon: '↕', categories: ['pose', 'action', 'angle'], saveCategory: 'pose' },
         { id: 'scenery', labelKey: 'tagCategory.scenery', fallback: 'Scenery', icon: '△', categories: ['background'], saveCategory: 'background' },
-        { id: 'style', labelKey: 'tagCategory.style', fallback: 'Style', icon: '✦', categories: ['style', 'artist'], saveCategory: 'style' },
+        { id: 'style', labelKey: 'tagCategory.style', fallback: 'Style', icon: '◇', categories: ['style', 'artist'], saveCategory: 'style' },
         { id: 'qualityMeta', labelKey: 'tagCategory.qualityMeta', fallback: 'Quality / Meta', icon: '#', categories: ['quality', 'meta', 'rating'], saveCategory: 'quality' },
         { id: 'unclassified', labelKey: 'tagCategory.unclassified', fallback: 'Unclassified', icon: '?', categories: ['unknown'], saveCategory: 'unknown' },
     ];
@@ -37,7 +37,7 @@
         { id: 'characterPrompt', labelKey: 'tagCategory.characterPrompt', fallback: 'Character / Appearance', icon: '◎', groupIds: ['appearance'] },
         { id: 'outfitPrompt', labelKey: 'tagCategory.outfitPrompt', fallback: 'Outfit prompt', icon: '▣', groupIds: ['clothing'] },
         { id: 'poseScenePrompt', labelKey: 'tagCategory.poseScenePrompt', fallback: 'Pose + Scene prompt', icon: '↕', groupIds: ['pose', 'scenery'] },
-        { id: 'stylePrompt', labelKey: 'tagCategory.stylePrompt', fallback: 'Style prompt', icon: '✦', groupIds: ['style'] },
+        { id: 'stylePrompt', labelKey: 'tagCategory.stylePrompt', fallback: 'Style prompt', icon: '◇', groupIds: ['style'] },
         { id: 'trainingCaption', labelKey: 'tagCategory.trainingCaption', fallback: 'Clean training caption', icon: 'TXT', groupIds: ['appearance', 'clothing', 'pose', 'scenery', 'style'] },
         { id: 'noQualityPrompt', labelKey: 'tagCategory.noQualityPrompt', fallback: 'Prompt without quality/meta', icon: '-#', groupIds: ['appearance', 'clothing', 'pose', 'scenery', 'style', 'unclassified'] },
     ];

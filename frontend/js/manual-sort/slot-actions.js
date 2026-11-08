@@ -567,9 +567,9 @@ function finishSorting() {
         icon: 'i-folders',
         title: formatManualSortI18n('flow.sortDoneTitle', 'Sorting done. What next?'),
         actions: [
-            { icon: '🔳', label: formatManualSortI18n('nav.censor', 'Censor Edit'), action: 'view:censor' },
-            { icon: '📦', label: formatManualSortI18n('nav.dataset', 'Dataset'), action: 'view:dataset' },
-            { icon: '🖼️', label: formatManualSortI18n('nav.gallery', 'Gallery'), action: 'view:gallery' },
+            { icon: '#i-grid', label: formatManualSortI18n('nav.censor', 'Censor Edit'), action: 'view:censor' },
+            { icon: '#i-package', label: formatManualSortI18n('nav.dataset', 'Dataset'), action: 'view:dataset' },
+            { icon: '#i-image', label: formatManualSortI18n('nav.gallery', 'Gallery'), action: 'view:gallery' },
         ],
     });
 

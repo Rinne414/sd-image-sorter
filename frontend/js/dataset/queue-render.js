@@ -318,14 +318,14 @@
         const badge = document.createElement('span');
         badge.className = `dataset-queue-badge dataset-queue-badge-${status}`;
         const badgeMap = {
-            untagged: { icon: '⚠️', key: 'dataset.statusUntagged', fallback: 'no caption' },
-            tagged:   { icon: '✓',  key: 'dataset.statusTagged',   fallback: 'tagged' },
-            edited:   { icon: '✏️', key: 'dataset.statusEdited',   fallback: 'edited' },
+            untagged: { icon: 'i-alert', key: 'dataset.statusUntagged', fallback: 'no caption' },
+            tagged:   { icon: 'i-check',  key: 'dataset.statusTagged',   fallback: 'tagged' },
+            edited:   { icon: 'i-edit', key: 'dataset.statusEdited',   fallback: 'edited' },
         };
         const b = badgeMap[status];
         const badgeIcon = document.createElement('span');
         badgeIcon.setAttribute('aria-hidden', 'true');
-        badgeIcon.textContent = b.icon;
+        window.UiIcon ? window.UiIcon.fill(badgeIcon, b.icon) : (badgeIcon.textContent = b.icon);
         const badgeText = document.createElement('span');
         badgeText.textContent = this._t(b.key, b.fallback);
         badge.append(badgeIcon, badgeText);
