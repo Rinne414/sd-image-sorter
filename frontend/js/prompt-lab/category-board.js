@@ -11,11 +11,11 @@
 Object.assign(window.PromptLab, {
     _getCategoryBoardGroups() {
         return window.TagCategoryCopy?.CORE_BOARD_GROUPS || [
-            { id: 'appearance', labelKey: 'tagCategory.appearance', fallback: 'Appearance', icon: '◌', saveCategory: 'body' },
-            { id: 'clothing', labelKey: 'tagCategory.clothing', fallback: 'Clothing', icon: '▣', saveCategory: 'outfit' },
-            { id: 'pose', labelKey: 'tagCategory.pose', fallback: 'Pose', icon: '↕', saveCategory: 'pose' },
-            { id: 'scenery', labelKey: 'tagCategory.scenery', fallback: 'Scenery', icon: '△', saveCategory: 'background' },
-            { id: 'unclassified', labelKey: 'tagCategory.unclassified', fallback: 'Unclassified', icon: '?', saveCategory: 'unknown' },
+            { id: 'appearance', labelKey: 'tagCategory.appearance', fallback: 'Appearance', icon: 'i-eye', saveCategory: 'body' },
+            { id: 'clothing', labelKey: 'tagCategory.clothing', fallback: 'Clothing', icon: 'i-shirt', saveCategory: 'outfit' },
+            { id: 'pose', labelKey: 'tagCategory.pose', fallback: 'Pose', icon: 'i-move', saveCategory: 'pose' },
+            { id: 'scenery', labelKey: 'tagCategory.scenery', fallback: 'Scenery', icon: 'i-image', saveCategory: 'background' },
+            { id: 'unclassified', labelKey: 'tagCategory.unclassified', fallback: 'Unclassified', icon: 'i-help', saveCategory: 'unknown' },
         ];
     },
 
@@ -95,7 +95,7 @@ Object.assign(window.PromptLab, {
             return `
                 <section class="promptlab-category-board-column promptlab-category-board-${this._escapeValue(group.id)}" data-board-group="${this._safeDataValue(group.id)}">
                     <header class="promptlab-category-board-column-head">
-                        <span class="promptlab-category-board-icon" aria-hidden="true">${this._escapeValue(group.icon || '')}</span>
+                        <span class="promptlab-category-board-icon" aria-hidden="true">${window.UiIcon ? window.UiIcon.html(group.icon) : ''}</span>
                         <span class="promptlab-category-board-title">${this._escapeValue(label)}</span>
                         <span class="promptlab-category-board-count">${tags.length}</span>
                     </header>

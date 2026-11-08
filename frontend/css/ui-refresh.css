@@ -13417,3 +13417,53 @@ html .nav-bar.nav-measuring * {
     font-size: 12.5px;
     line-height: 1.5;
 }
+
+/* Fold arrows are line chevrons (2026-11-08): the text glyphs (down and right
+   triangles) were a second icon family next to the line icons. Scripts may
+   still write a glyph; it is hidden and a chevron is drawn, and each place's
+   own folded state turns it a quarter turn. */
+.collapse-icon,
+.cat-arrow,
+.qs-section-collapse,
+.folder-row-toggle > span[aria-hidden="true"] {
+    display: inline-block;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    font-size: 0;
+    line-height: 0;
+    vertical-align: middle;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    transition: transform 160ms ease;
+}
+
+.is-collapsed > .collapse-icon,
+.cat-group:not(.expanded) .cat-arrow,
+.folder-row-toggle[aria-expanded="false"] > span[aria-hidden="true"] {
+    transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .collapse-icon,
+    .cat-arrow,
+    .qs-section-collapse,
+    .folder-row-toggle > span[aria-hidden="true"] {
+        transition: none;
+    }
+}
+
+/* A menu's caret (line chevron, 2026-11-08): text-sized beside its label. */
+.icon.icon-caret {
+    width: 12px;
+    height: 12px;
+    vertical-align: -0.05em;
+    opacity: 0.8;
+}
+
+/* Chinese fonts have no italic: the browser slanted the glyphs instead (an
+   unreadable fake). Latin text in a real italic face keeps its italic. */
+html:lang(zh) {
+    font-synthesis-style: none;
+}

@@ -93,6 +93,8 @@ Object.assign(window.PromptLab, {
                     if (tagsDiv) tagsDiv.style.display = 'flex';
                     const arrow = group.querySelector('.cat-arrow');
                     if (arrow) arrow.textContent = '▼';
+                    // The arrow is drawn from the group's state (ui-refresh.css).
+                    group.classList.add('expanded');
                 }
             });
         });

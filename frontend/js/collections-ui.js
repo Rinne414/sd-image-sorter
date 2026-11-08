@@ -173,7 +173,7 @@
                     : t('collections.fold', 'Hide the collections inside');
                 foldSlot = `<button type="button" class="collection-row-fold" data-action="fold" data-id="${collection.id}" `
                     + `aria-expanded="${row.folded ? 'false' : 'true'}" title="${escapeHtml(foldLabel)}" aria-label="${escapeHtml(foldLabel)}">`
-                    + `<span aria-hidden="true">${window.UiIcon ? window.UiIcon.html('i-chevron-down') : '▾'}</span></button>`;
+                    + `<span aria-hidden="true">${window.UiIcon ? window.UiIcon.html('i-chevron-down') : ''}</span></button>`;
             } else if (nested && !isFavorites) {
                 foldSlot = '<span class="collection-row-fold-slot" aria-hidden="true"></span>';
             }

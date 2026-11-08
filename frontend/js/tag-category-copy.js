@@ -3,13 +3,13 @@
  */
 (function () {
     const CATEGORY_GROUPS = [
-        { id: 'appearance', labelKey: 'tagCategory.appearance', fallback: 'Appearance', icon: '◌', categories: ['character', 'body', 'expression'], saveCategory: 'body' },
-        { id: 'clothing', labelKey: 'tagCategory.clothing', fallback: 'Clothing', icon: '▣', categories: ['outfit'], saveCategory: 'outfit' },
-        { id: 'pose', labelKey: 'tagCategory.pose', fallback: 'Pose', icon: '↕', categories: ['pose', 'action', 'angle'], saveCategory: 'pose' },
-        { id: 'scenery', labelKey: 'tagCategory.scenery', fallback: 'Scenery', icon: '△', categories: ['background'], saveCategory: 'background' },
-        { id: 'style', labelKey: 'tagCategory.style', fallback: 'Style', icon: '◇', categories: ['style', 'artist'], saveCategory: 'style' },
-        { id: 'qualityMeta', labelKey: 'tagCategory.qualityMeta', fallback: 'Quality / Meta', icon: '#', categories: ['quality', 'meta', 'rating'], saveCategory: 'quality' },
-        { id: 'unclassified', labelKey: 'tagCategory.unclassified', fallback: 'Unclassified', icon: '?', categories: ['unknown'], saveCategory: 'unknown' },
+        { id: 'appearance', labelKey: 'tagCategory.appearance', fallback: 'Appearance', icon: 'i-eye', categories: ['character', 'body', 'expression'], saveCategory: 'body' },
+        { id: 'clothing', labelKey: 'tagCategory.clothing', fallback: 'Clothing', icon: 'i-shirt', categories: ['outfit'], saveCategory: 'outfit' },
+        { id: 'pose', labelKey: 'tagCategory.pose', fallback: 'Pose', icon: 'i-move', categories: ['pose', 'action', 'angle'], saveCategory: 'pose' },
+        { id: 'scenery', labelKey: 'tagCategory.scenery', fallback: 'Scenery', icon: 'i-image', categories: ['background'], saveCategory: 'background' },
+        { id: 'style', labelKey: 'tagCategory.style', fallback: 'Style', icon: 'i-palette', categories: ['style', 'artist'], saveCategory: 'style' },
+        { id: 'qualityMeta', labelKey: 'tagCategory.qualityMeta', fallback: 'Quality / Meta', icon: 'i-star', categories: ['quality', 'meta', 'rating'], saveCategory: 'quality' },
+        { id: 'unclassified', labelKey: 'tagCategory.unclassified', fallback: 'Unclassified', icon: 'i-help', categories: ['unknown'], saveCategory: 'unknown' },
     ];
 
     const CORE_BOARD_GROUPS = CATEGORY_GROUPS.filter((group) => (
@@ -34,12 +34,12 @@
     };
 
     const PURPOSE_PRESETS = [
-        { id: 'characterPrompt', labelKey: 'tagCategory.characterPrompt', fallback: 'Character / Appearance', icon: '◎', groupIds: ['appearance'] },
-        { id: 'outfitPrompt', labelKey: 'tagCategory.outfitPrompt', fallback: 'Outfit prompt', icon: '▣', groupIds: ['clothing'] },
-        { id: 'poseScenePrompt', labelKey: 'tagCategory.poseScenePrompt', fallback: 'Pose + Scene prompt', icon: '↕', groupIds: ['pose', 'scenery'] },
-        { id: 'stylePrompt', labelKey: 'tagCategory.stylePrompt', fallback: 'Style prompt', icon: '◇', groupIds: ['style'] },
-        { id: 'trainingCaption', labelKey: 'tagCategory.trainingCaption', fallback: 'Clean training caption', icon: 'TXT', groupIds: ['appearance', 'clothing', 'pose', 'scenery', 'style'] },
-        { id: 'noQualityPrompt', labelKey: 'tagCategory.noQualityPrompt', fallback: 'Prompt without quality/meta', icon: '-#', groupIds: ['appearance', 'clothing', 'pose', 'scenery', 'style', 'unclassified'] },
+        { id: 'characterPrompt', labelKey: 'tagCategory.characterPrompt', fallback: 'Character / Appearance', icon: 'i-person', groupIds: ['appearance'] },
+        { id: 'outfitPrompt', labelKey: 'tagCategory.outfitPrompt', fallback: 'Outfit prompt', icon: 'i-shirt', groupIds: ['clothing'] },
+        { id: 'poseScenePrompt', labelKey: 'tagCategory.poseScenePrompt', fallback: 'Pose + Scene prompt', icon: 'i-move', groupIds: ['pose', 'scenery'] },
+        { id: 'stylePrompt', labelKey: 'tagCategory.stylePrompt', fallback: 'Style prompt', icon: 'i-palette', groupIds: ['style'] },
+        { id: 'trainingCaption', labelKey: 'tagCategory.trainingCaption', fallback: 'Clean training caption', icon: 'i-file', groupIds: ['appearance', 'clothing', 'pose', 'scenery', 'style'] },
+        { id: 'noQualityPrompt', labelKey: 'tagCategory.noQualityPrompt', fallback: 'Prompt without quality/meta', icon: 'i-broom', groupIds: ['appearance', 'clothing', 'pose', 'scenery', 'style', 'unclassified'] },
     ];
 
     const FIND_GROUP_IDS = ['appearance', 'clothing', 'pose', 'scenery', 'style'];
@@ -426,7 +426,7 @@
             button.className = 'tag-category-copy-item tag-category-copy-purpose';
             button.dataset.purpose = preset.id;
             button.innerHTML = `
-                <span class="tag-category-copy-icon" aria-hidden="true">${escapeHtml(preset.icon)}</span>
+                <span class="tag-category-copy-icon" aria-hidden="true">${window.UiIcon ? window.UiIcon.html(preset.icon) : ''}</span>
                 <span class="tag-category-copy-label">${escapeHtml(label)}</span>
                 <span class="tag-category-copy-count">${presetTags.length}</span>
             `;
@@ -449,7 +449,7 @@
             button.className = 'tag-category-copy-item';
             button.dataset.group = group.id;
             button.innerHTML = `
-                <span class="tag-category-copy-icon" aria-hidden="true">${escapeHtml(group.icon)}</span>
+                <span class="tag-category-copy-icon" aria-hidden="true">${window.UiIcon ? window.UiIcon.html(group.icon) : ''}</span>
                 <span class="tag-category-copy-label">${escapeHtml(label)}</span>
                 <span class="tag-category-copy-count">${groupTags.length}</span>
             `;

@@ -955,3 +955,19 @@ html[data-look="pro"] .guide-btn--pulse {
     border-color: var(--border-strong);
     color: var(--text);
 }
+
+/* Close buttons drew an accent outline on any focus, mouse included; the
+   keyboard keeps the cyan ring. */
+html[data-look="pro"] .modal-close:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* The picture's folder name is a label, not a highlight. */
+html[data-look="pro"] .modal-file-subfolder {
+    color: var(--text-secondary);
+}
+
+/* Tag-category icons in the copy menu are labels, in the text colour. */
+html[data-look="pro"] .tag-category-copy-icon {
+    color: var(--text-secondary);
+}

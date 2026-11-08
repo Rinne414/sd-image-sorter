@@ -298,7 +298,7 @@
             const toggle = hasKids
                 ? `<button type="button" class="folder-row-toggle" data-action="toggle" data-path="${safePath}" `
                     + `aria-label="${escapeHtml(t('folders.toggle', 'Expand / collapse'))}" aria-expanded="${isExpanded ? 'true' : 'false'}">`
-                    + `<span aria-hidden="true">${isExpanded ? '▾' : '▸'}</span></button>`
+                    + '<span aria-hidden="true"></span></button>'
                 : '<span class="folder-row-toggle folder-row-toggle-empty" aria-hidden="true"></span>';
 
             let html = `<div class="folder-row${isActive ? ' is-active' : ''}" `
