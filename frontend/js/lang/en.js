@@ -267,6 +267,7 @@ window.I18nLang_en = {
     'inspector.date': 'Date',
     'inspector.rating': 'My rating',
     'inspector.prompt': 'Prompt',
+    'inspector.generation': 'Generation',
     'inspector.steps': 'Steps',
     'inspector.sampler': 'Sampler',
     'inspector.seed': 'Seed',

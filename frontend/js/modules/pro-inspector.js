@@ -145,9 +145,19 @@
             fact(t('inspector.date', 'Date'), formatDate(image.created_at)),
             fact(t('inspector.rating', 'My rating'), stars),
         ].filter(Boolean).forEach((row) => facts.appendChild(row));
-        generationFacts(image, detail).forEach((row) => facts.appendChild(row));
 
         const parts = [thumb, name, facts];
+        // How the picture was made reads as its own group (round 17: a flat key/value list).
+        const generation = generationFacts(image, detail);
+        if (generation.length) {
+            const head = document.createElement('div');
+            head.className = 'pro-inspector-section-head';
+            head.textContent = t('inspector.generation', 'Generation');
+            const group = document.createElement('div');
+            group.className = 'pro-inspector-facts';
+            generation.forEach((row) => group.appendChild(row));
+            parts.push(head, group);
+        }
         const prompt = detail?.image?.prompt || '';
         if (prompt) {
             const head = document.createElement('div');

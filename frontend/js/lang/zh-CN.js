@@ -270,6 +270,7 @@ window.I18nLang_zhCN = {
     'inspector.date': '日期',
     'inspector.rating': '我的评分',
     'inspector.prompt': '提示词',
+    'inspector.generation': '生成参数',
     'inspector.steps': '步数',
     'inspector.sampler': '采样器',
     'inspector.seed': '种子',
