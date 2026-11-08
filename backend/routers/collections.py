@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 import database as db
+import db_collection_tree
 import db_pinned_sets
 from services.tag_export_service import iter_selection_token_id_chunks
 
@@ -29,6 +30,13 @@ router = APIRouter(prefix="/api/collections", tags=["collections"])
 class CreateCollectionRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     folder_path: Optional[str] = Field(default=None, max_length=4096)
+    # The collection to create it inside; None: the top level.
+    parent_id: Optional[int] = Field(default=None, ge=1)
+
+
+class MoveCollectionRequest(BaseModel):
+    # The collection to put it inside; None: the top level.
+    parent_id: Optional[int] = Field(default=None, ge=1)
 
 
 class RenameCollectionRequest(BaseModel):
@@ -88,8 +96,10 @@ async def list_collections():
 @router.post("")
 async def create_collection(request: CreateCollectionRequest):
     """Create a new collection."""
+    if request.parent_id is not None:
+        _require_visible(request.parent_id)
     try:
-        return db.create_collection(request.name, request.folder_path)
+        return db.create_collection(request.name, request.folder_path, parent_id=request.parent_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -131,6 +141,21 @@ async def rename_collection(collection_id: int, request: RenameCollectionRequest
     if not ok:
         raise HTTPException(status_code=404, detail="Collection not found")
     return {"status": "ok"}
+
+
+@router.post("/{collection_id}/move")
+def move_collection(collection_id: int, request: MoveCollectionRequest):
+    """Put a collection inside another one, or back at the top level (parent_id null)."""
+    _require_visible(collection_id)
+    if request.parent_id is not None:
+        _require_visible(request.parent_id)
+    try:
+        ok = db_collection_tree.move_collection(collection_id, request.parent_id)
+    except db_collection_tree.CollectionTreeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return {"status": "ok", "parent_id": request.parent_id}
 
 
 @router.delete("/{collection_id}")

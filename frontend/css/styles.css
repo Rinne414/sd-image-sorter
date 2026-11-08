@@ -8713,3 +8713,102 @@ input[type="radio"] {
     font-size: 13px;
     font-weight: 600;
 }
+
+/* Collections inside collections (collections-tree.js): rows step in under
+   their parent, a caret folds a parent, a row lights up as a drop target, and
+   a dashed strip takes a collection back to the top level while one is dragged.
+   The list id outranks the row rules in ui-refresh.css. */
+#collections-list .collection-row {
+    margin-left: calc(var(--collection-depth, 0) * 14px);
+}
+
+#collections-list .collection-row-fold,
+#collections-list .collection-row-fold-slot {
+    flex: 0 0 20px;
+    width: 20px;
+    height: 26px;
+}
+
+#collections-list .collection-row-fold {
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+#collections-list .collection-row-fold:hover,
+#collections-list .collection-row-fold:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    outline: none;
+}
+
+#collections-list .collection-row-fold[aria-expanded="false"] span {
+    display: inline-block;
+    transform: rotate(-90deg);
+}
+
+#collections-list .collection-row.is-drop-target {
+    border-color: var(--accent-primary);
+    background: rgba(var(--accent-primary-rgb), 0.14);
+    box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+.collections-drop-top {
+    display: none;
+    margin-top: 6px;
+    padding: 8px 10px;
+    border: 1px dashed var(--border-strong);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-size: var(--fs-label);
+    text-align: center;
+}
+
+#sidebar-body-collections.is-moving-collection .collections-drop-top {
+    display: block;
+}
+
+.collections-drop-top.is-drop-target {
+    border-color: var(--accent-primary);
+    background: rgba(var(--accent-primary-rgb), 0.14);
+    color: var(--text-primary);
+}
+
+/* A row's buttons (More, Rename, Delete) take no room until the row is
+   hovered or focused: they appear over its right end, so names keep the full
+   width in the narrow sidebar (at 1366 px they were cut to "Mood..."). */
+#collections-list .collection-row {
+    position: relative;
+}
+
+#collections-list .collection-row-actions {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    display: none;
+    padding-left: 14px;
+    border-radius: 0 8px 8px 0;
+    background: linear-gradient(to right, transparent, var(--surface-3) 14px);
+    opacity: 1;
+    transform: translateY(-50%);
+}
+
+#collections-list .collection-row:hover .collection-row-actions,
+#collections-list .collection-row:focus-within .collection-row-actions {
+    display: flex;
+}
+
+/* The Add to / Move to pickers indent a collection under the one it sits in. */
+.collections-picker-menu .context-menu-label {
+    padding-left: calc(var(--picker-depth, 0) * 14px);
+}
+
+.collections-picker-menu .collections-picker-header.is-name {
+    text-transform: none;
+    letter-spacing: normal;
+}

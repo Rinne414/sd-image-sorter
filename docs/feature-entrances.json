@@ -1010,6 +1010,21 @@
       }
     },
     {
+      "id": "gallery.collection-nesting",
+      "area": "gallery",
+      "en": "Collections inside collections (drag pictures or a collection, Move to…)",
+      "zh": "合集里的合集（拖放图片或合集、移到…）",
+      "classic": [
+        "#collections-drop-top"
+      ],
+      "vopus": {
+        "missing": "V Opus groups pictures as batches, which do not nest, and its library page lists no collections (2026-11-08)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
+    },
+    {
       "id": "gallery.sidebar-collapse",
       "area": "gallery",
       "en": "Collapse / expand the sidebar",

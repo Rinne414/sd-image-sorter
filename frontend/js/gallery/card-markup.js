@@ -303,6 +303,8 @@ Object.assign(window.Gallery, {
         });
 
         item.addEventListener('dragstart', (e) => {
+            // Which pictures this drag carries, for a drop on a sidebar collection (collections-tree.js).
+            window.CollectionsTree?.markImageDrag?.(e, image, item);
             // Desktop shell: drag the real files instead (desktop-bridge.js).
             if (window.DesktopBridge?.startNativeDrag?.(e, image)) return;
             // Use full image URL (not thumbnail) so ComfyUI gets the original with workflow metadata
@@ -466,6 +468,8 @@ Object.assign(window.Gallery, {
         });
 
         item.addEventListener('dragstart', (e) => {
+            // Which pictures this drag carries, for a drop on a sidebar collection (collections-tree.js).
+            window.CollectionsTree?.markImageDrag?.(e, image, item);
             // Desktop shell: drag the real files instead (desktop-bridge.js).
             if (window.DesktopBridge?.startNativeDrag?.(e, image)) return;
             // Use full image URL (not thumbnail) so ComfyUI gets the original with workflow metadata

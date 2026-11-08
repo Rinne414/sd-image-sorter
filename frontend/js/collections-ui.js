@@ -72,6 +72,8 @@
                 // re-binding on every refresh.
                 list.addEventListener('click', (event) => this._onListClick(event));
             }
+            // Drag pictures onto a collection, or a collection into another (collections-tree.js).
+            window.CollectionsTree?.bind?.();
             // Rows are JS-rendered HTML (no data-i18n), so re-render on a
             // language switch or the built-in Favorites keeps showing the
             // previous language's name (QA P3-7c).
@@ -116,18 +118,32 @@
             const list = document.getElementById('collections-list');
             if (!list) return;
 
-            const ordered = this._favoritesFirst();
-            if (ordered.length === 0) {
+            const rows = this._treeRows();
+            if (rows.length === 0) {
                 list.innerHTML = `<p class="collections-empty">${escapeHtml(t('collections.empty', 'No collections yet'))}</p>`;
                 this._renderBrowsingIndicator();
                 return;
             }
 
-            list.innerHTML = ordered.map((collection) => this._rowHtml(collection)).join('');
+            // Rows line up in a tree only once something is nested; a flat list looks as before.
+            const nested = rows.some((row) => row.depth > 0);
+            list.innerHTML = rows
+                .filter((row) => !row.hidden)
+                .map((row) => this._rowHtml(row.collection, row, nested))
+                .join('');
             this._renderBrowsingIndicator();
         },
 
-        _rowHtml(collection) {
+        /** Favorites, then every collection followed by the ones inside it (collections-tree.js). */
+        _treeRows() {
+            const tree = window.CollectionsTree;
+            if (!tree) {
+                return this._favoritesFirst().map((collection) => ({ collection, depth: 0, hasChildren: false, folded: false, hidden: false }));
+            }
+            return tree.order(this._collections);
+        },
+
+        _rowHtml(collection, row = { depth: 0, hasChildren: false, folded: false }, nested = false) {
             const isFavorites = collection.slug === FAVORITES_SLUG;
             const isActive = this._activeId != null && Number(this._activeId) === Number(collection.id);
             const name = isFavorites
@@ -142,6 +158,23 @@
                 + `aria-label="${escapeHtml(t('collections.rename', 'Rename'))}">`
                 + `<span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></span></button>`
             );
+            const moreLabel = t('collections.more', 'More: new collection inside, move to');
+            const moreBtn = isFavorites ? '' : (
+                `<button type="button" class="collection-row-action" data-action="more" `
+                + `data-id="${collection.id}" title="${escapeHtml(moreLabel)}" aria-label="${escapeHtml(moreLabel)}" `
+                + `aria-haspopup="menu"><span aria-hidden="true">⋯</span></button>`
+            );
+            let foldSlot = '';
+            if (row.hasChildren) {
+                const foldLabel = row.folded
+                    ? t('collections.unfold', 'Show the collections inside')
+                    : t('collections.fold', 'Hide the collections inside');
+                foldSlot = `<button type="button" class="collection-row-fold" data-action="fold" data-id="${collection.id}" `
+                    + `aria-expanded="${row.folded ? 'false' : 'true'}" title="${escapeHtml(foldLabel)}" aria-label="${escapeHtml(foldLabel)}">`
+                    + `<span aria-hidden="true">▾</span></button>`;
+            } else if (nested && !isFavorites) {
+                foldSlot = '<span class="collection-row-fold-slot" aria-hidden="true"></span>';
+            }
             const deleteBtn = isFavorites ? '' : (
                 `<button type="button" class="collection-row-action collection-row-action-danger" data-action="delete" `
                 + `data-id="${collection.id}" title="${escapeHtml(t('collections.delete', 'Delete'))}" `
@@ -150,14 +183,16 @@
             );
 
             return `<div class="collection-row${isActive ? ' is-active' : ''}${isFavorites ? ' is-favorites' : ''}" `
-                + `data-id="${collection.id}">`
+                + `data-id="${collection.id}" data-depth="${row.depth}" style="--collection-depth: ${row.depth}"`
+                + `${isFavorites ? '' : ' draggable="true"'}>`
+                + foldSlot
                 + `<button type="button" class="collection-row-open" data-action="browse" data-id="${collection.id}" `
                 + `aria-pressed="${isActive ? 'true' : 'false'}">`
                 + `<span class="collection-row-icon" aria-hidden="true">${icon}</span>`
                 + `<span class="collection-row-name">${escapeHtml(name)}</span>`
                 + `<span class="collection-row-count">${count}</span>`
                 + `</button>`
-                + `<div class="collection-row-actions">${renameBtn}${deleteBtn}</div>`
+                + `<div class="collection-row-actions">${moreBtn}${renameBtn}${deleteBtn}</div>`
                 + `</div>`;
         },
 
@@ -196,6 +231,12 @@
 
             if (action === 'browse') {
                 this.browse(id);
+            } else if (action === 'fold') {
+                window.CollectionsTree?.toggleFold?.(id);
+                this._renderList();
+            } else if (action === 'more') {
+                window._lastPointerEvent = this._pointAt(trigger);
+                window.CollectionsTree?.openRowMenu?.(id);
             } else if (action === 'rename') {
                 const collection = this._collections.find((c) => Number(c.id) === id);
                 this.renamePrompt(id, collection?.name || '');
@@ -239,18 +280,26 @@
             return this._activeId != null;
         },
 
-        async createPrompt() {
+        async createPrompt(parentId = null) {
             const app = appRef();
+            const parent = parentId == null ? null : this._collections.find((c) => Number(c.id) === Number(parentId));
             try {
                 let name = await app.showInputModal(
                     t('collections.create', 'New collection'),
-                    t('collections.namePrompt', 'Enter a name for the collection:'),
+                    parent
+                        ? t('collections.namePromptInside', 'Name of the new collection inside "{name}":', { name: parent.name || '' })
+                        : t('collections.namePrompt', 'Enter a name for the collection:'),
                     ''
                 );
                 name = (name || '').trim();
                 if (!name) return;
 
-                const created = await app.API?.createCollection?.(name);
+                const created = await app.API?.createCollection?.(name, null, parent ? Number(parent.id) : null);
+                if (parent) {
+                    // Show the new one: its parent opens.
+                    const folds = window.CollectionsTree?.readFolds?.();
+                    if (folds?.has(Number(parent.id))) window.CollectionsTree.toggleFold(Number(parent.id));
+                }
                 await this.refresh();
                 toast(t('collections.created', 'Collection created'), 'success');
                 return created;
@@ -334,21 +383,24 @@
             menu.className = 'collections-picker-menu gallery-context-menu';
             menu.setAttribute('role', 'menu');
 
-            const ordered = this._favoritesFirst();
             const header = document.createElement('div');
             header.className = 'collections-picker-header';
             header.textContent = t('collections.addTo', 'Add to collection');
             menu.appendChild(header);
 
-            ordered.forEach((collection) => {
+            // Every collection, the ones inside others indented under them (folding is the sidebar's).
+            const rows = window.CollectionsTree ? window.CollectionsTree.order(this._collections, new Set()) : this._treeRows();
+            rows.forEach(({ collection, depth }) => {
                 const name = collection.slug === FAVORITES_SLUG
                     ? t('collections.favorites', 'Favorites')
                     : (collection.name || '');
                 const icon = collection.slug === FAVORITES_SLUG ? '♥' : '📁';
-                menu.appendChild(this._pickerItem(icon, name, () => {
+                const item = this._pickerItem(icon, name, () => {
                     menu.remove();
                     this._addToCollection(collection.id, name, ids, selectionToken);
-                }));
+                });
+                item.style.setProperty('--picker-depth', String(depth));
+                menu.appendChild(item);
             });
 
             const separator = document.createElement('div');
@@ -367,6 +419,41 @@
             document.body.appendChild(menu);
             this._positionPickerAtPointer(menu);
             this._bindPickerDismiss(menu);
+        },
+
+        /** The point just under a row button, where a menu opened from it appears. */
+        _pointAt(element) {
+            const rect = element.getBoundingClientRect();
+            return { clientX: Math.round(rect.left), clientY: Math.round(rect.bottom) };
+        },
+
+        /**
+         * A small menu at the pointer: a header and items ({ label, depth, current, run }).
+         * Used by the row's More menu and Move to... (collections-tree.js).
+         */
+        _openMenu(headerText, items) {
+            document.querySelector('.collections-picker-menu')?.remove();
+            const menu = document.createElement('div');
+            menu.className = 'collections-picker-menu gallery-context-menu';
+            menu.setAttribute('role', 'menu');
+            const header = document.createElement('div');
+            // It carries a collection's name: shown as typed, not in the heading capitals.
+            header.className = 'collections-picker-header is-name';
+            header.textContent = headerText;
+            menu.appendChild(header);
+            items.forEach((entry) => {
+                const item = this._pickerItem(entry.current ? '●' : '', entry.label, () => {
+                    menu.remove();
+                    entry.run();
+                });
+                item.style.setProperty('--picker-depth', String(entry.depth || 0));
+                if (entry.current) item.setAttribute('aria-current', 'true');
+                menu.appendChild(item);
+            });
+            document.body.appendChild(menu);
+            this._positionPickerAtPointer(menu);
+            this._bindPickerDismiss(menu);
+            menu.querySelector('.context-menu-item')?.focus();
         },
 
         _pickerItem(icon, labelText, onClick) {

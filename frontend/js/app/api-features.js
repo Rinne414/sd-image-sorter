@@ -363,8 +363,15 @@ Object.assign(API, {
         return this.get('/api/folders');
     },
 
-    async createCollection(name, folderPath = null) {
-        return this.post('/api/collections', { name, folder_path: folderPath });
+    async createCollection(name, folderPath = null, parentId = null) {
+        const body = { name, folder_path: folderPath };
+        if (parentId != null) body.parent_id = parentId;
+        return this.post('/api/collections', body);
+    },
+
+    // Put a collection inside another one, or back at the top level (parentId null).
+    async moveCollection(collectionId, parentId = null) {
+        return this.post(`/api/collections/${collectionId}/move`, { parent_id: parentId });
     },
 
     async renameCollection(collectionId, name) {

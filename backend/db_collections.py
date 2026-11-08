@@ -386,7 +386,7 @@ def list_collections() -> List[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute(
             f"""
-            SELECT c.id, c.slug, c.name, c.folder_path, c.created_at,
+            SELECT c.id, c.slug, c.name, c.folder_path, c.created_at, c.parent_id,
                    COUNT(i.id) AS item_count
             FROM collections c
             LEFT JOIN collection_items ci ON ci.collection_id = c.id
@@ -407,8 +407,12 @@ def list_collections() -> List[Dict[str, Any]]:
     return collections
 
 
-def create_collection(name: str, folder_path: Optional[str] = None) -> Dict[str, Any]:
-    """Create a new collection with a unique slug. Returns the created row."""
+def create_collection(
+    name: str, folder_path: Optional[str] = None, parent_id: Optional[int] = None
+) -> Dict[str, Any]:
+    """Create a new collection with a unique slug, optionally inside ``parent_id``. Returns the created row."""
+    from db_collection_tree import check_parent
+
     clean_name = (name or "").strip()
     if not clean_name:
         raise ValueError("Collection name is required")
@@ -416,6 +420,7 @@ def create_collection(name: str, folder_path: Optional[str] = None) -> Dict[str,
     base_slug = _slugify_collection_name(clean_name)
     with get_db() as conn:
         cursor = conn.cursor()
+        check_parent(cursor, parent_id)
         # Ensure slug uniqueness by suffixing -2, -3, ... on collision.
         slug = base_slug
         suffix = 2
@@ -430,8 +435,8 @@ def create_collection(name: str, folder_path: Optional[str] = None) -> Dict[str,
             slug = f"{base_slug}-{suffix}"
             suffix += 1
         cursor.execute(
-            "INSERT INTO collections (slug, name, folder_path, library_id) VALUES (?, ?, ?, ?)",
-            (slug, clean_name, folder_path or "", lib_params[0]),
+            "INSERT INTO collections (slug, name, folder_path, library_id, parent_id) VALUES (?, ?, ?, ?, ?)",
+            (slug, clean_name, folder_path or "", lib_params[0], parent_id),
         )
         new_id = cursor.lastrowid
         cursor.execute("SELECT * FROM collections WHERE id = ?", (new_id,))
@@ -454,7 +459,12 @@ def rename_collection(collection_id: int, name: str) -> bool:
 
 
 def delete_collection(collection_id: int) -> bool:
-    """Delete a collection and its items (the Favorites collection is protected)."""
+    """Delete a collection and its items (the Favorites collection is protected).
+
+    Its sub-collections are not deleted: they move up one level.
+    """
+    from db_collection_tree import lift_children
+
     with get_db() as conn:
         cursor = conn.cursor()
         lib_sql, lib_params = _library_clause()
@@ -467,6 +477,7 @@ def delete_collection(collection_id: int) -> bool:
             return False
         if _row_to_dict(row).get("slug") == FAVORITES_COLLECTION_SLUG:
             raise ValueError("The Favorites collection cannot be deleted")
+        lift_children(cursor, collection_id)
         cursor.execute("DELETE FROM collection_items WHERE collection_id = ?", (collection_id,))
         cursor.execute("DELETE FROM collections WHERE id = ?", (collection_id,))
         return cursor.rowcount > 0
