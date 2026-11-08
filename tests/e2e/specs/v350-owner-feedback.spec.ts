@@ -2,6 +2,18 @@ import { expect, test } from '../fixtures/click-ledger'
 import { markModelsReady } from '../fixtures/model-status'
 import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 import { isIntentionalAbort } from '../fixtures/request-noise'
+import { cleanupImages, seedImages } from '../fixtures/v4-seed'
+
+// The gallery toolbar (search help, filters) folds while the library is empty:
+// this file brings its own pictures instead of relying on what earlier specs left.
+const OWN_PREFIX = 'v350fb-'
+const OWN_DIR = 'v350-feedback'
+test.beforeAll(() => {
+  seedImages({ prefix: OWN_PREFIX, token: 'v350fbtoken', count: 3, dir: OWN_DIR })
+})
+test.afterAll(() => {
+  cleanupImages(OWN_PREFIX, [OWN_DIR])
+})
 
 /**
  * Owner feedback batch 2026-07-05 (v3.5.0): regression tests for
