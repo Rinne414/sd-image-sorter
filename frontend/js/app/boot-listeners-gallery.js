@@ -128,6 +128,7 @@ function initBootListenersGallery() {
 
     // --- Unified Filter Modal ---
     $('#btn-open-filters').addEventListener('click', openFilterModal);
+    $('#btn-pro-add-filter')?.addEventListener('click', openFilterModal);
 
     // Filter presets (FIX 2026-06-12): the preset functions (saveFilterPreset /
     // loadFilterPreset / deleteFilterPreset / renderFilterPresets) existed and

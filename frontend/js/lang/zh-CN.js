@@ -863,6 +863,7 @@ window.I18nLang_zhCN = {
     'filter.artist': '画师',
     'filter.dimensions': '尺寸与比例',
     'filter.aspect': '纵横比例',
+    'filter.addFilter': '添加筛选',
     'filter.clearAll': '清除所有筛选',
     'filter.apply': '应用筛选',
     'filter.reset': '重置全部',

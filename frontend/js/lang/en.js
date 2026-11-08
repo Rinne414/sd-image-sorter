@@ -861,6 +861,7 @@ window.I18nLang_en = {
     'filter.artist': 'Artist',
     'filter.dimensions': 'Dimensions & Aspect',
     'filter.aspect': 'Aspect Ratio',
+    'filter.addFilter': 'Add a filter',
     'filter.clearAll': 'Clear All Filters',
     'filter.apply': 'Apply Filters',
     'filter.reset': 'Reset All',

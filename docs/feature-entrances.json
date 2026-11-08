@@ -902,6 +902,7 @@
       "zh": "筛选编辑器（全部条件）",
       "classic": [
         "#btn-open-filters",
+        "#btn-pro-add-filter",
         "#btn-toolbar-filters",
         "#btn-pro-filters",
         "#btn-pro-filters-more",

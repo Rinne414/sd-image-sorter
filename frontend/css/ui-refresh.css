@@ -13559,3 +13559,8 @@ html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
 .pro-select-slot:empty {
     display: none;
 }
+
+/* Proposal B's "Add a filter" row under its filter list; hidden elsewhere. */
+.pro-add-filter {
+    display: none;
+}

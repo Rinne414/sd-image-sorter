@@ -426,6 +426,14 @@ test('proposal B: Select sits beside the count, filters start open and Clear all
   const filters = page.locator('[data-sidebar-section="filters"] .sidebar-section-toggle')
   await expect(filters).toHaveAttribute('aria-expanded', 'true')
   await expect(page.locator('#btn-clear-filters')).toBeHidden()
+  // The list shows only the filters that are on; with none, only "Add a filter".
+  await expect(page.locator('#filter-summary .summary-row[data-filter-field="generators"]')).toBeHidden()
+  const add = page.locator('#btn-pro-add-filter')
+  await expect(add).toBeVisible()
+  await add.click()
+  await expect(page.locator('#filter-modal')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#filter-modal')).toBeHidden()
 
   // Proposal A: Select goes back to the sidebar's foot.
   await page.evaluate(() => (window as any).SdLook.set('pro'))

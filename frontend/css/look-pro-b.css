@@ -362,6 +362,74 @@ html[data-look-variant="b"] #filter-summary .summary-label > span {
     color: var(--text);
 }
 
-html[data-look-variant="b"] #filter-summary .summary-row:not(.is-active) .summary-value {
+/* ---- Filters: only the ones that are on, then "Add a filter" (round 16:
+   eight rows ending in 无 / 全部 / 任意 read as an unfilled form). The
+   artist row shows itself by an inline style when that filter is on. ---- */
+html[data-look-variant="b"] #filter-summary .summary-row:not(.is-active) {
+    display: none;
+}
+
+html[data-look-variant="b"] #sidebar-body-filters .pro-add-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 32px;
+    padding: 0 0 0 18px;
+    border: 0;
+    border-radius: var(--pro-r-control);
+    background: transparent;
     color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+html[data-look-variant="b"] #sidebar-body-filters .pro-add-filter:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+/* ---- The top bar reads as an app, not a web admin (round 16: icon + label
+   tabs, a pill button and a Ctrl K pill). Page tabs are their names; their
+   icons come back when the bar folds the tabs to icons. The two actions use
+   the control corner; the shortcut stays printed, as plain grey text. ---- */
+html[data-look-variant="b"] .nav-bar:not(.nav-tabs-icon-only) .nav-tab .tab-icon {
+    display: none;
+}
+
+html[data-look-variant="b"] #btn-scan,
+html[data-look-variant="b"] #btn-tag {
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look-variant="b"] #btn-all-features kbd {
+    border: 0;
+    padding: 0;
+    background: transparent;
+}
+
+/* An empty list keeps no gap above "Add a filter"; Clear all filters (it
+   clears the conditions, never pictures) is a quiet row like it. */
+html[data-look-variant="b"] #filter-summary {
+    margin-bottom: 2px;
+}
+
+html[data-look-variant="b"] #sidebar-body-filters #btn-clear-filters {
+    justify-content: flex-start;
+    height: 32px;
+    margin-top: 2px;
+    /* Its words line up with "Add a filter"'s words (18 + 16 icon + 8 gap). */
+    padding: 0 0 0 42px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 400;
+}
+
+html[data-look-variant="b"] #sidebar-body-filters #btn-clear-filters:hover {
+    background: var(--surface-3);
+    color: var(--text);
 }
