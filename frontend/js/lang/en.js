@@ -256,6 +256,7 @@ window.I18nLang_en = {
     'action.tag': 'AI Tag Images',
     'action.library': 'Library',
     'nav.tagLibrary': 'Tags and prompts',
+    'library.switchTitle': 'Switch or manage libraries',
     'action.libraryTooltip': 'Browse all tags and prompts in your library',
     'action.help': 'Help',
     'action.clearGallery': 'Clear current library…',

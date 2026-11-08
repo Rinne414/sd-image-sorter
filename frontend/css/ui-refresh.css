@@ -13493,3 +13493,29 @@ html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
     width: 14px;
     height: 14px;
 }
+
+/* The sidebar's library name is a button to library management: it reads
+   as the name with a small chevron, not as a framed control. */
+.sidebar-library-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: -4px -6px;
+    padding: 4px 6px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.sidebar-library-switch:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.sidebar-library-switch .icon-caret {
+    flex: none;
+    color: var(--text-muted);
+}

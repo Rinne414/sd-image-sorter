@@ -1404,3 +1404,54 @@ html.pro-toolbar-one-row[data-look="pro"] #view-gallery .gallery-header-left > .
     flex: 1 1 200px;
     flex-shrink: 1;
 }
+
+/* ---- From blind round 7 (pro 6/5) ---- */
+
+/* One library switcher: the sidebar's library name (a button with a chevron)
+   instead of a second "主图库" beside the Gallery tab in the top bar. */
+html[data-look="pro"] #nav-library-chip {
+    display: none !important;
+}
+
+/* The source tabs are one choice, drawn as a segmented control, so they no
+   longer look like the filter chips (on/off toggles) beside them. */
+html[data-look="pro"] #view-gallery #generator-tabs {
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #view-gallery #generator-tabs .gen-tab {
+    height: calc(var(--pro-control-h) - 6px);
+    min-height: 0;
+    border-color: transparent;
+    background: transparent;
+    border-radius: 6px;
+}
+
+html[data-look="pro"] #view-gallery #generator-tabs .gen-tab.active {
+    background: var(--pro-chosen-bg);
+}
+
+/* A filter chip that is on reads as on: filled light, not a lifted grey. */
+html[data-look="pro"] #view-gallery .gallery-chip[aria-pressed="true"] {
+    border-color: var(--text);
+    background: var(--text);
+    color: var(--bg);
+}
+
+/* Zero counts step back without becoming unreadable. */
+html[data-look="pro"] #collections-list .collection-row-count.is-zero {
+    opacity: 0.65;
+}
+
+/* In the one-row toolbar the groups are set apart by space: sources, then
+   search and filters, then the sort tools and views. */
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .gallery-header-left > .gallery-search-box {
+    margin-left: 14px;
+}
+
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .view-options .gallery-search-tools {
+    margin-right: 14px;
+}

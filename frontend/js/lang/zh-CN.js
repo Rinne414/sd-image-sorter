@@ -259,6 +259,7 @@ window.I18nLang_zhCN = {
     'action.tag': 'AI 打标',
     'action.library': '词库',
     'nav.tagLibrary': '标签与提示词',
+    'library.switchTitle': '切换或管理图库',
     'action.libraryTooltip': '浏览词库中所有标签和提示词',
     'action.help': '帮助',
     'action.clearGallery': '清空当前图库…',

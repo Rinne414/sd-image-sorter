@@ -193,7 +193,7 @@ test('pro look: the gallery toolbar has one control height and the grid starts w
   await open(page, 'pro')
   await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
   const look = await page.evaluate(() => {
-    const controls = ['.gen-tab', '.view-btn[data-size="grid"]', '#btn-group-runs', '#gallery-search-input', '#btn-search-help', '.gallery-chip', '#aspect-quick-toggle', '#gallery-sort', '#sort-reverse-btn']
+    const controls = ['#generator-tabs', '.view-btn[data-size="grid"]', '#btn-group-runs', '#gallery-search-input', '#btn-search-help', '.gallery-chip', '#aspect-quick-toggle', '#gallery-sort', '#sort-reverse-btn']
     const heights = [...new Set(controls.map((sel) => Math.round(document.querySelector(sel)!.getBoundingClientRect().height)))]
     const left = (sel: string) => Math.round(document.querySelector(sel)!.getBoundingClientRect().left)
     return { heights, edgeGap: Math.abs(left('#gallery-grid .gallery-item') - left('#gallery-search-input')) }
@@ -274,4 +274,22 @@ test.describe('pro look gallery toolbar in one row when it fits', () => {
     await expect(page.locator('html')).not.toHaveClass(/pro-toolbar-one-row/)
     await expect(page.locator('#gallery-search-row')).toBeVisible()
   })
+})
+
+test('pro look: one library switcher, the sidebar name; today\'s look keeps the top-bar chip too', async ({ page }) => {
+  await open(page, 'pro')
+  await expect(page.locator('#nav-library-chip')).toBeHidden()
+  const sidebarSwitch = page.locator('#btn-sidebar-library')
+  await expect(sidebarSwitch).toBeVisible()
+  await sidebarSwitch.click()
+  await expect(page.locator('#entry-library-menu')).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // Today's look, switched live (the init script would bring the pro look back
+  // on a reload), at a width where its top bar has room for the chip (at 1366
+  // in English the top bar's own fitting hides it).
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.evaluate(() => (window as any).SdLook.set(null))
+  await expect(page.locator('#nav-library-chip')).toBeVisible()
+  await expect(page.locator('#btn-sidebar-library')).toBeVisible()
 })

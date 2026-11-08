@@ -108,6 +108,7 @@
       "classic": [
         "#entry-library-switcher",
         "#nav-library-chip",
+        "#btn-sidebar-library",
         "#entry-fn-gallery"
       ],
       "vopus": {

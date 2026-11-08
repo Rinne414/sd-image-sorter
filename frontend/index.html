@@ -802,7 +802,11 @@
                     <!-- Owner 2026-10-22: Clear current library visible on the gallery page, away from
                          Select Images and Import; the same confirm as the library menu's item. -->
                     <div class="sidebar-library-line" id="sidebar-library-line">
-                        <span class="sidebar-library-name" id="sidebar-library-name" data-i18n-locked="1"></span>
+                        <!-- The library name opens library management, like the top-bar library chip. -->
+                        <button type="button" class="sidebar-library-switch" id="btn-sidebar-library" title="Switch or manage libraries" data-i18n-title="library.switchTitle">
+                            <span class="sidebar-library-name" id="sidebar-library-name" data-i18n-locked="1"></span>
+                            <svg class="icon icon-caret" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+                        </button>
                         <button type="button" class="sidebar-library-clear" id="btn-sidebar-clear-library" data-i18n="library.clearShort">Clear library…</button>
                     </div>
                     <div class="filter-sidebar-scroll">

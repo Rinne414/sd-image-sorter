@@ -869,7 +869,7 @@
             e.stopPropagation();
             openMenu();
         });
-        document.getElementById('nav-library-chip')?.addEventListener('click', (e) => {
+        const openLibraryManagement = (e) => {
             e.preventDefault();
             e.stopPropagation();
             // Prefer entry home management; if entry hidden, still open menu if present.
@@ -878,7 +878,11 @@
                 try { window.EntryPage.show(); } catch (_e) { /* ignore */ }
             }
             openMenu();
-        });
+        };
+        document.getElementById('nav-library-chip')?.addEventListener('click', openLibraryManagement);
+        // The sidebar's library name opens the same place (the pro look shows
+        // only this one: the chip beside the Gallery tab repeated the name).
+        document.getElementById('btn-sidebar-library')?.addEventListener('click', openLibraryManagement);
         document.addEventListener('click', (e) => {
             const home = document.getElementById('entry-library-home');
             const chip = document.getElementById('nav-library-chip');
