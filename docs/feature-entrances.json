@@ -4251,6 +4251,21 @@
         "find": "[data-testid=\"disk-index\"]",
         "note": "tab settings-tab-disk"
       }
+    },
+    {
+      "id": "settings.look",
+      "area": "settings",
+      "en": "Interface look (classic or professional preview)",
+      "zh": "界面外观（经典或专业预览）",
+      "classic": [
+        "#settings-look"
+      ],
+      "vopus": {
+        "missing": "the professional look is designed on the classic interface first (goal 2026-11-08)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [

@@ -48,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added / 新增
 
+- **Interface look: Professional (preview)** (classic, Settings › Appearance, off by default): the start of the new look. The owner's brand magenta as the one accent, flat sidebar rows of one height with quiet counts, one corner shape, the picture count as a title (kept on laptop widths), no box around the toolbar or the grid, and only the source tabs the library has pictures from. Settings › Reset also clears it, the Group runs switch and folded collections.
+  - **界面外观：专业（预览）**（经典界面，“设置 › 外观”，默认关闭）：新外观的开始。用作者品牌的洋红作为唯一强调色，侧栏每行一样高、数量安静靠右，统一圆角，图片数量作为标题（笔记本宽度也显示），工具栏和图片区不再有外框，只显示图库里真的有图片的来源。“设置 › 重置”也会清除它、“同批合并”开关和收起的合集。
 - **Network proxy** (Model Center): enter the port of Clash, v2rayN or a similar tool once, and model downloads, package installs and update checks all use it, so TUN mode is not needed. Includes a connection test and one click for the system proxy; local addresses never use it.
   - **网络代理**（模型中心）：填一次 Clash、v2rayN 等工具的端口，模型下载、装包和检查更新都会走它，不用开 TUN 模式。可以测试连接，也可以一键用系统代理；本机地址不走代理。
 - **One banner when the program's server stops**: instead of failing requests one by one, the page says the server stopped; refreshing a folder and the preview give a reason and a Retry.

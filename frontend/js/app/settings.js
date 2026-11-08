@@ -358,10 +358,11 @@ const SETTING_RESET_KEYS = [
     // language, size, sound, start page
     'sd-image-sorter-lang', 'ui_scale_v1', 'sort-audio-enabled',
     'aurora-entry-skip', 'aurora-entry-hero-off', 'aurora-entry-hero-mode',
-    'sd-comfort-zen', 'sd-comfort-warmth', 'library_auto_refresh_enabled',
+    'sd-comfort-zen', 'sd-comfort-warmth', 'sd-look', 'library_auto_refresh_enabled',
     'sd-image-sorter-debug-enabled', 'sd-image-sorter-update-autocheck',
     // tabs, panels shown or folded, gallery view
     'aurora-nav-tabs', 'gallery-view-mode', 'sd-sorter:grid-size', 'desktop-sidebar-collapsed',
+    'sd-sorter:group-runs', 'sd-sorter:collection-folds',
     'sd-image-sorter-scan-advanced-open', 'sd-image-sorter-tag-advanced-open',
     'sd-image-sorter-dataset-tag-legend-open',
     // tool options

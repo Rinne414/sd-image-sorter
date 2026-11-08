@@ -41,9 +41,12 @@
     <!-- tokens.css must stay the LAST stylesheet: it owns the Graphite palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
+    <!-- The opt-in "pro" look (js/look.js sets data-look before paint); scoped, so it changes nothing until chosen. -->
+    <link rel="stylesheet" href="/static/css/look-pro.css">
     <!-- Adaptive UI scaling for large/high-res desktops. Loaded synchronously
          (pre-paint) so the root zoom is set before first render. -->
     <script src="/static/js/ui-scale.js"></script>
+    <script src="/static/js/look.js"></script>
     <!-- First: an error nothing else caught is said on screen, never silent (error-fallback.js). -->
     <script src="/static/js/error-fallback.js"></script>
 </head>
@@ -5831,6 +5834,19 @@
                             <span aria-hidden="true" id="settings-comfort-zen-icon"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg></span>
                             <span id="settings-comfort-zen-label" data-i18n="comfort.zenOffLabel">Off</span>
                         </button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="look.title">Interface look</strong>
+                            <span data-i18n="look.body">Classic, or the new professional look being designed (magenta accent, flatter lists)</span>
+                        </div>
+                        <label class="settings-inline-control">
+                            <span data-i18n="look.label">Look</span>
+                            <select id="settings-look" class="input-field">
+                                <option value="" data-i18n="look.classic" selected>Classic</option>
+                                <option value="pro" data-i18n="look.pro">Professional (preview)</option>
+                            </select>
+                        </label>
                     </div>
                     <div class="settings-row">
                         <div class="settings-row-copy">

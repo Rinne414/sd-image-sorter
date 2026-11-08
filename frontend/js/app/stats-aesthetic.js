@@ -168,7 +168,26 @@ function renderGeneratorTabCounts(genCounts, total, { resolving = false, filtere
         countOthersEl.title = resolving ? resolvingTitle : othersHint;
     }
     if (othersTab) othersTab.title = othersHint;
+    // Before the library statistics arrive nothing is known to be empty.
+    markEmptyGeneratorTabs(libraryCounts, resolving || !AppState.analytics?.generatorCounts);
     syncGeneratorRailOverflow();
+}
+
+/**
+ * Mark the source tabs the whole library has no pictures from (`is-empty`).
+ * The chosen tab is never marked, and nothing is marked while counts are
+ * still resolving. The pro look hides marked tabs (css/look-pro.css); a tab
+ * comes back as soon as its source has pictures.
+ */
+function markEmptyGeneratorTabs(libraryCounts, resolving) {
+    const othersLibrary = OTHERS_GENERATOR_BUNDLE.reduce((sum, gen) => sum + (libraryCounts[gen] || 0), 0);
+    document.querySelectorAll('#generator-tabs .gen-tab[data-gen]').forEach((tab) => {
+        const gen = tab.dataset.gen;
+        if (gen === 'all') return;
+        const libraryCount = gen === 'others' ? othersLibrary : (libraryCounts[gen] || 0);
+        const isChosen = tab.classList.contains('active') || tab.getAttribute('aria-selected') === 'true';
+        tab.classList.toggle('is-empty', !resolving && !isChosen && libraryCount === 0);
+    });
 }
 
 // The tab hints are text written by script: write them again in the new language.

@@ -1,0 +1,256 @@
+/* ==========================================================================
+   look-pro.css - the "pro" look of the classic interface (opt-in sample).
+
+   Goal 2026-11-08 (.plans/ui-pro-2026-11/plan.md): a paid-grade picture
+   manager. What the professional tools share (benchmark.md): the chrome is
+   neutral and the pictures carry the colour, with ONE accent; one icon weight
+   and one corner scale; quiet grey counts beside heavier titles; rows of one
+   height; nothing boxed that does not need a box.
+
+   The accent is the owner's brand magenta (#D5237A, contrast 3.92:1 with the
+   warm white, so it carries white text only at weight 600+), cyan #6ED0C9 is
+   the keyboard focus ring only. Every rule is scoped to html[data-look="pro"]
+   (js/look.js), so today's look is untouched until the look is chosen.
+   ========================================================================== */
+
+html[data-look="pro"] {
+    /* One accent: the brand magenta. */
+    --accent: #D5237A;
+    --accent-rgb: 213, 35, 122;
+    --accent-bright: #E0408F;
+    --accent-deep: #B81D69;
+    --accent-soft: rgba(213, 35, 122, 0.16);
+    --accent-line: rgba(213, 35, 122, 0.62);
+    --on-accent: #FFF6FA;
+    --accent-primary: #D5237A;
+    --accent-primary-rgb: 213, 35, 122;
+    --accent-secondary-rgb: 213, 35, 122;
+    --pink: #D5237A;
+    --pink-rgb: 213, 35, 122;
+    --focus-ring: #6ED0C9;
+
+    /* One corner scale and one type scale. */
+    --pro-r-control: 8px;
+    --pro-r-panel: 12px;
+    --pro-r-tile: 8px;
+    --pro-row: 32px;
+    --pro-fs-body: 14px;
+    --pro-fs-label: 12.5px;
+    --pro-fs-title: 17px;
+}
+
+html[data-look="pro"] *:focus-visible {
+    outline: 2px solid var(--focus-ring) !important;
+    outline-offset: 2px;
+}
+
+/* ---- Top bar: quiet tabs, the place you are in marked by the accent ---- */
+
+html[data-look="pro"] .nav-bar .nav-tab {
+    border-radius: var(--pro-r-control);
+    font-size: var(--pro-fs-body);
+}
+
+html[data-look="pro"] .nav-bar .nav-tab.active {
+    background: var(--accent-soft);
+    color: #FFFFFF;
+    box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+html[data-look="pro"] .nav-library-chip {
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] .btn.btn-primary:not(.btn-icon-only):not(#btn-toggle-select) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] .btn.btn-primary:not(.btn-icon-only):not(#btn-toggle-select):hover {
+    background: var(--accent-bright);
+    border-color: var(--accent-bright);
+}
+
+/* ---- Sidebar: flat rows of one height, counts right-aligned and quiet ---- */
+
+html[data-look="pro"] .filter-sidebar {
+    font-size: var(--pro-fs-body);
+}
+
+html[data-look="pro"] .sidebar-section-title {
+    font-size: var(--pro-fs-label);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    color: var(--muted);
+}
+
+html[data-look="pro"] #collections-list {
+    gap: 1px;
+}
+
+html[data-look="pro"] #collections-list .collection-row {
+    min-height: var(--pro-row);
+    padding: 0 4px 0 2px;
+    border: 0;
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    box-shadow: none;
+}
+
+html[data-look="pro"] #collections-list .collection-row:hover {
+    background: var(--surface-3);
+}
+
+html[data-look="pro"] #collections-list .collection-row.is-active {
+    background: var(--accent-soft);
+    box-shadow: none;
+}
+
+html[data-look="pro"] #collections-list .collection-row.is-active .collection-row-name {
+    color: #FFFFFF;
+}
+
+html[data-look="pro"] #collections-list .collection-row-open {
+    padding: 6px 6px;
+    font-size: var(--pro-fs-body);
+}
+
+html[data-look="pro"] #collections-list .collection-row-count,
+html[data-look="pro"] #collections-list .collection-row.is-active .collection-row-count {
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: var(--pro-fs-label);
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] #folder-tree .folder-row-open {
+    min-height: var(--pro-row);
+    border-radius: var(--pro-r-control);
+    font-size: var(--pro-fs-body);
+}
+
+html[data-look="pro"] #folder-tree .folder-row-open:hover {
+    background: var(--surface-3);
+}
+
+/* The select-mode button is a normal button, not a slab at the foot of the panel. */
+html[data-look="pro"] #btn-toggle-select {
+    min-height: 40px;
+    border-radius: var(--pro-r-control);
+    font-size: var(--pro-fs-body);
+}
+
+/* ---- Gallery header and toolbars: no box around them, one control shape ---- */
+
+html[data-look="pro"] #view-gallery .gallery-header {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+
+html[data-look="pro"] .gen-tab,
+html[data-look="pro"] .view-btn {
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] .gen-tab.active,
+html[data-look="pro"] .view-btn.active,
+html[data-look="pro"] .view-btn[aria-pressed="true"] {
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
+    color: #FFFFFF;
+}
+
+html[data-look="pro"] #gallery-search-input {
+    border-radius: var(--pro-r-control);
+    font-size: var(--pro-fs-body);
+}
+
+/* ---- Grid: clean pictures with small, even gaps ---- */
+
+html[data-look="pro"] #gallery-grid .gallery-item {
+    border-radius: var(--pro-r-tile);
+}
+
+html[data-look="pro"] #gallery-grid .gallery-item img {
+    border-radius: inherit;
+}
+
+/* ---- Pass 2: one even background, the count as a title, one "selected" style ---- */
+
+/* The grid area painted its own darker box only as tall as the pictures. */
+html[data-look="pro"] #view-gallery .gallery-container {
+    background: transparent;
+}
+
+/* The toolbar is part of the window, not a boxed panel above the pictures. */
+html[data-look="pro"] #gallery-toolbar {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+html[data-look="pro"] #gallery-search-row {
+    border-bottom: 1px solid var(--hairline-2);
+}
+
+/* Where you are and how many: a quiet title, as the professional tools do. */
+html[data-look="pro"] #image-count {
+    color: var(--text);
+    font-size: var(--pro-fs-title);
+    font-weight: 650;
+    letter-spacing: 0;
+}
+
+/* Every segmented switch marks its chosen part the same soft way. */
+html[data-look="pro"] #view-gallery .aspect-quick-btn.is-active,
+html[data-look="pro"] #view-gallery .media-quick-btn.is-active {
+    background: var(--accent-soft);
+    color: #FFFFFF;
+    box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+/* The sidebar's collapse control is a small icon button, not a large triangle. */
+html[data-look="pro"] #btn-collapse-desktop-sidebar {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+html[data-look="pro"] #btn-collapse-desktop-sidebar:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+/* Sources the library has no pictures from (app/stats-aesthetic.js marks them):
+   only the filters that apply are shown; the chosen one always stays. */
+html[data-look="pro"] #generator-tabs .gen-tab.is-empty {
+    display: none;
+}
+
+/* Where you are and how many stays visible on laptop widths too (today's look
+   hides it below 1600 px to save room; the empty source tabs it no longer shows
+   give that room back). */
+@media (max-width: 1600px) {
+    html[data-look="pro"] .gallery-header-left > .image-count {
+        display: inline-flex;
+        font-size: 15px;
+    }
+}
+
+/* The source row's "more to the right" fade ends in the colour actually behind
+   it (the toolbar is no longer a panel of its own). */
+html[data-look="pro"] #view-gallery .generator-tabs {
+    --toolbar-bg: var(--bg);
+}
