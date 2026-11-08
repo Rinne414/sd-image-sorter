@@ -364,15 +364,23 @@ test('a program that stops answering is said, and a job it no longer knows ends 
   await page.getByTestId('mediacensor-start').click()
   const jobId = ((await (await started).json()) as { job_id: string }).job_id
   const job = page.getByTestId('job').first()
+  // Keep one real "still running" answer: the GIF can finish in about 4 s on a
+  // fast GPU, before the contact comes back (2026-11-08), so the answers after
+  // the reconnect repeat it instead of depending on how fast the job is.
+  const runningAnswer = page.waitForResponse((res) => /\/api\/censor\/media\/jobs\/[^/]+$/.test(res.url()) && res.request().method() === 'GET')
   await expect(job).toContainText('Censoring v4mc-long.gif…', { timeout: 30_000 })
+  const running = await (await runningAnswer).json()
   const jobUrl = '**/api/censor/media/jobs/*'
   const quiet = (route: import('@playwright/test').Route) => (route.request().method() === 'GET' ? route.abort() : route.fallback())
   await page.route(jobUrl, quiet)
   await expect(page.getByText('Lost contact with the program. Still trying')).toBeVisible({ timeout: 20_000 })
   await expect(headline(page)).toContainText('lost contact with the program')
   await page.unroute(jobUrl, quiet)
+  const stillRunning = (route: import('@playwright/test').Route) => (route.request().method() === 'GET' ? route.fulfill({ json: running }) : route.fallback())
+  await page.route(jobUrl, stillRunning)
   await expect(page.getByText('In contact with the program again.')).toBeVisible({ timeout: 20_000 })
   await expect(headline(page)).not.toContainText('lost contact')
+  await page.unroute(jobUrl, stillRunning)
   // the program restarted: it answers 404 for a job it does not know
   const gone = (route: import('@playwright/test').Route) => (route.request().method() === 'GET' ? route.fulfill({ status: 404, json: { detail: 'Unknown job.' } }) : route.fallback())
   await page.route(jobUrl, gone)
