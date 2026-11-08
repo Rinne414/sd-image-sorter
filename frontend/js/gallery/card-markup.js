@@ -47,7 +47,9 @@ Object.assign(window.Gallery, {
         const highResAttr = finalUrl ? ` data-highres-src="${finalUrl}"` : '';
 
         if (!isLarge) {
-            const imageTag = isWaterfall
+            // Waterfall cards are always virtual (immediateLoad) unless the
+            // thumbnail gate defers them during a flick.
+            const imageTag = isWaterfall && immediateLoad
                 ? `<img src="${initialUrl}" alt="${safeFilename}" loading="lazy" decoding="async" draggable="false"${highResAttr}>`
                 : `<img ${imgAttributes} alt="${safeFilename}" draggable="false"${highResAttr}>`;
 
@@ -132,6 +134,29 @@ Object.assign(window.Gallery, {
     },
 
     /**
+     * One thumbnail gate (gallery/thumb-gate.js) per scroll container: it hears
+     * every scroll and holds back the pictures of cards rendered mid-flick.
+     * @param {HTMLElement} scrollContainer
+     */
+    _ensureThumbGate(scrollContainer) {
+        if (!window.GalleryThumbGate) return;
+        if (this._thumbGate && this._thumbGateContainer === scrollContainer) return;
+        if (this._thumbGateTarget && this._thumbGateListener) {
+            this._thumbGateTarget.removeEventListener('scroll', this._thumbGateListener);
+        }
+        this._thumbGate?.dispose();
+        const isViewport = this._isViewportScrollContainer(scrollContainer);
+        this._thumbGate = window.GalleryThumbGate.create({
+            getScrollTop: () => (isViewport ? window.scrollY : scrollContainer.scrollTop),
+            load: (item) => this._loadImage(item),
+        });
+        this._thumbGateContainer = scrollContainer;
+        this._thumbGateTarget = isViewport ? window : scrollContainer;
+        this._thumbGateListener = () => this._thumbGate.noteScroll();
+        this._thumbGateTarget.addEventListener('scroll', this._thumbGateListener, { passive: true });
+    },
+
+    /**
      * Initialize virtual scrolling if needed
      * @param {string} viewMode - Current view mode ('grid', 'large', 'waterfall')
      */
@@ -165,6 +190,8 @@ Object.assign(window.Gallery, {
         const isWaterfall = viewMode === 'waterfall';
         const VirtualListClass = isWaterfall ? window.WaterfallVirtualList : window.VirtualList;
         if (!VirtualListClass) return null;
+
+        this._ensureThumbGate(scrollContainer);
 
         try {
             const options = this._buildVirtualListOptions(grid, scrollContainer, viewMode);
@@ -217,14 +244,17 @@ Object.assign(window.Gallery, {
         item.setAttribute('aria-label', `${image.filename || 'Image'} - ${generatorLabel}`);
         item.setAttribute('aria-selected', isGalleryImageSelected(AppState, image.id) ? 'true' : 'false');
 
+        // A card rendered mid-flick waits for its picture until the gallery settles.
+        const deferThumb = Boolean(this._thumbGate?.shouldDefer());
         item.innerHTML = this._buildGalleryItemMarkup(
             image,
             viewMode,
             initialUrl,
             finalUrl,
             genColors[generatorValue] || genColors.unknown,
-            true
+            !deferThumb
         );
+        if (deferThumb) this._thumbGate.defer(item);
         this._attachGalleryOrderBadge(item, index);
         this._decorateVideoCard?.(item, image);
 

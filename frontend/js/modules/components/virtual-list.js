@@ -42,7 +42,7 @@ class VirtualList {
     constructor(options) {
         this.validateOptions(options);
 
-        const { container, scrollContainer, renderItem, getItemKey, estimateItemHeight, config, onItemsRendered } = options;
+        const { container, scrollContainer, renderItem, getItemKey, estimateItemHeight, config, onItemsRendered, onItemsRecycled } = options;
 
         this.container = container;
         this.scrollContainer = scrollContainer;
@@ -50,6 +50,8 @@ class VirtualList {
         this.getItemKey = getItemKey || ((index) => index);
         this.estimateItemHeight = estimateItemHeight || (() => this.config.estimatedItemHeight);
         this.onItemsRendered = typeof onItemsRendered === 'function' ? onItemsRendered : null;
+        // Told which elements leave the page, before they go (the gallery cancels their thumbnails).
+        this.onItemsRecycled = typeof onItemsRecycled === 'function' ? onItemsRecycled : null;
 
         this.config = { ...VirtualList.DEFAULT_CONFIG, ...config };
 
@@ -450,6 +452,7 @@ class VirtualList {
             }
         }
 
+        this._notifyItemsRecycled(keysToRemove.map((key) => this.renderedElements.get(key)?.element));
         for (const key of keysToRemove) {
             const itemData = this.renderedElements.get(key);
             if (itemData && itemData.element) {
@@ -708,6 +711,9 @@ class VirtualList {
         if (Object.prototype.hasOwnProperty.call(options, 'onItemsRendered')) {
             this.onItemsRendered = typeof options.onItemsRendered === 'function' ? options.onItemsRendered : null;
         }
+        if (Object.prototype.hasOwnProperty.call(options, 'onItemsRecycled')) {
+            this.onItemsRecycled = typeof options.onItemsRecycled === 'function' ? options.onItemsRecycled : null;
+        }
         if (options.config) {
             this.config = { ...this.config, ...options.config };
         }
@@ -761,6 +767,23 @@ class VirtualList {
     getLayoutForKey(targetKey) {
         const index = this.getIndexForKey(targetKey);
         return index >= 0 ? this.getLayoutForIndex(index) : null;
+    }
+
+    /**
+     * Notify caller about elements that are about to leave the page.
+     * @param {(HTMLElement|undefined)[]} elements
+     */
+    _notifyItemsRecycled(elements) {
+        if (!this.onItemsRecycled || !elements) return;
+        const present = elements.filter(Boolean);
+        if (present.length === 0) return;
+        try {
+            this.onItemsRecycled(present);
+        } catch (error) {
+            if (typeof window !== 'undefined' && window.Logger) {
+                window.Logger.warn('VirtualList: onItemsRecycled callback failed:', error);
+            }
+        }
     }
 
     /**

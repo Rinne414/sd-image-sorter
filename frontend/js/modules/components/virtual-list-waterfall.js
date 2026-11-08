@@ -245,6 +245,7 @@ class WaterfallVirtualList extends VirtualList {
             }
         }
 
+        this._notifyItemsRecycled(keysToRemove.map((key) => this.renderedElements.get(key)?.element));
         for (const key of keysToRemove) {
             const itemData = this.renderedElements.get(key);
             if (itemData && itemData.element) {

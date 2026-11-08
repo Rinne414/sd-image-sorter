@@ -429,6 +429,7 @@ Object.assign(window.Gallery, {
             renderItem: (index, image) => this.createVirtualGalleryItem(index, image, viewMode),
             getItemKey: (index, image) => image.id || index,
             onItemsRendered: (elements) => this._handleRenderedLargeItems(elements),
+            onItemsRecycled: (elements) => this._releaseRecycledThumbs(elements),
             config: {
                 bufferSize: GALLERY_VIRTUAL_CONFIG.bufferSize,
                 threshold: GALLERY_VIRTUAL_CONFIG.threshold,
@@ -472,6 +473,21 @@ Object.assign(window.Gallery, {
         }
 
         return imageCount >= GALLERY_VIRTUAL_CONFIG.threshold;
+    },
+
+    /**
+     * A card scrolled out of the page cancels its thumbnail if it has not
+     * arrived: queued requests for cards already gone made the cards on screen
+     * wait behind them after a flick (measured 2026-11-08).
+     * @param {HTMLElement[]} elements
+     */
+    _releaseRecycledThumbs(elements) {
+        elements.forEach((element) => {
+            element.querySelectorAll('img').forEach((img) => {
+                const src = img.getAttribute('src') || '';
+                if (src && !src.startsWith('data:') && !img.complete) img.removeAttribute('src');
+            });
+        });
     },
 
     /**
