@@ -8812,3 +8812,41 @@ input[type="radio"] {
     text-transform: none;
     letter-spacing: normal;
 }
+
+/* The gallery sidebar on laptop heights (UI audit 2026-11-08): its browse
+   area fades at the bottom while more rows are below (sidebar-scroll-cue.js),
+   and in selection mode the batch panel drops its explanations and puts its
+   two buttons side by side, so the footer no longer takes half the height. */
+.filter-sidebar-scroll.has-more-below {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+
+@media (max-height: 860px) {
+    #btn-toggle-select.btn-large {
+        min-height: 44px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+
+    #selection-actions .selection-panel-section-title,
+    #selection-actions .selection-panel-helper,
+    #selection-actions #selection-scope-summary:empty {
+        display: none;
+    }
+
+    #selection-actions .selection-panel-pick-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+    }
+
+    #selection-actions .selection-panel-pick-actions .btn,
+    #selection-actions .selection-panel-pick-actions .btn span {
+        min-width: 0;
+        overflow: visible;
+        white-space: normal;
+        text-overflow: clip;
+        line-height: 1.25;
+    }
+}

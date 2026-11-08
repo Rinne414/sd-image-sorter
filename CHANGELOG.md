@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Laptop heights: selection mode and Style Finder** (1366x768): in selection mode the batch panel took half the gallery sidebar and the collections list stopped mid-row with nothing saying it went on; the panel now drops its explanations and puts its two buttons side by side there, and the list fades at the bottom while more is below. Style Finder's pinned run buttons read as cards piled on the model settings; they are one slim footer there now. "Done selecting" shows a check instead of a sparkle.
+  - **笔记本高度下的选择模式和画风识别**（1366x768）：选择模式时批量面板占了图库侧栏一半，合集列表在一行中间被截断，看不出下面还有；现在那里会省掉说明文字、两个按钮并排，列表下面还有内容时底部会渐隐。画风识别固定在底部的按钮以前像几张卡片叠在模型设置上；现在那里是一条精简的底栏。“完成选择”改用勾号，不再是闪光图标。
 - **An empty collection says how to fill it**: it showed "No images match your filters, try removing some filters" (the language refresh overwrote its own message); it now says the collection is empty and to drag pictures onto it or use Add to collection, in both languages.
   - **空合集会说明怎么加入图片**：以前显示“没有符合条件的图片，试试去掉几个筛选条件”（语言刷新覆盖了它自己的提示）；现在会说明这个合集还是空的，可以把图片拖进来或用“加入合集”，中英文都一样。
 - **A V Opus page that fails no longer blanks the program**: an error while a page draws now shows what failed, the reason, Reload and Back to the library in place of that page, and the top bar keeps working; errors outside drawing are said in a message. Before, one such error left the whole V Opus window empty.

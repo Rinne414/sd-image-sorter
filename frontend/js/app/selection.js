@@ -33,7 +33,8 @@ function syncSelectionModeButton() {
     );
 
     if (iconEl) {
-        iconEl.innerHTML = isSelecting ? "<svg class=\"icon\" aria-hidden=\"true\"><use href=\"#i-sparkle\"/></svg>" : "<svg class=\"icon\" aria-hidden=\"true\"><use href=\"#i-check\"/></svg>";
+        // "Done selecting" is a check, not a sparkle (an AI-made look); the label tells the two states apart.
+        iconEl.innerHTML = "<svg class=\"icon\" aria-hidden=\"true\"><use href=\"#i-check\"/></svg>";
     }
 
     if (labelEl) {

@@ -13320,3 +13320,27 @@ html .nav-bar.nav-measuring * {
     min-width: 0;
     overflow-wrap: anywhere;
 }
+
+/* Style Finder at laptop heights (UI audit 2026-11-08): the pinned run
+   buttons were two framed cards with headings (194 px) over a scrolling
+   column, so they read as cards piled on the model settings. They stay pinned
+   but as one slim footer: no inner frames, no headings (each button names its
+   action), so the settings above keep most of the column. */
+@media (max-height: 820px) and (min-width: 1101px) {
+    #view-artist .artist-controls-actions {
+        gap: 8px;
+        padding-top: 8px;
+    }
+
+    #view-artist .artist-controls-actions .control-section {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    #view-artist .artist-controls-actions .control-section > h3,
+    #view-artist .artist-controls-actions .control-section > h4 {
+        display: none;
+    }
+}

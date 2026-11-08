@@ -254,3 +254,12 @@ html[data-look="pro"] #generator-tabs .gen-tab.is-empty {
 html[data-look="pro"] #view-gallery .generator-tabs {
     --toolbar-bg: var(--bg);
 }
+
+/* One primary per area: in selection mode the batch panel's "select all
+   matching" is the accent; leaving selection mode is a quiet button. */
+html[data-look="pro"] #btn-toggle-select.selection-active,
+html[data-look="pro"] #btn-toggle-select.active {
+    background: var(--surface-3);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
