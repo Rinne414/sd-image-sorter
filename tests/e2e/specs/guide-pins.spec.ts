@@ -213,7 +213,8 @@ test('desktop help opens the English gallery guide with sections, shortcuts, foc
     'How To Use It',
     'Main Functions',
     'Practical Tips',
-    '⌨️ Keyboard Shortcuts',
+    // Section titles carry no emoji: the guide's icons are line icons (2026-11-09).
+    'Keyboard Shortcuts',
   ])
   await expect(overlay.locator('.guide-shortcut-key')).toContainText(['G / L / W', '?', 'Esc'])
   await expect(overlay.locator('.guide-modal-action')).toBeFocused()

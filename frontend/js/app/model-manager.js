@@ -346,7 +346,7 @@ async function runBulkDownload(items) {
     for (const [itemIndex, item] of items.entries()) {
         updateBanner(appT('models.bulkProgress', 'Downloading {index}/{total}: {name}', { index: completed + 1, total, name: item.name || item.id }));
         if (button) {
-            button.innerHTML = `<span aria-hidden="true">⏳</span> <span>${escapeHtml(appT(
+            button.innerHTML = `<span aria-hidden="true">${window.UiIcon ? window.UiIcon.html('i-clock') : ''}</span> <span>${escapeHtml(appT(
                 'models.bulkProgress',
                 'Downloading {index}/{total}: {name}',
                 { index: completed + 1, total, name: item.name || item.id }
@@ -419,7 +419,7 @@ async function runBulkDownload(items) {
                     const pct = Math.round((p.downloaded / p.total) * 100);
                     const detail = appT('models.bulkProgressDetail', '{index}/{total}: {name} {pct}%', { index: completed + 1, total, name: item.name || item.id, pct });
                     updateBanner(detail);
-                    button.innerHTML = `<span aria-hidden="true">⏳</span> <span>${escapeHtml(detail)}</span>`;
+                    button.innerHTML = `<span aria-hidden="true">${window.UiIcon ? window.UiIcon.html('i-clock') : ''}</span> <span>${escapeHtml(detail)}</span>`;
                 } else if (!p?.active && p?.stage) {
                     updateBanner(appT('models.bulkStageDetail', '{index}/{total}: {name}: {stage}', {
                         index: completed + 1,

@@ -85,8 +85,8 @@ const KeyboardShortcutsPanel = (function () {
         panel.innerHTML = `
             <div class="shortcuts-panel-content">
                 <div class="shortcuts-panel-header">
-                    <h3>⌨️ ${t('shortcuts.title', 'Keyboard Shortcuts')}</h3>
-                    <button class="shortcuts-panel-close" aria-label="${t('common.close', 'Close')}">&times;</button>
+                    <h3>${t('shortcuts.title', 'Keyboard Shortcuts')}</h3>
+                    <button class="shortcuts-panel-close" aria-label="${t('common.close', 'Close')}">${window.UiIcon ? window.UiIcon.html('i-close') : ''}</button>
                 </div>
                 <div class="shortcuts-panel-body">${bodyHtml}</div>
                 <div class="shortcuts-panel-footer">

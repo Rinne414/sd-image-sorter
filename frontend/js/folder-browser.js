@@ -117,9 +117,9 @@ async function _renderFolderBrowser(container, path, notice = '') {
             listHtml = `<div class="folder-browser-empty">${escapeHtml(fbT('folderBrowser.empty', 'No subfolders found'))}</div>`;
         } else {
             listHtml = data.subdirs.map(function(dir) {
-                const arrow = dir.has_children ? '<span class="folder-browser-item-arrow">&#9654;</span>' : '';
+                const arrow = dir.has_children ? '<span class="folder-browser-item-arrow">' + (window.UiIcon ? window.UiIcon.html('i-chevron-down') : '') + '</span>' : '';
                 return '<div class="folder-browser-item" data-path="' + escapeHtml(dir.path) + '" data-has-children="' + dir.has_children + '">' +
-                    '<span class="folder-browser-item-icon">&#128193;</span>' +
+                    '<span class="folder-browser-item-icon">' + (window.UiIcon ? window.UiIcon.html('i-folder') : '') + '</span>' +
                     '<span class="folder-browser-item-name">' + escapeHtml(dir.name) + '</span>' +
                     arrow + '</div>';
             }).join('');

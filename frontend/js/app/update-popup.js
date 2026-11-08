@@ -334,7 +334,7 @@ async function _showUpdatePopup(anchorBtn) {
     popup.innerHTML = `<div class="update-popup-card">
         <div class="update-popup-header">
             <span class="update-popup-title">${escapeHtml(appT('update.popupTitle', 'Version Info'))}</span>
-            <button class="update-popup-close" data-update-action="close" aria-label="Close">&times;</button>
+            <button class="update-popup-close" data-update-action="close" aria-label="${escapeHtml(appT('common.close', 'Close'))}">${window.UiIcon ? window.UiIcon.html('i-close') : ''}</button>
         </div>
         <div class="update-popup-row">
             <span class="update-popup-label">${escapeHtml(appT('update.currentLabel', 'Current Version'))}</span>

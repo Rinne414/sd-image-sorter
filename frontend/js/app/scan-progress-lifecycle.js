@@ -425,7 +425,7 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
             if (_scanSkippedOther > 0 && _scanSkippedPaths.length > 0) {
                 const pathsToClaim = _scanSkippedPaths.slice();
                 _scanCtaActions.push({
-                    icon: '↪️',
+                    icon: '#i-move',
                     label: I18n.format(appT(
                         'scan.claimOtherLibraryCta',
                         'Move {count} into this library',

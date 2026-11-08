@@ -282,7 +282,7 @@
 
             return `
                 <section class="guide-section">
-                    <h4>⌨️ ${this._escape(data.sectionTitle)}</h4>
+                    <h4>${this._escape(data.sectionTitle)}</h4>
                     <div class="guide-shortcuts-grid">${rows}</div>
                 </section>
             `;

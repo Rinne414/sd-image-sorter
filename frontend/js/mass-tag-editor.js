@@ -914,7 +914,7 @@
                 box.appendChild(btn);
             }
             btn.disabled = false;
-            btn.textContent = this.t("↩ Undo this operation", "↩ 撤销这次操作");
+            btn.textContent = this.t("Undo this operation", "撤销这次操作");
             btn.onclick = async () => {
                 btn.disabled = true;
                 try {

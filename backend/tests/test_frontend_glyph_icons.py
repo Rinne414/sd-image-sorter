@@ -23,6 +23,20 @@ GLYPHS = re.compile("[▲▴▶▸▼▾◀◂■▬▮▦◼◥◫▣⌕⌖⟳�
 # A multiplication sign is a fine "960 × 1440", but not a close or remove button.
 BUTTON_CROSS = re.compile(r">\s*×\s*<|textContent\s*=\s*'×'|,\s*'×'\)")
 
+# The same glyphs written as HTML entities (a close button's &times;, a
+# folder arrow's &#9654;) slipped past the character check (2026-11-09).
+ENTITIES = re.compile(
+    r"&(times|#215|#x0*d7|#9654|#x0*25b6|#9660|#x0*25bc|#9650|#x0*25b2|#10005|#x0*2715);",
+    re.IGNORECASE,
+)
+
+# Emoji used as icons beside line icons (censor undo/redo, keycap step numbers,
+# busy hourglasses, keyboard marks; 2026-11-09). Rating stars and the warning
+# sign stay allowed: they are typography in text.
+EMOJI_ICONS = re.compile(
+    "[⌨↩↪↔⬇ℹ⏳✂]️?|[0-9]️⃣|[🌀-🫿]"
+)
+
 # The whole-UI error fallback draws when scripts failed; its close stays text.
 TEXT_ALLOWED_FILES = ("error-fallback.js",)
 
@@ -51,7 +65,13 @@ def _offenders(path: Path) -> list[str]:
     if path.name in TEXT_ALLOWED_FILES:
         return found
     for number, line in enumerate(lines, 1):
-        if not (GLYPHS.search(line) or BUTTON_CROSS.search(line)) or _is_comment(line):
+        hit = (
+            GLYPHS.search(line)
+            or BUTTON_CROSS.search(line)
+            or ENTITIES.search(line)
+            or EMOJI_ICONS.search(line)
+        )
+        if not hit or _is_comment(line):
             continue
         if any(marker in line for marker in CSS_DRAWN + COPY_LINES):
             continue

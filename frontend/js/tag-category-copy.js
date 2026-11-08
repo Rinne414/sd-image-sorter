@@ -494,7 +494,7 @@
             teach.type = 'button';
             teach.className = 'tag-category-copy-item';
             teach.innerHTML = `
-                <span class="tag-category-copy-icon" aria-hidden="true">↔</span>
+                <span class="tag-category-copy-icon" aria-hidden="true">${window.UiIcon ? window.UiIcon.html('i-edit') : ''}</span>
                 <span class="tag-category-copy-label">${escapeHtml(t('tagCategory.teach', 'Teach categories'))}</span>
                 <span class="tag-category-copy-count">${allCount}</span>
             `;

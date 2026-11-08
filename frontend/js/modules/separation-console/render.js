@@ -221,7 +221,7 @@ Object.assign(SeparationConsole, {
             const actions = document.createElement('span');
             actions.className = 'sepcon-actions';
             actions.appendChild(this._actionBtn(
-                row.pruned ? '↩' : '✂',
+                row.pruned ? 'i-undo' : 'i-scissors',
                 row.pruned
                     ? sepconT('Un-prune (remove from blacklist)', '取消剪除（移出黑名单）')
                     : sepconT('Prune: blacklist at export so the trigger absorbs it', '剪除：加入导出黑名单，让触发词吸收'),

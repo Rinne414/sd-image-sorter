@@ -3447,3 +3447,18 @@
 .dataset-project-status[data-state="idle"] {
     display: none;
 }
+
+/* Pipeline step numbers: a small round number, not a keycap emoji. */
+.flow-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
