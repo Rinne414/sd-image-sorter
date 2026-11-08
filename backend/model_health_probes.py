@@ -17,7 +17,8 @@ import json
 import subprocess
 import sys
 import warnings
-from typing import Any, Dict
+from importlib import metadata
+from typing import Any, Dict, Optional, Tuple
 
 
 def _svc():
@@ -72,10 +73,40 @@ def _probe_loaded_torch_runtime() -> Dict[str, Any]:
     return result
 
 
+# The subprocess answer, per Python and installed torch version: importing
+# torch takes about 2 s, and /api/models/status asked twice on every call
+# (3.8 s each time, 7.1 s the first; the program's first page waited for it,
+# measured 2026-11-08). Installing another torch changes the version and the
+# next status asks again; a probe that failed or timed out is not kept.
+_TORCH_PROBE_CACHE: Dict[Tuple[str, Optional[str]], Dict[str, Any]] = {}
+
+
+def _installed_torch_version() -> Optional[str]:
+    try:
+        return metadata.version("torch")
+    except Exception:
+        return None
+
+
+def clear_torch_probe_cache() -> None:
+    _TORCH_PROBE_CACHE.clear()
+
+
 def _probe_torch_runtime() -> Dict[str, Any]:
     if "torch" in sys.modules:
         return _svc()._probe_loaded_torch_runtime()
+    key = (sys.executable, _installed_torch_version())
+    cached = _TORCH_PROBE_CACHE.get(key)
+    if cached is not None:
+        return dict(cached)
+    result, answered = _run_torch_probe()
+    if answered:
+        _TORCH_PROBE_CACHE[key] = dict(result)
+    return result
 
+
+def _run_torch_probe() -> Tuple[Dict[str, Any], bool]:
+    """Import torch in a subprocess; the flag says whether it answered."""
     code = r'''
 import json
 from importlib import metadata
@@ -95,6 +126,9 @@ try:
     result["torch_version"] = getattr(torch, "__version__", result["torch_version"])
     result["torch_cuda_build"] = getattr(getattr(torch, "version", None), "cuda", None)
     result["torch_cuda_available"] = bool(torch.cuda.is_available())
+    if result["torch_cuda_available"]:
+        result["gpu_name"] = torch.cuda.get_device_name(0)
+        result["gpu_vram_total_mb"] = round(torch.cuda.get_device_properties(0).total_memory / (1024 ** 2))
 except Exception as exc:
     result["torch_probe_error"] = str(exc)
 print(json.dumps(result))
@@ -114,7 +148,7 @@ print(json.dumps(result))
             "torch_cuda_available": False,
             "torch_probe_error": str(exc),
             "torch_probe_source": "subprocess",
-        }
+        }, False
 
     if completed.returncode != 0:
         return {
@@ -123,7 +157,7 @@ print(json.dumps(result))
             "torch_cuda_available": False,
             "torch_probe_error": (completed.stderr or completed.stdout or f"exit {completed.returncode}").strip(),
             "torch_probe_source": "subprocess",
-        }
+        }, False
 
     try:
         parsed = json.loads((completed.stdout or "{}").strip().splitlines()[-1])
@@ -134,7 +168,7 @@ print(json.dumps(result))
             "torch_cuda_available": False,
             "torch_probe_error": f"Could not parse torch probe output: {exc}",
             "torch_probe_source": "subprocess",
-        }
+        }, False
 
     return {
         "torch_version": parsed.get("torch_version"),
@@ -142,4 +176,6 @@ print(json.dumps(result))
         "torch_cuda_available": bool(parsed.get("torch_cuda_available")),
         "torch_probe_error": parsed.get("torch_probe_error"),
         "torch_probe_source": parsed.get("torch_probe_source") or "subprocess",
-    }
+        "gpu_name": parsed.get("gpu_name"),
+        "gpu_vram_total_mb": parsed.get("gpu_vram_total_mb"),
+    }, True

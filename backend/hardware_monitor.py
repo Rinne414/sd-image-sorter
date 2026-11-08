@@ -2,6 +2,7 @@
 import json
 import logging
 import platform
+import sys
 import shutil
 import subprocess
 import threading
@@ -222,6 +223,23 @@ def get_system_info(*, refresh: bool = False) -> Dict[str, Any]:
     return info
 
 
+def _apply_torch_subprocess_probe(info: Dict[str, Any]) -> None:
+    """CUDA availability, and the device name and size, from the cached torch subprocess probe."""
+    try:
+        import model_health_probes
+
+        probe = model_health_probes._probe_torch_runtime()
+    except Exception as exc:
+        logger.debug("torch subprocess probe failed: %s", exc)
+        return
+    if not probe.get("torch_cuda_available"):
+        return
+    info["torch_cuda_available"] = True
+    info["gpu_name"] = probe.get("gpu_name") or info["gpu_name"]
+    if probe.get("gpu_vram_total_mb"):
+        info["gpu_vram_total_mb"] = probe["gpu_vram_total_mb"]
+
+
 def _collect_system_info() -> Dict[str, Any]:
     """
     Detect system hardware capabilities for AI model inference.
@@ -271,11 +289,16 @@ def _collect_system_info() -> Dict[str, Any]:
     # --- Windows multi-GPU enumeration (NVIDIA / Intel / AMD) ---
     info["gpu_devices"] = _detect_windows_gpu_devices()
 
-    # --- GPU via torch.cuda ---
+    # --- GPU via torch.cuda, only when torch is already loaded ---
+    # Importing torch here cost 865 MB of memory and a CUDA context holding
+    # VRAM next to the user's ComfyUI, on every start (the boot warm-up runs
+    # this probe; measured 2026-11-08). Otherwise the cached subprocess probe
+    # answers, and its CUDA context ends with the subprocess.
+    torch = sys.modules.get("torch")
+    if torch is None:
+        _apply_torch_subprocess_probe(info)
     try:
-        import torch
-
-        if torch.cuda.is_available():
+        if torch is not None and torch.cuda.is_available():
             info["torch_cuda_available"] = True
             info["gpu_name"] = torch.cuda.get_device_name(0)
             try:

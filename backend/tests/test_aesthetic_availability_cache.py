@@ -1,12 +1,16 @@
 """Tests for the aesthetic predictor's is_available() caching behaviour.
 
 The frontend polls ``/api/aesthetic/status`` every few seconds while the
-aesthetic settings panel is open. Before the cache landed, every poll ran
-``import torch`` again and emitted a fresh
-"Aesthetic predictor torch import failed: No module named 'torch'" WARNING,
-flooding the launcher console for any user running in lightweight mode
-(the default since v3.2.2 / PR #11). These tests pin the new behaviour so
-the spam does not return.
+aesthetic settings panel is open. Before the cache landed, every poll checked
+torch again and emitted a fresh "Aesthetic predictor torch import failed:
+No module named 'torch'" WARNING, flooding the launcher console for any user
+running in lightweight mode (the default since v3.2.2 / PR #11). These tests
+pin the behaviour so the spam does not return.
+
+Since 2026-11-08 the check imports nothing heavy into the server (importing
+torch and open_clip cost 4.6 s and 811 MB on every start): torch is tried in
+a subprocess (``_torch_import_error``) and open_clip is only located
+(``_clip_installed``). The tests replace those two seams.
 """
 
 from __future__ import annotations
@@ -32,47 +36,30 @@ def _reset_cache_around_each_test():
     aesthetic.reset_availability_cache()
 
 
-def _force_torch_import_to_fail(monkeypatch):
-    """Make ``import torch`` inside ``is_available`` raise ImportError.
+def _torch_checks(monkeypatch, *, missing: bool = True) -> dict:
+    """Route the torch check through a counter; ``state['missing']`` flips it."""
+    state = {"missing": missing, "calls": 0}
 
-    Removing the module from ``sys.modules`` and inserting a sentinel that
-    raises on attribute access mirrors what users see in lightweight mode
-    where torch was never installed.
-    """
-    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    def torch_import_error():
+        state["calls"] += 1
+        return "No module named 'torch'" if state["missing"] else None
 
-    real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
-
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "torch" or name.startswith("torch."):
-            raise ImportError("No module named 'torch'")
-        return real_import(name, globals, locals, fromlist, level)
-
-    monkeypatch.setattr("builtins.__import__", fake_import)
+    monkeypatch.setattr(aesthetic, "_torch_import_error", torch_import_error)
+    monkeypatch.setattr(aesthetic, "_clip_installed", lambda: True)
+    return state
 
 
 def test_is_available_caches_negative_result(monkeypatch):
     """Once is_available() decides torch is missing, subsequent calls
-    must reuse that answer without re-running ``import torch``."""
-    _force_torch_import_to_fail(monkeypatch)
-
-    import_calls = {"count": 0}
-    real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
-
-    def counting_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "torch" or name.startswith("torch."):
-            import_calls["count"] += 1
-            raise ImportError("No module named 'torch'")
-        return real_import(name, globals, locals, fromlist, level)
-
-    monkeypatch.setattr("builtins.__import__", counting_import)
+    must reuse that answer without checking torch again."""
+    state = _torch_checks(monkeypatch)
 
     assert aesthetic.is_available() is False
     assert aesthetic.is_available() is False
     assert aesthetic.is_available() is False
 
-    assert import_calls["count"] == 1, (
-        "is_available() must only attempt the torch import once per process; "
+    assert state["calls"] == 1, (
+        "is_available() must only check torch once per process; "
         "the cached negative result must short-circuit subsequent polls."
     )
 
@@ -80,7 +67,7 @@ def test_is_available_caches_negative_result(monkeypatch):
 def test_is_available_logs_torch_failure_only_once(monkeypatch, caplog):
     """The aesthetic settings panel polls /api/aesthetic/status every few
     seconds. Repeated polls must not produce repeated WARNING entries."""
-    _force_torch_import_to_fail(monkeypatch)
+    _torch_checks(monkeypatch)
 
     with caplog.at_level(logging.WARNING, logger="aesthetic"):
         aesthetic.is_available()
@@ -89,7 +76,8 @@ def test_is_available_logs_torch_failure_only_once(monkeypatch, caplog):
         aesthetic.is_available()
 
     matching = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if "Aesthetic predictor torch import failed" in record.getMessage()
     ]
     assert len(matching) == 1, (
@@ -101,48 +89,23 @@ def test_is_available_logs_torch_failure_only_once(monkeypatch, caplog):
 def test_reset_availability_cache_re_runs_import_check(monkeypatch):
     """After Prepare for Aesthetic Score installs torch + open_clip, the
     model service calls reset_availability_cache() so the next status poll
-    discovers the freshly-installed runtime.
+    discovers the freshly-installed runtime."""
+    state = _torch_checks(monkeypatch)
 
-    The test routes ``import torch`` / ``import open_clip`` through fake
-    ``ModuleType`` instances instead of deleting the real torch from
-    ``sys.modules``. CI environments install torch via requirements-dev.txt;
-    deleting it and letting the real import run a second time would trigger
-    a ``RuntimeError: Only a single TORCH_LIBRARY can be used to register
-    the namespace triton`` because torch's C++ globals are already
-    registered in this interpreter.
-    """
-    import types
-
-    real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
-    fail_torch = {"on": True}
-    fake_torch = types.ModuleType("torch")
-    fake_open_clip = types.ModuleType("open_clip")
-
-    def routed_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "torch" or name.startswith("torch."):
-            if fail_torch["on"]:
-                raise ImportError("No module named 'torch'")
-            return fake_torch
-        if name == "open_clip" or name.startswith("open_clip."):
-            return fake_open_clip
-        return real_import(name, globals, locals, fromlist, level)
-
-    monkeypatch.setattr("builtins.__import__", routed_import)
-
-    # First poll: torch missing → False, cache populated with False.
+    # First poll: torch missing -> False, cache populated with False.
     assert aesthetic.is_available() is False
     assert aesthetic._availability_cache is False
 
-    # Simulate Prepare succeeding: torch is now importable. Without the
-    # reset, the cached False would stick for the rest of this process.
-    fail_torch["on"] = False
+    # Simulate Prepare succeeding. Without the reset, the cached False would
+    # stick for the rest of this process.
+    state["missing"] = False
     aesthetic.reset_availability_cache()
     assert aesthetic._availability_cache is None, (
         "reset_availability_cache() must clear the cached value back to None "
-        "so the next is_available() call actually re-runs the import check."
+        "so the next is_available() call actually re-runs the check."
     )
 
-    # Second poll: torch present → True, cache populated with True.
+    # Second poll: torch present -> True, cache populated with True.
     assert aesthetic.is_available() is True
     assert aesthetic._availability_cache is True
 
@@ -152,7 +115,7 @@ def test_reset_availability_cache_re_arms_warning(monkeypatch, caplog):
     next is_available() call after reset_availability_cache() should emit
     the WARNING again (otherwise the user has no breadcrumb at all when
     re-investigating after a failed prepare)."""
-    _force_torch_import_to_fail(monkeypatch)
+    _torch_checks(monkeypatch)
 
     with caplog.at_level(logging.WARNING, logger="aesthetic"):
         aesthetic.is_available()  # logs warning #1
@@ -163,7 +126,8 @@ def test_reset_availability_cache_re_arms_warning(monkeypatch, caplog):
         aesthetic.is_available()  # logs warning #2
 
     matching = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if "Aesthetic predictor torch import failed" in record.getMessage()
     ]
     assert len(matching) == 2, (
@@ -171,3 +135,40 @@ def test_reset_availability_cache_re_arms_warning(monkeypatch, caplog):
         f"the WARNING once. Got {len(matching)} messages: "
         f"{[r.getMessage() for r in matching]}"
     )
+
+
+def test_torch_present_without_clip_is_unavailable(monkeypatch):
+    _torch_checks(monkeypatch, missing=False)
+    monkeypatch.setattr(aesthetic, "_clip_installed", lambda: False)
+    assert aesthetic.is_available() is False
+
+
+def test_the_check_never_imports_torch_into_the_server(monkeypatch):
+    """The answer comes from the subprocess probe; torch stays out of this process."""
+    import model_health_probes
+
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.setattr(
+        model_health_probes,
+        "_probe_torch_runtime",
+        lambda: {"torch_version": "2.7.0+cu128", "torch_probe_error": None},
+    )
+    monkeypatch.setattr(aesthetic, "_clip_installed", lambda: True)
+    assert aesthetic.is_available() is True
+    assert "torch" not in sys.modules
+
+
+def test_a_broken_torch_reads_as_unavailable(monkeypatch):
+    import model_health_probes
+
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.setattr(
+        model_health_probes,
+        "_probe_torch_runtime",
+        lambda: {
+            "torch_version": "2.7.0",
+            "torch_probe_error": "[WinError 126] fbgemm.dll could not be found",
+        },
+    )
+    monkeypatch.setattr(aesthetic, "_clip_installed", lambda: True)
+    assert aesthetic.is_available() is False

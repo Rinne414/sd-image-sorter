@@ -263,17 +263,28 @@ def _sam3_supported_on_platform() -> bool:
     return sys.platform != "darwin"
 
 
+SAM3_MODULE_FILES = ("modeling_sam3", "image_processing_sam3", "processing_sam3")
+
+
 def _sam3_runtime_import_ready() -> bool:
-    """Check the concrete SAM3 modules used by the segmenter without loading them."""
-    required_modules = (
-        "transformers.models.sam3.modeling_sam3",
-        "transformers.models.sam3.image_processing_sam3",
-        "transformers.models.sam3.processing_sam3",
-    )
+    """Check the concrete SAM3 modules used by the segmenter without loading them.
+
+    find_spec of a submodule imports its parent packages: the old check
+    imported transformers (2.9 s and its memory, on the first Model Center
+    status, measured 2026-11-08). Locating the top-level package does not
+    import it, so the module files are looked for in its folders.
+    """
     try:
-        return all(importlib.util.find_spec(module_name) is not None for module_name in required_modules)
+        spec = importlib.util.find_spec("transformers")
     except (ImportError, ModuleNotFoundError, ValueError):
         return False
+    if spec is None or not spec.submodule_search_locations:
+        return False
+    for location in spec.submodule_search_locations:
+        folder = Path(location) / "models" / "sam3"
+        if all((folder / f"{name}.py").is_file() for name in SAM3_MODULE_FILES):
+            return True
+    return False
 
 
 def _clip_text_model_loaded() -> bool:

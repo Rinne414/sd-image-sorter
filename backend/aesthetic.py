@@ -11,8 +11,10 @@ normalized CLIP embedding: once its 11 MB file is installed, the same CLIP
 pass yields both scores. deepghs anime_aesthetic (``anime_aesthetic.py``) is
 an optional ONNX grade on the same opened picture.
 """
+import importlib.util
 import logging
 import os
+import sys
 import threading
 import warnings
 from dataclasses import dataclass
@@ -555,21 +557,50 @@ def predict_scores(
         return None
 
 
+def _torch_import_error() -> Optional[str]:
+    """Why torch cannot be imported here, or None when it can.
+
+    Asked without importing torch into the server: importing torch and
+    open_clip took 4.6 s and 811 MB on every start (measured 2026-11-08) just
+    to say whether Aesthetic Score is available. A subprocess imports it
+    instead (shared with the Model Center probe and kept per installed torch
+    version), so a broken DLL chain still reads as unavailable.
+    """
+    if "torch" in sys.modules:
+        return None
+    import model_health_probes
+
+    probe = model_health_probes._probe_torch_runtime()
+    error = probe.get("torch_probe_error")
+    if error:
+        return str(error)
+    return None if probe.get("torch_version") else "No module named 'torch'"
+
+
+def _clip_installed() -> bool:
+    """open_clip (or OpenAI's clip) is installed; located, not imported (it imports torch)."""
+    for name in ("open_clip", "clip"):
+        try:
+            if importlib.util.find_spec(name) is not None:
+                return True
+        except (ImportError, ValueError):
+            continue
+    return False
+
+
 def is_available() -> bool:
     """Check if the required dependencies are installed.
 
-    Catches both ImportError (missing package) AND OSError (DLL load failure
-    on Windows when torch's cudnn / cuda chain is broken). Without the
-    OSError catch, ``/api/aesthetic/status`` returned 500 to the user any
-    time a system had a broken torch runtime - even though the rest of the
-    app still works. The frontend's "aesthetic unavailable" toast is far
-    more useful than an unhandled 500.
+    torch must import (a missing package and a broken DLL chain both read as
+    unavailable, never as a 500 from ``/api/aesthetic/status``), checked in a
+    subprocess by :func:`_torch_import_error`; open_clip must be installed.
+    Nothing heavy is imported into the server to answer.
 
     Result is cached at module scope so the frontend's repeated
-    ``/api/aesthetic/status`` poll does not retry ``import torch`` (and
-    re-log the same WARNING) on every call. Call
-    :func:`reset_availability_cache` after installing the aesthetic
-    dependency group so the next status check picks up the new state.
+    ``/api/aesthetic/status`` poll does not check again (and re-log the same
+    WARNING) on every call. Call :func:`reset_availability_cache` after
+    installing the aesthetic dependency group so the next status check picks
+    up the new state.
     """
     global _availability_cache, _availability_warning_logged
 
@@ -581,36 +612,27 @@ def is_available() -> bool:
         if _availability_cache is not None:
             return _availability_cache
 
-        try:
-            import torch  # noqa: F401
-            try:
-                import open_clip  # noqa: F401
-            except (ImportError, OSError):
-                try:
-                    import clip  # noqa: F401
-                except (ImportError, OSError):
-                    _availability_cache = False
-                    return False
-            _availability_cache = True
-            return True
-        except (ImportError, OSError) as exc:
-            if not _availability_warning_logged:
-                # First failure in this process: WARNING so the launcher
-                # console flags the missing runtime once. Subsequent polls
-                # of /api/aesthetic/status hit the cache above and stay
-                # silent, so the previous "log spam every 5 seconds"
-                # behaviour is gone.
-                logger.warning(
-                    "Aesthetic predictor torch import failed: %s. "
-                    "Aesthetic Score is part of the optional AI runtime; "
-                    "click Setup Now → Prepare for Aesthetic Score (or set "
-                    "SD_IMAGE_SORTER_INSTALL_FULL_AI=1 before launch) to install "
-                    "torch + open_clip.",
-                    exc,
-                )
-                _availability_warning_logged = True
-            _availability_cache = False
-            return False
+        torch_error = _torch_import_error()
+        if torch_error is None:
+            _availability_cache = _clip_installed()
+            return _availability_cache
+        if not _availability_warning_logged:
+            # First failure in this process: WARNING so the launcher
+            # console flags the missing runtime once. Subsequent polls
+            # of /api/aesthetic/status hit the cache above and stay
+            # silent, so the previous "log spam every 5 seconds"
+            # behaviour is gone.
+            logger.warning(
+                "Aesthetic predictor torch import failed: %s. "
+                "Aesthetic Score is part of the optional AI runtime; "
+                "click Setup Now → Prepare for Aesthetic Score (or set "
+                "SD_IMAGE_SORTER_INSTALL_FULL_AI=1 before launch) to install "
+                "torch + open_clip.",
+                torch_error,
+            )
+            _availability_warning_logged = True
+        _availability_cache = False
+        return False
 
 
 def reset_availability_cache() -> None:
@@ -626,3 +648,5 @@ def reset_availability_cache() -> None:
     with _availability_cache_lock:
         _availability_cache = None
         _availability_warning_logged = False
+    # A package installed after start is found only once the finders forget their listings.
+    importlib.invalidate_caches()
