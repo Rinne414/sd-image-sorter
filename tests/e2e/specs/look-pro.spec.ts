@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 
+import { cleanupImages, seedImages } from '../fixtures/v4-seed'
+
 /**
  * The opt-in professional look (goal 2026-11-08, .plans/ui-pro-2026-11):
  * chosen in Settings > Appearance, remembered, and it shows only the source
@@ -7,6 +9,10 @@ import { expect, test } from '@playwright/test'
  */
 
 test.use({ viewport: { width: 1366, height: 768 } })
+
+// The gallery toolbar folds while the library is empty: bring our own pictures.
+test.beforeAll(() => seedImages({ prefix: 'lookpro-', token: 'lookprotoken', count: 3, dir: 'look-pro' }))
+test.afterAll(() => cleanupImages('lookpro-', ['look-pro']))
 
 async function open(page: import('@playwright/test').Page, look: 'pro' | null) {
   await page.addInitScript((l) => {
