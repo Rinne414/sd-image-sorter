@@ -1,16 +1,18 @@
 /**
- * pro-fold-menu.js - proposal B folds a few toolbar buttons into one labelled
- * menu (the View menu, the More menu beside the picture count).
+ * pro-fold-menu.js - proposal B moves a few gallery buttons: some fold into a
+ * labelled menu (View, More beside the picture count), Select pictures moves
+ * next to the count.
  *
- * Blind A/B rounds (2026-11-08): the gallery toolbar carried about fifteen
- * controls and several bare icons nobody could name; the judges asked for
- * about six visible. In proposal B (the pro look with data-look-variant="b")
- * the folded buttons move into their menu, where each shows its own name;
- * each keeps its handler and pressed state. Nothing is removed: proposal A
- * and today's look keep the buttons in the toolbar.
+ * Blind A/B rounds (2026-11-08/09): the gallery toolbar carried about fifteen
+ * controls and several bare icons nobody could name, and Select pictures sat
+ * at the foot of the sidebar, far from the grid. In proposal B (the pro look
+ * with data-look-variant="b") the folded buttons move into their menu, where
+ * each shows its own name, and Select moves beside the count; each keeps its
+ * handler and pressed state. Nothing is removed: proposal A and today's look
+ * keep every button where it was.
  *
- * create(...) runs from <head>, so each menu's Esc listener comes before the
- * body scripts' own Esc handlers.
+ * The menus are created from <head>, so each menu's Esc listener comes before
+ * the body scripts' own Esc handlers.
  *
  * Classic script, no globals.
  */
@@ -24,15 +26,54 @@
         return root.dataset.look === 'pro' && root.dataset.lookVariant === 'b';
     }
 
+    function whenReady(start) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', start, { once: true });
+        } else {
+            start();
+        }
+    }
+
+    function onLookChange(callback) {
+        new MutationObserver(callback).observe(document.documentElement, {
+            attributes: true, attributeFilter: ['data-look', 'data-look-variant'],
+        });
+    }
+
+    /**
+     * Keeps nodes() inside the host element while proposal B is on and puts
+     * them back where they were (same parent, same place) when it is off.
+     */
+    function relocate(hostId, nodes) {
+        const moved = [];
+
+        function moveIn() {
+            const host = el(hostId);
+            if (!host || moved.length) return;
+            nodes().filter(Boolean).forEach((node) => {
+                moved.push({ node, parent: node.parentNode, next: node.nextSibling });
+                host.appendChild(node);
+            });
+        }
+
+        function moveBack() {
+            while (moved.length) {
+                const { node, parent, next } = moved.pop();
+                parent.insertBefore(node, next && next.parentNode === parent ? next : null);
+            }
+        }
+
+        return { sync: () => (active() ? moveIn() : moveBack()) };
+    }
+
     /**
      * @param {{button: string, popover: string, body: string, nodes: () => Element[], placement?: string}} spec
      *   element ids of the menu button, its popover and the popover's body;
      *   nodes() lists the buttons to fold.
      */
-    function create(spec) {
-        const moved = [];
+    function createMenu(spec) {
         const placement = spec.placement || 'bottom-end';
-
+        const mover = relocate(spec.body, spec.nodes);
         const isOpen = () => el(spec.popover)?.hidden === false;
 
         function close() {
@@ -52,24 +93,10 @@
             pop.querySelector('button:not([disabled])')?.focus({ preventScroll: true });
         }
 
-        function fold() {
-            const host = el(spec.body);
-            if (!host || moved.length) return;
-            spec.nodes().filter(Boolean).forEach((node) => {
-                moved.push({ node, parent: node.parentNode, next: node.nextSibling });
-                host.appendChild(node);
-            });
+        function sync() {
+            if (!active()) close();
+            mover.sync();
         }
-
-        function unfold() {
-            close();
-            while (moved.length) {
-                const { node, parent, next } = moved.pop();
-                parent.insertBefore(node, next && next.parentNode === parent ? next : null);
-            }
-        }
-
-        const sync = () => (active() ? fold() : unfold());
 
         window.addEventListener('keydown', (event) => {
             if (event.key !== 'Escape' || !isOpen()) return;
@@ -79,7 +106,7 @@
             el(spec.button)?.focus({ preventScroll: true });
         }, true);
 
-        function start() {
+        whenReady(() => {
             const button = el(spec.button);
             const pop = el(spec.popover);
             if (!button || !pop) return;
@@ -99,21 +126,12 @@
                 close();
             });
             window.addEventListener('resize', close);
-            new MutationObserver(sync).observe(document.documentElement, {
-                attributes: true, attributeFilter: ['data-look', 'data-look-variant'],
-            });
+            onLookChange(sync);
             sync();
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', start, { once: true });
-        } else {
-            start();
-        }
-        return { open, close, isOpen };
+        });
     }
 
-    create({
+    createMenu({
         button: 'btn-pro-view',
         popover: 'pro-view-popover',
         body: 'pro-view-popover-body',
@@ -123,11 +141,18 @@
             el('btn-pro-inspector'),
         ],
     });
-    create({
+    createMenu({
         button: 'btn-pro-more',
         popover: 'pro-more-popover',
         body: 'pro-more-popover-body',
         placement: 'bottom-start',
         nodes: () => [el('btn-random'), el('btn-reconnect-missing')],
+    });
+
+    // Select pictures beside the count (round 14, both judges: "too far from the grid").
+    const select = relocate('pro-select-slot', () => [el('btn-toggle-select')]);
+    whenReady(() => {
+        onLookChange(select.sync);
+        select.sync();
     });
 })();

@@ -189,11 +189,6 @@ html[data-look-variant="b"] .nav-bar:not(.nav-tabs-compact-labels) .nav-actions 
     white-space: nowrap;
 }
 
-/* The language button is its word alone while the labels show. */
-html[data-look-variant="b"] .nav-bar:not(.nav-tabs-compact-labels) #btn-language-toggle > span[aria-hidden="true"] {
-    display: none;
-}
-
 html[data-look-variant="b"] #btn-all-features kbd {
     margin-left: 2px;
     padding: 1px 6px;
@@ -286,4 +281,87 @@ html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) 
    cannot hold an icon): it lines up with the rows that have one. */
 html[data-look-variant="b"] #pro-view-popover-body > #btn-group-runs {
     padding-left: 36px;
+}
+
+/* ---- Select pictures beside the count (round 14, both judges: the button at
+   the sidebar's foot was far from the grid) ---- */
+html[data-look-variant="b"] .pro-select-slot #btn-toggle-select {
+    width: auto;
+    height: var(--pro-control-h);
+    min-height: var(--pro-control-h);
+    margin: 0;
+    padding: 0 12px;
+    gap: 6px;
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    box-shadow: none;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+html[data-look-variant="b"] .pro-select-slot #btn-toggle-select:hover {
+    background: var(--surface-3);
+}
+
+html[data-look-variant="b"] .pro-select-slot #btn-toggle-select[aria-pressed="true"] {
+    background: var(--pro-chosen-bg);
+}
+
+html[data-look-variant="b"] .filter-sidebar-footer > .divider-h {
+    display: none;
+}
+
+/* "Clear all filters" only when a filter is on. */
+html[data-look-variant="b"] #sidebar-body-filters:not(:has(.summary-row.is-active)):not(:has(#artist-filter-row[style*="flex"])) #btn-clear-filters {
+    display: none;
+}
+
+/* The details' labels read at a glance (round 14: "grey 12 px labels"). */
+html[data-look-variant="b"] .pro-inspector-fact-label {
+    color: var(--text-2);
+}
+
+/* ---- Round 15 (both judges): one filled button, quieter tools ----
+   Import stays the only filled button; AI tagging is a framed secondary. The
+   language button is its word alone (EN / 中文), Help its "?". */
+html[data-look-variant="b"] #btn-tag {
+    border: 1px solid var(--hairline-2);
+    background: transparent;
+    box-shadow: none;
+    color: var(--text);
+}
+
+html[data-look-variant="b"] #btn-tag:hover {
+    background: var(--surface-3);
+}
+
+html[data-look-variant="b"] .nav-bar:not(.nav-tabs-compact-labels) #btn-language-toggle > span[aria-hidden="true"] {
+    display: none;
+}
+
+/* ---- The filter card reads as a list, not a form (round 15, Opus) ----
+   No inner card, no colons; a row that filters nothing shows its value
+   quietly, so the filters that are on stand out. */
+html[data-look-variant="b"] #filter-summary {
+    /* The labels start under the section title, like the other lists. */
+    padding: 0 0 0 18px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+html[data-look-variant="b"] #filter-summary .summary-label {
+    font-size: 0;
+}
+
+html[data-look-variant="b"] #filter-summary .summary-label > span {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text);
+}
+
+html[data-look-variant="b"] #filter-summary .summary-row:not(.is-active) .summary-value {
+    color: var(--muted);
 }

@@ -145,6 +145,7 @@
             fact(t('inspector.date', 'Date'), formatDate(image.created_at)),
             fact(t('inspector.rating', 'My rating'), stars),
         ].filter(Boolean).forEach((row) => facts.appendChild(row));
+        generationFacts(image, detail).forEach((row) => facts.appendChild(row));
 
         const parts = [thumb, name, facts];
         const prompt = detail?.image?.prompt || '';
@@ -188,13 +189,55 @@
             });
             parts.push(head, list);
         }
+        parts.push(actionsRow(image));
+        body.replaceChildren(...parts);
+    }
+
+    /**
+     * Steps, sampler, CFG, seed and LoRAs: what an SD user looks up most, read
+     * from the same parsed metadata the preview uses (Gallery._extractParsedData).
+     */
+    function generationFacts(image, detail) {
+        const parsed = detail?.image ? (window.Gallery?._extractParsedData?.(detail.image) || {}) : {};
+        const gp = parsed.generation_params || {};
+        const cfg = gp.cfg_scale ?? gp.cfg ?? gp.scale;
+        const number = (value) => (typeof value === 'number' && !Number.isInteger(value) ? String(Number(value.toFixed(4))) : String(value));
+        let loras = [];
+        try {
+            loras = typeof image.loras === 'string' ? JSON.parse(image.loras) : (image.loras || []);
+        } catch (_error) { /* unreadable list: no LoRA row */ }
+        const loraNames = (Array.isArray(loras) ? loras : []).map((l) => (typeof l === 'string' ? l : l?.name)).filter(Boolean);
+        return [
+            fact(t('inspector.steps', 'Steps'), gp.steps != null ? number(gp.steps) : ''),
+            fact(t('inspector.sampler', 'Sampler'), gp.sampler || gp.sampler_name || ''),
+            fact('CFG', cfg != null ? number(cfg) : ''),
+            fact(t('inspector.seed', 'Seed'), gp.seed != null ? number(gp.seed) : ''),
+            fact('LoRA', loraNames.join(', ')),
+        ].filter(Boolean);
+    }
+
+    /** Open preview and Open folder, side by side under the details. */
+    function actionsRow(image) {
         const open = document.createElement('button');
         open.type = 'button';
         open.className = 'btn btn-secondary pro-inspector-open';
         open.textContent = t('inspector.openPreview', 'Open preview');
         open.addEventListener('click', () => window.Gallery?.openPreview?.(image.id));
-        parts.push(open);
-        body.replaceChildren(...parts);
+        const folder = document.createElement('button');
+        folder.type = 'button';
+        folder.className = 'btn btn-secondary pro-inspector-folder';
+        folder.textContent = t('modal.openFolder', 'Open folder');
+        folder.addEventListener('click', async () => {
+            try {
+                await window.App.API.openFolder(image.id);
+            } catch (_error) {
+                window.showToast?.(t('modal.openFolderFailed', 'Failed to open folder'), 'error');
+            }
+        });
+        const row = document.createElement('div');
+        row.className = 'pro-inspector-actions';
+        row.append(open, folder);
+        return row;
     }
 
     function imageById(id) {

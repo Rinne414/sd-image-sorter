@@ -27,7 +27,10 @@
             /* private mode — fall through to the default */
         }
         // Default: collapse the All/None filter summary so Folders is first.
-        return id === 'filters';
+        // Proposal B keeps it open: its rows show what can be filtered by
+        // (round 14 judge: the sidebar was empty below the sections).
+        if (id !== 'filters') return false;
+        return document.documentElement.dataset.lookVariant !== 'b';
     }
 
     function writeCollapsed(id, collapsed) {

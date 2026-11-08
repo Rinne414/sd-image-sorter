@@ -1785,10 +1785,24 @@ html[data-look="pro"] .pro-inspector-tag {
 html[data-look="pro"] .pro-inspector-open {
     align-self: stretch;
     justify-content: center;
-    margin-top: 4px;
 }
 
 /* Round 10: the panel's facts read at the body size, not label size. */
 html[data-look="pro"] .pro-inspector-fact {
     font-size: 13px;
+}
+
+/* The details panel's two actions share one row. */
+html[data-look="pro"] .pro-inspector-actions {
+    display: flex;
+    gap: 8px;
+}
+
+html[data-look="pro"] .pro-inspector-actions > .btn {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+html[data-look="pro"] .pro-inspector-actions {
+    margin-top: 4px;
 }
