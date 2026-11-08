@@ -61,6 +61,9 @@ function installVlHarness(): void {
       scrollContainer.setAttribute('data-vl-harness', 'scroll')
       scrollContainer.style.cssText = 'position:relative;width:400px;height:300px;overflow-y:scroll;'
       const container = document.createElement('div')
+      // A padded container (the pro look pads the gallery grid) is set before init.
+      const { containerStyle, ...rest } = options
+      if (containerStyle) container.style.cssText = containerStyle
       scrollContainer.appendChild(container)
       document.body.appendChild(scrollContainer)
 
@@ -78,7 +81,7 @@ function installVlHarness(): void {
         },
         getItemKey: (index: number, data: any) => data.id,
       }
-      const vl = new Cls(Object.assign(base, options))
+      const vl = new Cls(Object.assign(base, rest))
       vl.init(items)
       w.__vl = vl
       w.__vlScroll = scrollContainer
@@ -367,6 +370,44 @@ test('grid layout math maps index<->row/col and drives scrollToItem', async ({ p
   expect(result.secondRowTop).toBeCloseTo(result.rowStride, 1)
   expect(result.scrollMatches).toBe(true)
   expect(result.atRow3).toBe(result.expectedAtRow3)
+})
+
+test('a padded container keeps its padding: items start inside it, grid and waterfall', async ({ page }) => {
+  // Absolutely placed items ignore padding; with 96+ pictures the pro look's
+  // 14 px grid inset was lost and the tiles no longer lined up with the toolbar.
+  const result = await page.evaluate((config) => {
+    const w = window as unknown as VlWindow
+    const items = Array.from({ length: 200 }, (_v, i) => ({ id: 300 + i, width: 100, height: 150 }))
+    const pad = 'box-sizing:border-box;padding:14px;'
+    const grid = w.__vlHarness.make('grid', items, { config, containerStyle: pad })
+    const rowStride = grid.itemHeight + grid.config.rowGap
+    const firstEl = w.__vlScroll.querySelector('.vl-item[data-pin-index="0"]') as HTMLElement | null
+    const g = {
+      first: grid.getLayoutForIndex(0),
+      columns: grid.columns,
+      rowWidth: grid.columns * grid.itemWidth,
+      innerWidth: grid.container.clientWidth - 28,
+      firstLeftStyle: firstEl?.style.left,
+      atRow3: grid.getItemAtScrollPosition(14 + rowStride * 3),
+      minHeight: parseFloat(grid.container.style.minHeight),
+      rowsHeight: grid.totalHeight,
+    }
+    w.__vlHarness.teardown()
+    const fall = w.__vlHarness.make('waterfall', items, { columnWidth: 100, config: { ...config, forceVirtual: true }, containerStyle: pad })
+    const f = fall.getLayoutForIndex(0)
+    w.__vlHarness.teardown()
+    return { g, f: { top: f.top, left: f.left } }
+  }, GRID_CONFIG)
+
+  expect(result.g.first.top).toBe(14)
+  expect(result.g.first.left).toBe(14)
+  expect(result.g.firstLeftStyle).toBe('14px')
+  // Columns share the width inside the padding (the config has no column gap).
+  expect(result.g.rowWidth).toBeCloseTo(result.g.innerWidth, 0)
+  expect(result.g.atRow3).toBe(3 * result.g.columns)
+  // Border-box: min-height carries the rows and both paddings.
+  expect(result.g.minHeight).toBeCloseTo(result.g.rowsHeight + 28, 0)
+  expect(result.f).toEqual({ top: 14, left: 14 })
 })
 
 // ---------------------------------------------------------------------------

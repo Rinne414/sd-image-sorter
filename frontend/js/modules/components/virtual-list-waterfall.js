@@ -52,7 +52,7 @@ class WaterfallVirtualList extends VirtualList {
     _recalculateLayout() {
         if (!this.container) return;
 
-        const containerWidth = this.container.clientWidth;
+        const containerWidth = this._contentWidth();
 
         // Calculate columns based on column width
         this.columns = Math.max(1, Math.floor(
@@ -87,8 +87,8 @@ class WaterfallVirtualList extends VirtualList {
             this.itemPositions.push({
                 index: i,
                 column: minCol,
-                top: minHeight,
-                left: minCol * (this.columnWidth + this.config.columnGap),
+                top: this._insetTop() + minHeight,
+                left: this.inset.left + minCol * (this.columnWidth + this.config.columnGap),
                 width: this.columnWidth,
                 height,
             });
@@ -103,7 +103,7 @@ class WaterfallVirtualList extends VirtualList {
         // Set container styles
         this.container.style.position = 'relative';
         this.container.style.display = 'block';
-        this.container.style.minHeight = `${this.totalHeight}px`;
+        this._applyMinHeight();
         this.container.style.gridTemplateColumns = '';
 
         // Use itemPositions as layout cache
@@ -131,7 +131,7 @@ class WaterfallVirtualList extends VirtualList {
             return;
         }
 
-        const containerWidth = this.container.clientWidth;
+        const containerWidth = this._contentWidth();
         const nextColumns = Math.max(1, Math.floor(
             (containerWidth + this.config.columnGap) /
             (this.waterfallConfig.columnWidth + this.config.columnGap)
@@ -164,8 +164,8 @@ class WaterfallVirtualList extends VirtualList {
             this.itemPositions.push({
                 index,
                 column: minCol,
-                top: minHeight,
-                left: minCol * (this.columnWidth + this.config.columnGap),
+                top: this._insetTop() + minHeight,
+                left: this.inset.left + minCol * (this.columnWidth + this.config.columnGap),
                 width: this.columnWidth,
                 height,
             });
@@ -174,7 +174,7 @@ class WaterfallVirtualList extends VirtualList {
         });
 
         this.totalHeight = Math.max(0, Math.max(...this.columnHeights, 0) - this.config.rowGap);
-        this.container.style.minHeight = `${this.totalHeight}px`;
+        this._applyMinHeight();
         this.layoutCache = this.itemPositions;
 
         this._updateVisibleItems();

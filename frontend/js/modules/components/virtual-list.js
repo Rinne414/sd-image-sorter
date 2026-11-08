@@ -328,7 +328,7 @@ class VirtualList {
         } else {
             const totalRows = Math.ceil(this.items.length / this.columns);
             this.totalHeight = Math.max(0, totalRows * (this.itemHeight + this.config.rowGap) - this.config.rowGap);
-            this.container.style.minHeight = `${this.totalHeight}px`;
+            this._applyMinHeight();
         }
 
         this._updateVisibleItems();
@@ -340,7 +340,7 @@ class VirtualList {
     _recalculateLayout() {
         if (!this.container) return;
 
-        const containerWidth = this.container.clientWidth;
+        const containerWidth = this._contentWidth();
         const itemAspectRatio = Number(this.config.itemAspectRatio) > 0 ? Number(this.config.itemAspectRatio) : 1;
 
         // Calculate columns based on minimum width
@@ -360,11 +360,47 @@ class VirtualList {
         // Set container styles for virtual scrolling
         this.container.style.position = 'relative';
         this.container.style.display = 'block';
-        this.container.style.minHeight = `${this.totalHeight}px`;
+        this._applyMinHeight();
         this.container.style.gridTemplateColumns = '';
 
         // Build layout cache for item positions
         this._buildLayoutCache();
+    }
+
+    /**
+     * The container's padding. Absolutely placed items ignore it, so the
+     * layout adds it itself: with 96+ pictures the pro look's 14 px grid inset
+     * was lost and the tiles no longer lined up with the toolbar (2026-11-09).
+     */
+    _readInset() {
+        const style = window.getComputedStyle(this.container);
+        const px = (value) => parseFloat(value) || 0;
+        const inset = {
+            top: px(style.paddingTop),
+            right: px(style.paddingRight),
+            bottom: px(style.paddingBottom),
+            left: px(style.paddingLeft),
+        };
+        // min-height counts the padding only under border-box sizing.
+        inset.vertical = style.boxSizing === 'border-box' ? inset.top + inset.bottom : 0;
+        this.inset = inset;
+        return inset;
+    }
+
+    /** The width the items share: the container's inner width less its padding. */
+    _contentWidth() {
+        const inset = this._readInset();
+        return Math.max(0, this.container.clientWidth - inset.left - inset.right);
+    }
+
+    /** The container's top padding: rows start below it. */
+    _insetTop() {
+        return this.inset?.top || 0;
+    }
+
+    /** The rows' height plus the container's padding where min-height counts it. */
+    _applyMinHeight() {
+        this.container.style.minHeight = `${this.totalHeight + (this.inset?.vertical || 0)}px`;
     }
 
     /**
@@ -382,8 +418,8 @@ class VirtualList {
             index,
             row,
             col,
-            top: row * (this.itemHeight + this.config.rowGap),
-            left: col * (this.itemWidth + this.config.columnGap),
+            top: this._insetTop() + row * (this.itemHeight + this.config.rowGap),
+            left: (this.inset?.left || 0) + col * (this.itemWidth + this.config.columnGap),
             width: this.itemWidth,
             height: this.itemHeight,
         };
@@ -408,7 +444,7 @@ class VirtualList {
         }
 
         const viewportHeight = this._getViewportHeight();
-        const relativeScroll = this._getRelativeScroll();
+        const relativeScroll = this._getRelativeScroll() - this._insetTop();
 
         const rowHeight = this.itemHeight + this.config.rowGap;
         const bufferHeight = this.config.bufferSize * rowHeight;
@@ -622,7 +658,7 @@ class VirtualList {
      * @returns {number} Item index
      */
     getItemAtScrollPosition(scrollTop) {
-        const row = Math.floor(scrollTop / (this.itemHeight + this.config.rowGap));
+        const row = Math.max(0, Math.floor((scrollTop - this._insetTop()) / (this.itemHeight + this.config.rowGap)));
         return Math.min(row * this.columns, this.items.length - 1);
     }
 
