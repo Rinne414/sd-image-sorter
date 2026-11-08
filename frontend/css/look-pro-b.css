@@ -324,10 +324,11 @@ html[data-look-variant="b"] .pro-inspector-fact-label {
 }
 
 /* ---- Round 15 (both judges): one filled button, quieter tools ----
-   Import stays the only filled button; AI tagging is a framed secondary. The
-   language button is its word alone (EN / 中文), Help its "?". */
+   Import stays the only filled button; AI tagging reads like the other tools,
+   icon and word with no frame (rounds 16 and 18: two framed buttons still
+   competed). The language button is its word alone (EN / 中文), Help its "?". */
 html[data-look-variant="b"] #btn-tag {
-    border: 1px solid var(--hairline-2);
+    border: 1px solid transparent;
     background: transparent;
     box-shadow: none;
     color: var(--text);
