@@ -393,6 +393,7 @@ window.I18nLang_zhCN = {
     'look.classic': '经典',
     'look.pro': '专业（预览）',
     'look.proB': '专业 · 提案 B（试用）',
+    'gallery.viewMenu': '视图',
     'comfort.warmthTitle': '房间色温',
     'comfort.warmthBody': '冷工作室、中性、或略暖的深色',
     'comfort.warmthLabel': '色调',

@@ -391,6 +391,7 @@ window.I18nLang_en = {
     'look.classic': 'Classic',
     'look.pro': 'Professional (preview)',
     'look.proB': 'Professional, proposal B (trial)',
+    'gallery.viewMenu': 'View',
     'comfort.warmthTitle': 'Room warmth',
     'comfort.warmthBody': 'Cool studio, neutral, or slightly warm dark',
     'comfort.warmthLabel': 'Tone',

@@ -474,7 +474,7 @@
             button.className = 'tag-category-copy-item tag-category-copy-find';
             button.dataset.group = group.id;
             button.innerHTML = `
-                <span class="tag-category-copy-icon" aria-hidden="true">⌕</span>
+                <span class="tag-category-copy-icon" aria-hidden="true">${window.UiIcon ? window.UiIcon.html('i-search') : ''}</span>
                 <span class="tag-category-copy-label">${escapeHtml(label)}</span>
                 <span class="tag-category-copy-count">${groupTags.length}</span>
             `;

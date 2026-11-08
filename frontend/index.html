@@ -54,6 +54,7 @@
     <script src="/static/js/modules/pro-filter-popover.js"></script>
     <script src="/static/js/modules/pro-toolbar.js"></script>
     <script src="/static/js/modules/pro-inspector.js"></script>
+    <script src="/static/js/modules/pro-view-popover.js"></script>
     <!-- First: an error nothing else caught is said on screen, never silent (error-fallback.js). -->
     <script src="/static/js/error-fallback.js"></script>
 </head>
@@ -1080,6 +1081,15 @@
                             </div>
                         </div>
                         <div class="view-options">
+                            <!-- Proposal B: one View menu for the view modes, Group runs and the details panel (js/modules/pro-view-popover.js). -->
+                            <button type="button" class="pro-view-btn" id="btn-pro-view" aria-haspopup="dialog" aria-expanded="false" aria-controls="pro-view-popover">
+                                <svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>
+                                <span data-i18n="gallery.viewMenu">View</span>
+                                <svg class="icon icon-caret" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+                            </button>
+                            <div class="pro-filter-popover pro-view-popover" id="pro-view-popover" role="dialog" aria-label="View" data-i18n-aria="gallery.viewMenu" hidden>
+                                <div class="pro-filter-popover-body pro-view-popover-body" id="pro-view-popover-body"></div>
+                            </div>
                             <button class="view-btn" data-size="grid" title="Grid view" aria-label="Grid view" aria-pressed="true" data-i18n-title="gallery.viewGrid" data-i18n-aria="gallery.viewGrid">
                                 <svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>
                             </button>
@@ -1129,7 +1139,7 @@
                          fields the filter modal uses — no parallel state. -->
                     <div class="gallery-search-row" id="gallery-search-row">
                         <div class="gallery-search-box">
-                            <span class="gallery-search-icon" aria-hidden="true">⌕</span>
+                            <span class="gallery-search-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                             <input type="text" id="gallery-search-input" class="input-field gallery-search-input"
                                    placeholder="Search prompts, models and file names…"
                                    data-i18n-placeholder="gallerySearch.placeholder"

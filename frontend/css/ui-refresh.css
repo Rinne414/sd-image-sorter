@@ -13532,3 +13532,14 @@ html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
 .pro-inspector {
     display: none;
 }
+
+/* Proposal B's View menu button (js/modules/pro-view-popover.js); hidden elsewhere. */
+.pro-view-btn,
+.pro-view-popover[hidden] {
+    display: none;
+}
+
+.gallery-search-icon {
+    display: inline-flex;
+    line-height: 0;
+}

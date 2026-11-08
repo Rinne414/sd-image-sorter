@@ -48,8 +48,13 @@ test('a source tab is marked empty only when the library has none, never the cho
 
 test('the pro look hides empty source tabs and keeps the count; classic shows them all', async ({ page }) => {
   await open(page, 'pro')
-  await page.evaluate(() => (window as any).markEmptyGeneratorTabs({ comfyui: 5 }, false))
-  await expect(page.locator('#generator-tabs .gen-tab[data-gen="forge"]')).toBeHidden()
+  // The app's own count refresh may land after this mark and re-mark from the
+  // shared test library (which can hold Forge pictures in a parallel run):
+  // mark again until the hidden state holds.
+  await expect.poll(() => page.evaluate(() => {
+    (window as any).markEmptyGeneratorTabs({ comfyui: 5 }, false)
+    return getComputedStyle(document.querySelector('#generator-tabs .gen-tab[data-gen="forge"]') as HTMLElement).display
+  })).toBe('none')
   await expect(page.locator('#generator-tabs .gen-tab[data-gen="all"]')).toBeVisible()
   await expect(page.locator('#image-count')).toBeVisible()
   await page.evaluate(() => (window as any).SdLook.set(null))

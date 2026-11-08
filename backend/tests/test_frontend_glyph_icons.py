@@ -18,7 +18,7 @@ from pathlib import Path
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
 
-GLYPHS = re.compile("[▲▴▶▸▼▾◀◂■▬▮▦◼◥◫▣]")
+GLYPHS = re.compile("[▲▴▶▸▼▾◀◂■▬▮▦◼◥◫▣⌕⌖]")
 
 # Elements whose glyph is hidden and drawn as a chevron by CSS.
 CSS_DRAWN = (

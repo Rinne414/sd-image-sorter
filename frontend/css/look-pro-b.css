@@ -35,11 +35,6 @@ html[data-look-variant="b"] .sidebar-section-title {
     color: var(--muted);
 }
 
-html[data-look-variant="b"] .filter-sidebar .sidebar-section + .sidebar-section {
-    margin-top: 18px;
-    padding-top: 14px;
-}
-
 html[data-look-variant="b"] .nav-bar .nav-tab.active {
     font-weight: 600;
 }
@@ -110,4 +105,67 @@ html[data-look-variant="b"] #view-gallery #gallery-grid {
 
 html[data-look-variant="b"] #view-gallery #gallery-grid .gallery-item {
     border-radius: 6px;
+}
+
+/* ---- One View menu (A/B judge: about six visible controls, not fifteen) ----
+   The view modes, Group runs and the details-panel toggle live in it; each
+   shows its name there (read from its own aria-label). */
+html[data-look-variant="b"] #view-gallery .pro-view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-sizing: border-box;
+    height: var(--pro-control-h);
+    padding: 0 10px;
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+html[data-look-variant="b"] #view-gallery .pro-view-btn:hover,
+html[data-look-variant="b"] #view-gallery .pro-view-btn[aria-expanded="true"] {
+    background: var(--surface-3);
+}
+
+html[data-look-variant="b"] .pro-view-popover-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 200px;
+}
+
+html[data-look-variant="b"] .pro-view-popover-body > .view-btn {
+    justify-content: flex-start;
+    width: 100%;
+    height: 34px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    color: var(--text);
+}
+
+html[data-look-variant="b"] .pro-view-popover-body > .view-btn:hover {
+    background: var(--surface-3);
+}
+
+html[data-look-variant="b"] .pro-view-popover-body > .view-btn[aria-pressed="true"] {
+    background: var(--pro-chosen-bg);
+}
+
+html[data-look-variant="b"] .pro-view-popover-body > .view-btn[data-size]::after,
+html[data-look-variant="b"] .pro-view-popover-body > #btn-pro-inspector::after {
+    content: attr(aria-label);
+    margin-left: 10px;
+    font-size: 13px;
+}
+
+html[data-look-variant="b"] .pro-view-popover-body > #btn-pro-inspector {
+    display: inline-flex;
+    align-items: center;
 }
