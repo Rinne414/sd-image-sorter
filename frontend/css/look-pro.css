@@ -1806,3 +1806,22 @@ html[data-look="pro"] .pro-inspector-actions > .btn {
 html[data-look="pro"] .pro-inspector-actions {
     margin-top: 4px;
 }
+
+/* ---- Dialogs sized to their content (UI audit #10) ----
+   Duplicate Cleanup and the Tags & Prompts Library filled 90% of the window
+   (1728 px at 1920) with their content in the left third. Duplicate Cleanup
+   keeps room for its rows of matching pictures; the library is a list. */
+html[data-look="pro"] #dup-cleaner-modal .modal-content {
+    width: min(1200px, calc(100vw - 64px));
+    max-width: min(1200px, calc(100vw - 64px));
+}
+
+html[data-look="pro"] #tags-library-modal .modal-content {
+    width: min(960px, calc(100vw - 64px));
+    max-width: min(960px, calc(100vw - 64px));
+}
+
+/* One way to close the library: its X (a second Close button sat at the foot). */
+html[data-look="pro"] #btn-close-tags-library-2 {
+    display: none;
+}

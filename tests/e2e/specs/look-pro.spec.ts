@@ -450,3 +450,22 @@ test('pro look: the details panel opens the picture’s folder', async ({ page }
   await folder.click()
   await expect.poll(() => asked).toEqual([id])
 })
+
+test('pro look: Duplicate Cleanup and the Tags library are sized to their content, with one close', async ({ page }) => {
+  // UI audit #10: both filled 90% of a 1920 window with their content in the left third.
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await open(page, 'pro')
+  await page.evaluate(() => (window as any).DupCleaner.open())
+  const dup = page.locator('#dup-cleaner-modal .modal-content')
+  await expect(dup).toBeVisible()
+  expect((await dup.boundingBox())!.width).toBeLessThanOrEqual(1201)
+  await page.keyboard.press('Escape')
+  await expect(dup).toBeHidden()
+
+  await page.evaluate(() => document.getElementById('btn-tags-library')!.click())
+  const library = page.locator('#tags-library-modal .modal-content')
+  await expect(library).toBeVisible()
+  expect((await library.boundingBox())!.width).toBeLessThanOrEqual(961)
+  await expect(page.locator('#btn-close-tags-library')).toBeVisible()
+  await expect(page.locator('#btn-close-tags-library-2')).toBeHidden()
+})
