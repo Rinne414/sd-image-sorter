@@ -325,7 +325,7 @@ def _get_fastembed_local_model_path(
     hub_dir_name = "models--" + model_name.replace("/", "--").replace("\\", "--")
     hub_snapshots = clip_root / hub_dir_name / "snapshots"
     if hub_snapshots.is_dir():
-        for snapshot in sorted(hub_snapshots.iterdir(), reverse=True):
+        for snapshot in _sorted_children(hub_snapshots, reverse=True):
             if not missing_model_artifacts(snapshot, required_files):
                 return str(snapshot.resolve())
 
@@ -405,7 +405,7 @@ def get_sam3_checkpoint_path() -> Optional[str]:
         snapshots = hub_dir / "snapshots"
         if not snapshots.is_dir():
             continue
-        for snapshot in sorted(snapshots.iterdir(), reverse=True):
+        for snapshot in _sorted_children(snapshots, reverse=True):
             if not missing_model_artifacts(snapshot, required_files):
                 return str(snapshot.resolve())
 
@@ -474,6 +474,19 @@ def get_cl_tagger_v2_checkpoint_path() -> Optional[str]:
     return None
 
 
+def _sorted_children(directory: Path, reverse: bool = False) -> list[Path]:
+    """The folder's entries, or none when it can no longer be listed.
+
+    A folder checked with exists()/is_dir() can go away before the listing
+    (moved, deleted, a drive disconnected); a status check then reports the
+    model missing instead of failing.
+    """
+    try:
+        return sorted(directory.iterdir(), reverse=reverse)
+    except OSError:
+        return []
+
+
 def _find_kaloscope_dir(artist_root: Path) -> Optional[Path]:
     """Find the directory holding the Kaloscope checkpoint, case-insensitively.
 
@@ -496,13 +509,7 @@ def _find_kaloscope_dir(artist_root: Path) -> Optional[Path]:
         return canonical.parent
 
     # 2) Case-insensitive kaloscope* directory, checkpoint at the HF subpath.
-    # The folder can go away after the exists() check (moved, deleted, a
-    # drive disconnected): then the model is simply not there.
-    try:
-        children = sorted(artist_root.iterdir())
-    except OSError:
-        return None
-    for child in children:
+    for child in _sorted_children(artist_root):
         if not child.is_dir():
             continue
         normalized = child.name.lower().replace("-", "").replace("_", "").replace(".", "")

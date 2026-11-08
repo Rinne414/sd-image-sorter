@@ -563,6 +563,16 @@ def test_find_kaloscope_dir_none_when_root_vanishes_after_check(monkeypatch, tmp
     assert model_health._find_kaloscope_dir(artist_root) is None
 
 
+def test_sorted_children_is_empty_for_a_folder_that_cannot_be_listed(tmp_path):
+    # Used for the CLIP and SAM3 snapshot folders too (checked, then listed).
+    from model_health_paths import _sorted_children
+
+    assert _sorted_children(tmp_path / "gone") == []
+    (tmp_path / "b").mkdir()
+    (tmp_path / "a").mkdir()
+    assert [p.name for p in _sorted_children(tmp_path, reverse=True)] == ["b", "a"]
+
+
 def test_resolve_artist_runtime_accepts_model_marker(monkeypatch, tmp_path):
     # The resolver accepts EITHER a "lsnet_model" OR a bare "model" subdir as
     # the runtime marker; pin the less-obvious "model" acceptance.
