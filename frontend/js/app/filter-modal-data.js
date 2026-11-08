@@ -815,7 +815,7 @@ function renderFilterPresets() {
             <span class="preset-name">${safeName}</span>
             <div class="preset-actions">${pinButton}
                 <button class="btn-small" data-preset-action="load" data-preset-name="${safeName}">${escapeHtml(appT('filter.loadPreset', 'Load'))}</button>
-                <button class="btn-small btn-danger" data-preset-action="delete" data-preset-name="${safeName}">×</button>
+                <button class="btn-small btn-danger" data-preset-action="delete" data-preset-name="${safeName}" title="${escapeHtml(appT('common.delete', 'Delete'))}" aria-label="${escapeHtml(appT('common.delete', 'Delete'))}">${window.UiIcon ? window.UiIcon.html('i-close') : ''}</button>
             </div>
         </div>
     `;}).join('');

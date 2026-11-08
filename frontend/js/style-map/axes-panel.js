@@ -42,7 +42,8 @@ export class AxesPanel {
         this.root.setAttribute('aria-labelledby', 'stylemap-axes-title');
         this.title = el('h4', 'stylemap-axes-title');
         this.title.id = 'stylemap-axes-title';
-        this.close = el('button', 'btn btn-ghost btn-small stylemap-axes-close', '×');
+        this.close = el('button', 'btn btn-ghost btn-small stylemap-axes-close');
+        window.UiIcon?.fill(this.close, 'i-close');
         this.close.type = 'button';
         this.close.addEventListener('click', () => this.setOpen(false, true));
         const head = el('div', 'stylemap-axes-head');

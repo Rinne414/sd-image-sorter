@@ -82,7 +82,7 @@ Object.assign(SeparationConsole, {
                     `{lengthCount} 张图疑似漏打「{spelling}」（分数 {band}）：`,
                 ), { lengthCount: gaps.length, spelling: row.spelling, band });
             head.appendChild(title);
-            head.appendChild(this._actionBtn('✕', sepconT('Close', '关闭'),
+            head.appendChild(this._actionBtn('i-close', sepconT('Close', '关闭'),
                 () => { panel.hidden = true; panel.textContent = ''; }));
             panel.appendChild(head);
             if (gaps.length === 0) return;
@@ -244,7 +244,7 @@ Object.assign(SeparationConsole, {
             const zhPart = info.zh ? ` · ${info.zh}` : '';
             title.textContent = `${info.canonical || row.spelling}${zhPart} — ${info.category || '?'}`;
             head.appendChild(title);
-            head.appendChild(this._actionBtn('✕', sepconT('Close', '关闭'),
+            head.appendChild(this._actionBtn('i-close', sepconT('Close', '关闭'),
                 () => { panel.hidden = true; panel.textContent = ''; }));
             panel.appendChild(head);
 
@@ -336,7 +336,7 @@ Object.assign(SeparationConsole, {
                     `「{spelling}」的模型视角（范围 {scope_images} 张）：`,
                 ), { spelling: row.spelling, scope_images: report.scope_images });
             head.appendChild(title);
-            head.appendChild(this._actionBtn('✕', sepconT('Close', '关闭'),
+            head.appendChild(this._actionBtn('i-close', sepconT('Close', '关闭'),
                 () => { panel.hidden = true; panel.textContent = ''; }));
             panel.appendChild(head);
             for (const entry of models) {

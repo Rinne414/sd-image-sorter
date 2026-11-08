@@ -173,7 +173,7 @@
         const remove = document.createElement('span');
         remove.className = 'dataset-queue-tag-chip-x';
         remove.setAttribute('aria-hidden', 'true');
-        remove.textContent = '×';
+        if (window.UiIcon) window.UiIcon.fill(remove, 'i-close');
         chip.append(glyph, label, remove);
         chip.title = datasetMaker._t(
             mode === 'include' ? 'dataset.queueTagChipIncludeRemove' : 'dataset.queueTagChipExcludeRemove',

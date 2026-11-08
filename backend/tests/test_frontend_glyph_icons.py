@@ -18,7 +18,13 @@ from pathlib import Path
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
 
-GLYPHS = re.compile("[▲▴▶▸▼▾◀◂■▬▮▦◼◥◫▣⌕⌖]")
+GLYPHS = re.compile("[▲▴▶▸▼▾◀◂■▬▮▦◼◥◫▣⌕⌖⟳↻↺＋⋯⚙⏹☁◎◇✕]")
+
+# A multiplication sign is a fine "960 × 1440", but not a close or remove button.
+BUTTON_CROSS = re.compile(r">\s*×\s*<|textContent\s*=\s*'×'|,\s*'×'\)")
+
+# The whole-UI error fallback draws when scripts failed; its close stays text.
+TEXT_ALLOWED_FILES = ("error-fallback.js",)
 
 # Elements whose glyph is hidden and drawn as a chevron by CSS.
 CSS_DRAWN = (
@@ -42,8 +48,10 @@ def _is_comment(line: str) -> bool:
 def _offenders(path: Path) -> list[str]:
     found = []
     lines = path.read_text(encoding="utf-8").split("\n")
+    if path.name in TEXT_ALLOWED_FILES:
+        return found
     for number, line in enumerate(lines, 1):
-        if not GLYPHS.search(line) or _is_comment(line):
+        if not (GLYPHS.search(line) or BUTTON_CROSS.search(line)) or _is_comment(line):
             continue
         if any(marker in line for marker in CSS_DRAWN + COPY_LINES):
             continue

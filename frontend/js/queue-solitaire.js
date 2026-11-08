@@ -1292,7 +1292,7 @@
                     <div class="qs-section-actions">
                         <button class="qs-section-btn qs-btn-select-all" data-section="${sectionId}" title="${selectAllLabel}" aria-label="${selectAllLabel}"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></button>
                         <button class="qs-section-btn qs-btn-rename" data-section="${sectionId}" title="${batchRenameLabel}" aria-label="${batchRenameLabel}"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></button>
-                        ${section.id !== 'unsorted' ? `<button class="qs-section-btn qs-btn-remove" data-section="${sectionId}" title="${removeSectionLabel}" aria-label="${removeSectionLabel}" style="color:var(--danger);">✕</button>` : ''}
+                        ${section.id !== 'unsorted' ? `<button class="qs-section-btn qs-btn-remove" data-section="${sectionId}" title="${removeSectionLabel}" aria-label="${removeSectionLabel}" style="color:var(--danger);"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>` : ''}
                     </div>
                 </div>
                 <div class="qs-section-grid ${emptyClass}" data-section="${sectionId}">

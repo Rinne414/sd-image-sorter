@@ -1,7 +1,7 @@
 /**
  * Aurora Phase 3 / Roadmap-C — review UI for AMBIGUOUS reconnect matches.
  *
- * A "Find Moved Images" run persists ambiguous groups (one found file, 2+
+ * A "Find Moved Files" run persists ambiguous groups (one found file, 2+
  * same-name-same-size gallery records) as pending reviews. This modal pages
  * through GET /api/images/repair-candidates, previews the found file via
  * GET /api/image-preview-by-path, and commits per-row choices with

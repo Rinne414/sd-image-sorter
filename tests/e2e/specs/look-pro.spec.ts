@@ -14,13 +14,13 @@ test.use({ viewport: { width: 1366, height: 768 } })
 test.beforeAll(() => seedImages({ prefix: 'lookpro-', token: 'lookprotoken', count: 3, dir: 'look-pro' }))
 test.afterAll(() => cleanupImages('lookpro-', ['look-pro']))
 
-async function open(page: import('@playwright/test').Page, look: 'pro' | null) {
-  await page.addInitScript((l) => {
-    localStorage.setItem('sd-image-sorter-lang', 'en')
+async function open(page: import('@playwright/test').Page, look: 'pro' | null, lang = 'en') {
+  await page.addInitScript(([l, language]) => {
+    localStorage.setItem('sd-image-sorter-lang', language as string)
     localStorage.setItem('aurora-entry-skip', '1')
     // A fresh browser has no look saved; only set one when asked (this runs on every load).
     if (l) localStorage.setItem('sd-look', l)
-  }, look)
+  }, [look, lang])
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.appReady)).toBe('1')
 }
@@ -352,3 +352,13 @@ test('pro look: the details panel follows the picture under the pointer and can 
   await expect(page.locator('#btn-pro-inspector')).toBeHidden()
 })
 
+test('pro look: the details panel speaks the chosen language from the first load and after a switch', async ({ page }) => {
+  // It is drawn before the language packs load; it once stayed English in the Chinese UI.
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await open(page, 'pro', 'zh-CN')
+  const note = page.locator('#pro-inspector .pro-inspector-empty')
+  const expected = (lang: string) => page.evaluate((l) => (window as any).I18n.translations[l]['inspector.empty'], lang)
+  await expect(note).toHaveText(await expected('zh-CN'))
+  await page.evaluate(() => (window as any).I18n.setLang('en'))
+  await expect(note).toHaveText(await expected('en'))
+})

@@ -115,7 +115,7 @@ Object.assign(SeparationConsole, {
                     `TIPO 推荐了 {lengthCount} 个打标器从未评分的标签 — 请人工挑选：`,
                 ), { lengthCount: proposals.length });
             head.appendChild(title);
-            head.appendChild(this._actionBtn('✕', sepconT('Close', '关闭'),
+            head.appendChild(this._actionBtn('i-close', sepconT('Close', '关闭'),
                 () => { panel.hidden = true; panel.textContent = ''; }));
             panel.appendChild(head);
             if (proposals.length === 0) return;

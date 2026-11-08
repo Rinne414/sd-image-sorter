@@ -164,7 +164,7 @@
             const moreBtn = isFavorites ? '' : (
                 `<button type="button" class="collection-row-action" data-action="more" `
                 + `data-id="${collection.id}" title="${escapeHtml(moreLabel)}" aria-label="${escapeHtml(moreLabel)}" `
-                + `aria-haspopup="menu"><span aria-hidden="true">⋯</span></button>`
+                + `aria-haspopup="menu"><span aria-hidden="true">${window.UiIcon ? window.UiIcon.html('i-more') : ''}</span></button>`
             );
             let foldSlot = '';
             if (row.hasChildren) {
@@ -396,7 +396,7 @@
                 const name = collection.slug === FAVORITES_SLUG
                     ? t('collections.favorites', 'Favorites')
                     : (collection.name || '');
-                const icon = collection.slug === FAVORITES_SLUG ? '♥' : 'i-folder';
+                const icon = collection.slug === FAVORITES_SLUG ? 'i-heart' : 'i-folder';
                 const item = this._pickerItem(icon, name, () => {
                     menu.remove();
                     this._addToCollection(collection.id, name, ids, selectionToken);
@@ -410,7 +410,7 @@
             separator.setAttribute('role', 'separator');
             menu.appendChild(separator);
 
-            menu.appendChild(this._pickerItem('＋', t('collections.new', 'New collection…'), async () => {
+            menu.appendChild(this._pickerItem('i-plus', t('collections.new', 'New collection…'), async () => {
                 menu.remove();
                 const created = await this.createPrompt();
                 if (created?.id != null) {
@@ -444,7 +444,7 @@
             header.textContent = headerText;
             menu.appendChild(header);
             items.forEach((entry) => {
-                const item = this._pickerItem(entry.current ? '●' : '', entry.label, () => {
+                const item = this._pickerItem(entry.current ? 'i-check' : '', entry.label, () => {
                     menu.remove();
                     entry.run();
                 });

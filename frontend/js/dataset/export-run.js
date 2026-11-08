@@ -1114,9 +1114,10 @@
 
         if (statusEl) {
             statusEl.className = `dataset-result-status ${resolved}`;
-            statusEl.textContent = resolved === 'ok' && warnings.length > 0
-                ? '!'
-                : (resolved === 'ok' ? '✓' : (resolved === 'partial' ? '⚠' : (resolved === 'cancelled' ? '!' : '✕')));
+            const mark = resolved === 'ok' && warnings.length > 0
+                ? 'i-alert'
+                : ({ ok: 'i-check', partial: 'i-alert', cancelled: 'i-stop' }[resolved] || 'i-close');
+            if (window.UiIcon) window.UiIcon.fill(statusEl, mark);
         }
         if (titleEl) {
             const map = { ok: 'dataset.resultOk', partial: 'dataset.resultPartial', failed: 'dataset.resultFailed', cancelled: 'dataset.resultCancelled' };

@@ -456,7 +456,7 @@ function renderModalActivePrompts() {
         const removeEl = document.createElement('span');
         removeEl.className = 'remove-modal-prompt';
         removeEl.dataset.prompt = prompt;
-        removeEl.textContent = '×';
+        if (window.UiIcon) window.UiIcon.fill(removeEl, 'i-close');
         removeEl.addEventListener('click', (e) => {
             e.stopPropagation();
             filterState.prompts = filterState.prompts.filter(p => p !== prompt);
@@ -485,7 +485,7 @@ function renderModalActivePrompts() {
         const removeEl = document.createElement('span');
         removeEl.className = 'remove-modal-prompt';
         removeEl.dataset.prompt = prompt;
-        removeEl.textContent = '×';
+        if (window.UiIcon) window.UiIcon.fill(removeEl, 'i-close');
         removeEl.addEventListener('click', (e) => {
             e.stopPropagation();
             filterState.excludePrompts = (filterState.excludePrompts || []).filter(p => p !== prompt);

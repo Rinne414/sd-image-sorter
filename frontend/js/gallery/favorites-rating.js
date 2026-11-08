@@ -113,7 +113,7 @@ Object.assign(window.Gallery, {
         }
         const clearLabel = this._t('rating.clear', null, 'Clear rating');
         html += `<button type="button" class="star-clear${stars === 0 ? ' is-hidden' : ''}" data-star="0" `
-            + `title="${this._escapeHtml(clearLabel)}" aria-label="${this._escapeHtml(clearLabel)}">✕</button>`;
+            + `title="${this._escapeHtml(clearLabel)}" aria-label="${this._escapeHtml(clearLabel)}">${window.UiIcon ? window.UiIcon.html('i-close') : ''}</button>`;
         container.innerHTML = html;
         if (!container.dataset.bound) {
             container.dataset.bound = '1';

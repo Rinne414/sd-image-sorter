@@ -566,7 +566,7 @@ function _showSam3CommonWordsPopup() {
     let html = `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
             <div style="flex:1;font-size:11px;color:var(--text-muted,#A6A6A6);line-height:1.4;">${window.escapeHtml(headerHelp)}</div>
-            <button id="sam3-common-popup-close" type="button" aria-label="${window.escapeHtml(closeLabel)}" title="${window.escapeHtml(closeLabel)}" style="background:none;border:none;color:var(--text-muted,#A6A6A6);font-size:18px;line-height:1;cursor:pointer;padding:2px 8px;border-radius:6px;flex-shrink:0;">×</button>
+            <button id="sam3-common-popup-close" type="button" aria-label="${window.escapeHtml(closeLabel)}" title="${window.escapeHtml(closeLabel)}" style="background:none;border:none;color:var(--text-muted,#A6A6A6);font-size:18px;line-height:1;cursor:pointer;padding:2px 8px;border-radius:6px;flex-shrink:0;">${window.UiIcon ? window.UiIcon.html('i-close') : ''}</button>
         </div>
     `;
     for (const [group, words] of Object.entries(SAM3_COMMON_PROMPTS)) {

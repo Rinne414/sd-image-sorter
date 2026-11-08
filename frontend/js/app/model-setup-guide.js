@@ -66,7 +66,7 @@ function showModelSetupGuide(pr) {
                 <h3 id="model-setup-guide-title" style="margin:0;font-size:18px;line-height:1.3;">${escapeHtml(titleText)}</h3>
                 ${providerLabel ? `<div style="font-size:12px;color:var(--text-muted,#A6A6A6);margin-top:4px;">${escapeHtml(providerLabel)}</div>` : ''}
             </div>
-            <button id="model-setup-guide-close-x" type="button" aria-label="${escapeHtml(closeLabel)}" style="background:none;border:none;color:var(--text-muted,#A6A6A6);font-size:22px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:8px;">×</button>
+            <button id="model-setup-guide-close-x" type="button" aria-label="${escapeHtml(closeLabel)}" style="background:none;border:none;color:var(--text-muted,#A6A6A6);font-size:22px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:8px;">${window.UiIcon ? window.UiIcon.html('i-close') : ''}</button>
         </div>
         <p style="margin:0 0 12px;line-height:1.5;">${escapeHtml(message)}</p>
         ${steps.length ? `<ol style="margin:0;padding-left:22px;">${stepsHtml}</ol>` : ''}

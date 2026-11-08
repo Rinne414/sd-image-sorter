@@ -70,9 +70,9 @@ function showToast(rawMessage, type = 'info', options = {}) {
     toast.className = `toast ${type}`;
     toast.setAttribute('role', 'alert');
 
-    const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+    const icons = { success: 'i-check', error: 'i-close', info: 'i-info', warning: 'i-alert' };
     toast.innerHTML = `
-        <span class="toast-icon" aria-hidden="true">${icons[type] || 'ℹ'}</span>
+        <span class="toast-icon" aria-hidden="true">${window.UiIcon ? window.UiIcon.html(icons[type] || 'i-info') : ''}</span>
         <span class="toast-message"></span>
     `;
     toast.querySelector('.toast-message').textContent = message;

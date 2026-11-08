@@ -104,7 +104,7 @@ Object.assign(window.Gallery, {
         const wrap = document.querySelector('#modal-tags-edit-chips');
         if (!wrap) return;
         wrap.innerHTML = (this._tagEditWorking || []).map((tag, i) =>
-            `<span class="tag tag-editable">${this._escapeHtml(tag)}<button type="button" class="tag-remove" data-idx="${i}" aria-label="Remove tag">×</button></span>`
+            `<span class="tag tag-editable">${this._escapeHtml(tag)}<button type="button" class="tag-remove" data-idx="${i}" aria-label="Remove tag">${window.UiIcon ? window.UiIcon.html('i-close') : ''}</button></span>`
         ).join('');
         wrap.querySelectorAll('.tag-remove').forEach(btn => {
             btn.addEventListener('click', () => {

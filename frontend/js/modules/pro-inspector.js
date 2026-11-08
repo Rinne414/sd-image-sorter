@@ -103,8 +103,18 @@
         if (!body) return;
         const note = document.createElement('p');
         note.className = 'pro-inspector-empty';
+        // Drawn before I18n.init on the first load: data-i18n lets the first
+        // translation pass write the right language.
+        note.setAttribute('data-i18n', 'inspector.empty');
         note.textContent = t('inspector.empty', 'Point at a picture to see its details here.');
         body.replaceChildren(note);
+    }
+
+    /** A language switch redraws the panel in the new language. */
+    function redraw() {
+        const image = shownId === null ? null : imageById(shownId);
+        if (image) render(image, details.get(shownId));
+        else renderEmpty();
     }
 
     function render(image, detail) {
@@ -227,6 +237,7 @@
             try { localStorage.setItem(STORE, next ? 'open' : 'closed'); } catch (_error) { /* per-session only */ }
             applyOpen(next);
         });
+        document.addEventListener('languageChanged', redraw);
         el('gallery-grid')?.addEventListener('mouseover', onPointer);
         el('gallery-grid')?.addEventListener('focusin', onPointer);
         const toolbar = el('gallery-toolbar');

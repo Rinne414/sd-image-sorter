@@ -97,7 +97,7 @@ function getErrorPatterns() {
         { pattern: /CUDA.*memory|out of memory/i, message: localizeErrorText('Not enough memory. Try closing other applications.', '内存不足，建议先关闭其他程序再试。') },
         { pattern: /timeout/i, message: localizeErrorText('Operation timed out. Please try again.', '操作超时，请重试。') },
         { pattern: /abort|cancelled/i, message: localizeErrorText('Operation was cancelled.', '操作已取消。') },
-        { pattern: /source file is missing on disk/i, message: localizeErrorText('The original image file is no longer there. Use Find Moved Images if you moved it, or reconnect the drive/folder.', '原始图片文件已经不在原位置。如果你移动过图片，请用“找回图片”；如果在外置盘，请先重新连接磁盘。') },
+        { pattern: /source file is missing on disk/i, message: localizeErrorText('The original image file is no longer there. Use Find Moved Files if you moved it, or reconnect the drive/folder.', '原始图片文件已经不在原位置。如果你移动过图片，请用「找回搬走的图」；如果在外置盘，请先重新连接磁盘。') },
         { pattern: /library entry does not contain a source image path/i, message: localizeErrorText('This gallery item has no usable original-file path. Scan the folder again to rebuild it.', '这个图库项目没有可用的原图路径。请重新扫描文件夹来重建它。') },
         { pattern: /Choose a full folder path/i, message: localizeErrorText('Choose a full folder path, for example D:/SD outputs.', '请填完整的文件夹路径，例如 D:/图片/输出。') },
         { pattern: /path is a file, not a folder|Path is not a directory/i, message: localizeErrorText('That path is a file, not a folder.', '这个路径是文件，不是文件夹。') },

@@ -440,9 +440,11 @@
 
         row.appendChild(buildVariantToggle(item, index));
 
-        const remove = makeEl('button', 'pub-item-remove', '✕');
+        const remove = makeEl('button', 'pub-item-remove');
+        if (window.UiIcon) window.UiIcon.fill(remove, 'i-close');
         remove.type = 'button';
         remove.title = t('pub.removeItem', 'Remove from this set');
+        remove.setAttribute('aria-label', remove.title);
         remove.addEventListener('click', () => {
             STATE.items.splice(index, 1);
             render();

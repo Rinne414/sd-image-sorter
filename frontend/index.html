@@ -380,7 +380,7 @@
                          back to the empty-state hint (and shows "Rate ★5" on an empty
                          library, where the real next step is scanning a folder). -->
                     <span id="entry-hero-credit"></span>
-                    <button type="button" class="hero-link" id="entry-hero-swap" data-i18n="entry.heroSwap" hidden>Swap ↻</button>
+                    <button type="button" class="hero-link" id="entry-hero-swap" data-i18n="entry.heroSwap" hidden>Swap</button>
                 </div>
                 <!-- Owner FB (2026-07-06): 不想展示 was a one-way door — replaced
                      by a four-state display-mode switch (off / single / slideshow
@@ -427,7 +427,7 @@
                         <span class="chip-label" id="nav-library-chip-label"></span>
                     </button>
                     <!-- Mission mode chip (owner 2026-07-07): shown while a mission
-                         scopes the bar to its pipeline tabs; ✕ restores the full set. -->
+                         scopes the bar to its pipeline tabs; its close button restores the full set. -->
                     <span class="nav-mission-chip" id="nav-mission-chip" hidden>
                         <button type="button" class="chip-label" id="nav-mission-chip-label" aria-expanded="false" aria-controls="nav-mission-steps" data-i18n-title="navMission.showSteps" title="Show the steps"></button>
                         <button type="button" class="chip-exit" id="nav-mission-exit"
@@ -733,7 +733,7 @@
                 <div class="bg-tag-progress-fill" id="bg-tag-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-tag-progress-text">Tagging...</span>
-            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-tag-cancel" title="Stop tagging" data-i18n-title="tagger.bgStopTitle">⏹</button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-tag-cancel" title="Stop tagging" data-i18n-title="tagger.bgStopTitle"><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg></button>
             <button class="bg-tag-progress-btn" id="bg-tag-open" title="Open tagger details" data-i18n-title="tagger.bgDetailsTitle"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg></button>
         </div>
 
@@ -743,7 +743,7 @@
                 <div class="bg-tag-progress-fill bg-scan-progress-fill" id="bg-scan-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-scan-progress-text">Importing images...</span>
-            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-scan-cancel" title="Stop scan" data-i18n-title="scan.bgStopTitle">⏹</button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-scan-cancel" title="Stop scan" data-i18n-title="scan.bgStopTitle"><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg></button>
             <button class="bg-tag-progress-btn bg-scan-open-btn" id="bg-scan-open" title="Open scan details" data-i18n-title="scan.bgDetailsTitle"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg></button>
         </div>
 
@@ -753,7 +753,7 @@
                 <div class="bg-tag-progress-fill bg-reconnect-progress-fill" id="bg-reconnect-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-reconnect-progress-text">Finding moved files...</span>
-            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-reconnect-cancel" title="Stop finding moved files" data-i18n-title="reconnect.bgStopTitle">⏹</button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-reconnect-cancel" title="Stop finding moved files" data-i18n-title="reconnect.bgStopTitle"><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg></button>
             <button class="bg-tag-progress-btn" id="bg-reconnect-open" title="Open Find Moved Files details" data-i18n-title="reconnect.bgDetailsTitle"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg></button>
         </div>
 
@@ -763,7 +763,7 @@
                 <div class="bg-tag-progress-fill bg-scan-progress-fill" id="bg-move-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-move-progress-text">Moving files...</span>
-            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-move-cancel" title="Stop moving" data-i18n-title="move.bgStopTitle">⏹</button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-move-cancel" title="Stop moving" data-i18n-title="move.bgStopTitle"><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg></button>
             <button class="bg-tag-progress-btn bg-tag-reset-btn" id="bg-move-reset" type="button" hidden data-i18n="job.resetStuck" data-i18n-title="job.resetStuckTitle" title="Clear a move that never finished stopping">Reset stuck job</button>
         </div>
 
@@ -773,7 +773,7 @@
                 <div class="bg-tag-progress-fill bg-scan-progress-fill" id="bg-delete-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-delete-progress-text">Moving to Trash...</span>
-            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-delete-cancel" title="Stop deleting" data-i18n-title="delete.bgStopTitle">⏹</button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-delete-cancel" title="Stop deleting" data-i18n-title="delete.bgStopTitle"><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg></button>
             <button class="bg-tag-progress-btn bg-tag-reset-btn" id="bg-delete-reset" type="button" hidden data-i18n="job.resetStuck" data-i18n-title="job.resetStuckTitle" title="Clear a delete that never finished stopping">Reset stuck job</button>
         </div>
 
@@ -783,7 +783,7 @@
                 <div class="bg-tag-progress-fill bg-scan-progress-fill" id="bg-remove-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-remove-progress-text">Removing from gallery...</span>
-            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-remove-cancel" title="Stop removing" data-i18n-title="remove.bgStopTitle">⏹</button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-remove-cancel" title="Stop removing" data-i18n-title="remove.bgStopTitle"><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg></button>
             <button class="bg-tag-progress-btn bg-tag-reset-btn" id="bg-remove-reset" type="button" hidden data-i18n="job.resetStuck" data-i18n-title="job.resetStuckTitle" title="Clear a remove that never finished stopping">Reset stuck job</button>
         </div>
 
@@ -798,7 +798,7 @@
                 <span class="pns-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span>
                 <span class="pns-title"></span>
                 <span class="pns-actions"></span>
-                <button type="button" class="pns-dismiss" aria-label="Dismiss" data-i18n-aria="common.close" title="Dismiss" data-i18n-title="common.close">×</button>
+                <button type="button" class="pns-dismiss" aria-label="Dismiss" data-i18n-aria="common.close" title="Dismiss" data-i18n-title="common.close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
             </div>
             <!-- Gallery View -->
             <section id="view-gallery" class="view active" role="tabpanel" aria-labelledby="nav-tab-gallery">
@@ -895,7 +895,7 @@
                                     <span data-i18n="libraryRoots.manageShort">Manage</span>
                                 </button>
                                 <button id="btn-refresh-folders" class="btn btn-ghost btn-small btn-icon-only" title="Refresh folder list" aria-label="Refresh folder list" data-i18n-title="folders.refresh" data-i18n-aria="folders.refresh">
-                                    <span aria-hidden="true">⟳</span>
+                                    <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></span>
                                 </button>
                             </div>
                         </div>
@@ -913,7 +913,7 @@
                             </button>
                             <div class="sidebar-section-actions">
                                 <button id="btn-new-collection" class="btn btn-ghost btn-small btn-icon-only" title="New collection" aria-label="New collection" data-i18n-aria="collections.create" data-i18n-title="collections.new">
-                                    <span aria-hidden="true">＋</span>
+                                    <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></span>
                                 </button>
                             </div>
                         </div>
@@ -1891,7 +1891,7 @@
                                 <div class="autosep-card autosep-card-configs" id="autosep-configs-card">
                                     <div class="autosep-card-head">
                                         <span class="autosep-card-summary-text" data-i18n="autosep.savedConfigs">Saved Configs</span>
-                                        <button class="btn btn-ghost btn-small" id="btn-autosep-new-config" type="button">＋ <span data-i18n="autosep.newConfig">New</span></button>
+                                        <button class="btn btn-ghost btn-small" id="btn-autosep-new-config" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg> <span data-i18n="autosep.newConfig">New</span></button>
                                     </div>
                                     <div class="autosep-config-controls">
                                         <select id="autosep-config-select" class="input-field"></select>
@@ -2584,7 +2584,7 @@
                             </div>
                             <button class="btn btn-ghost btn-small qs-filter-advanced-toggle" id="qs-filter-advanced" type="button" aria-expanded="false" aria-controls="qs-filter-advanced-fields"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> <span data-i18n="queueSolitaire.advancedFilters">Advanced Filters</span></button>
                             <button class="btn btn-ghost btn-small" id="qs-filter-gallery" type="button"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg> <span data-i18n="queueSolitaire.useGalleryFilters">Use Gallery Filters</span></button>
-                            <button class="btn btn-ghost btn-small" id="qs-filter-reset" type="button">↺ <span data-i18n="queueSolitaire.resetFilters">Reset</span></button>
+                            <button class="btn btn-ghost btn-small" id="qs-filter-reset" type="button"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> <span data-i18n="queueSolitaire.resetFilters">Reset</span></button>
                             <button class="btn btn-ghost btn-small" id="qs-filter-select" type="button"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> <span data-i18n="queueSolitaire.selectMatched">Select Matched</span></button>
                             <button class="btn btn-ghost btn-small" id="qs-filter-apply" type="button" data-i18n="action.search">Search</button>
                             <span class="qs-filter-match" id="qs-filter-match-count" data-i18n="queueSolitaire.initialMatching">0 matching</span>
@@ -5040,7 +5040,7 @@
                                     <button type="button" class="sepcon-view-refresh" id="sepcon-issues-refresh"
                                             data-testid="review-cockpit-refresh" aria-label="Refresh issues"
                                             title="Refresh issues" data-i18n-aria="dataset.reviewRefreshAria"
-                                            data-i18n-title="dataset.reviewRefreshAria">↻</button>
+                                            data-i18n-title="dataset.reviewRefreshAria"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></button>
                                 </div>
                                 <section id="sepcon-issues-panel" class="sepcon-issues-panel" role="tabpanel"
                                          aria-labelledby="sepcon-tab-issues" data-testid="review-cockpit-issues" hidden>
@@ -6068,7 +6068,7 @@
                                     <span data-i18n="settings.saveCurrentAiDefaults">Save current AI defaults</span>
                                 </button>
                                 <button type="button" class="btn btn-ghost btn-small danger" id="btn-settings-reset-ai-defaults">
-                                    <span aria-hidden="true">↺</span>
+                                    <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></span>
                                     <span data-i18n="settings.resetAiDefaults">Reset AI defaults</span>
                                 </button>
                             </div>
@@ -6250,7 +6250,7 @@
                                      holds readable ComfyUI images. -->
                                 <button class="btn btn-ghost btn-small" id="btn-metadata-reread-comfyui" type="button" hidden><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> <span id="metadata-reread-comfyui-label" data-i18n="health.rereadComfy">Re-read ComfyUI Prompts</span></button>
                                 <button class="btn btn-ghost btn-small" id="btn-metadata-reparse" type="button" hidden><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> <span id="metadata-reparse-label" data-i18n="health.reparse">Recover Missing Text</span></button>
-                                <button class="btn btn-primary btn-small" id="btn-health-refresh">↻ <span data-i18n="health.refresh">Refresh Audit</span></button>
+                                <button class="btn btn-primary btn-small" id="btn-health-refresh"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> <span data-i18n="health.refresh">Refresh Audit</span></button>
                             </div>
                         </header>
 
@@ -6782,7 +6782,7 @@
         <div class="modal" id="reconnect-modal" role="dialog" aria-modal="true" aria-labelledby="reconnect-modal-title" data-initial-focus="#reconnect-folder-path">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-small">
-                <h3 id="reconnect-modal-title" data-i18n="reconnect.title">Find Moved Images</h3>
+                <h3 id="reconnect-modal-title" data-i18n="reconnect.title">Find Moved Files</h3>
                 <p class="modal-description" data-i18n="reconnect.description">Use this if images were moved outside the app. It only updates gallery records and never touches the files.</p>
                 <div class="form-group">
                     <label for="reconnect-folder-path" id="reconnect-folder-path-label" data-i18n="reconnect.folderPath">Where should the app look?</label>

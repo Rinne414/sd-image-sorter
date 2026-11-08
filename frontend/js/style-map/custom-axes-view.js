@@ -133,7 +133,8 @@ export class CustomAxesView {
         img.alt = '';
         img.decoding = 'async';
         img.src = `/api/image-thumbnail/${id}?size=${THUMBNAIL_SIZE}`;
-        const remove = el('button', 'stylemap-custom-chip-x', '×');
+        const remove = el('button', 'stylemap-custom-chip-x');
+        window.UiIcon?.fill(remove, 'i-close');
         remove.type = 'button';
         remove.title = t('stylemap.customRemove', 'Remove');
         remove.setAttribute('aria-label', t('stylemap.customRemove', 'Remove'));

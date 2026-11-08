@@ -186,7 +186,7 @@ Object.assign(window.PromptLab, {
         return `
             <span class="slot-tag" data-tag="${encodedTag}" data-cat="${encodedCategory}">
                 ${safeTag}
-                <span class="slot-tag-remove" data-tag="${encodedTag}" data-cat="${encodedCategory}">×</span>
+                <span class="slot-tag-remove" data-tag="${encodedTag}" data-cat="${encodedCategory}">${window.UiIcon ? window.UiIcon.html('i-close') : ''}</span>
             </span>
         `;
     },

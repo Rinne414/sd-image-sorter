@@ -45,7 +45,7 @@ Object.assign(window.V321Integration, {
                     aria-disabled="${disabled ? 'true' : 'false'}"
                     data-model-value="${this._escapeAttr(value)}"
                 >
-                    <span class="tagger-model-choice-icon" aria-hidden="true">${this._escapeHtml(icon)}</span>
+                    <span class="tagger-model-choice-icon" aria-hidden="true">${window.UiIcon ? window.UiIcon.html(icon) : ''}</span>
                     <span class="tagger-model-choice-copy">
                         <span class="tagger-model-choice-title">${this._escapeHtml(title)}</span>
                         ${badge ? `<span class="tagger-model-choice-badge">${this._escapeHtml(badge)}</span>` : ''}
@@ -224,10 +224,10 @@ Object.assign(window.V321Integration, {
 
     _getModelChoiceIcon(value, activeTab) {
         const lower = String(value || '').toLowerCase();
-        if (value === 'vlm') return '☁';
-        if (lower.includes('toriigate')) return '◎';
-        if (value === 'custom') return '⚙';
-        return activeTab === 'nl' ? '◇' : '✓';
+        if (value === 'vlm') return 'i-cloud';
+        if (lower.includes('toriigate')) return 'i-target';
+        if (value === 'custom') return 'i-settings';
+        return activeTab === 'nl' ? 'i-message' : 'i-tag';
     },
 
     _getModelChoiceActionHtml(value, activeTab, selected, disabled) {

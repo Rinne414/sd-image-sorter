@@ -1825,6 +1825,11 @@
 #view-dataset .dataset-result-card .dataset-result-status.partial  { color: var(--accent-primary); }
 #view-dataset .dataset-result-card .dataset-result-status.failed   { color: var(--danger); }
 #view-dataset .dataset-result-card .dataset-result-status.cancelled { color: #A6A6A6; }
+#view-dataset .dataset-result-card .dataset-result-status .icon {
+    width: 48px;
+    height: 48px;
+    stroke-width: 1.75;
+}
 #view-dataset .dataset-result-card .dataset-modal-title {
     justify-content: center;
 }
