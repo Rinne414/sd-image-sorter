@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { useT, type MessageKey } from '../i18n'
 import { useApp } from '../state/store'
 import { useTheme, type ThemeMode } from '../theme'
-import { FrameMark } from '../ui/FrameMark'
+import { BrandMark } from '../ui/BrandMark'
 import { Icon } from '../ui/Icon'
 import { AiBusyChip } from '../features/jobs/AiBusyChip'
 import { JobsMenu } from '../features/jobs/JobsMenu'
@@ -85,7 +85,7 @@ export function TopBar() {
           {t('browse.skip')}
         </button>
         <button ref={brandRef} type="button" className={styles.brand} onClick={() => setPage('home')} aria-label={t('nav.home')} title={t('nav.home')}>
-          <FrameMark className={styles.mark} />
+          <BrandMark className={styles.mark} />
           {/* No "Vopus" badge: that is the build's code name, not something a user can read. */}
           <span className={styles.brandName}>SD Image Sorter</span>
         </button>
