@@ -2803,7 +2803,8 @@ test('scan folder browser should pick a real folder and scan it through the UI',
   try {
     await page.locator('#btn-start-scan').click()
     const terminal = await scanObserver.waitForTerminal(90000)
-    expect(terminal.status, terminal.message).toBe('done')
+    // Another page may acknowledge the run first; the import is checked below.
+    expect(['done', 'acknowledged'], terminal.message).toContain(terminal.status)
   } finally {
     scanObserver.stop()
   }
@@ -3083,7 +3084,8 @@ test('scan then tag through the real UI should finish and write tags for the new
   try {
     await page.locator('#btn-start-scan').click()
     const terminal = await scanObserver.waitForTerminal(90000)
-    expect(terminal.status, terminal.message).toBe('done')
+    // Another page may acknowledge the run first; the import is checked below.
+    expect(['done', 'acknowledged'], terminal.message).toContain(terminal.status)
   } finally {
     scanObserver.stop()
   }

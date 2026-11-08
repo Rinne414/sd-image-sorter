@@ -15,6 +15,7 @@ import { execFileSync } from 'node:child_process'
 
 import { expect, test } from '../fixtures/click-ledger'
 import { cleanupImages, seedImages } from '../fixtures/v4-seed'
+import { scanAndWait } from '../fixtures/scan-wait'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const runtimeDatabasePath = process.env.SD_IMAGE_SORTER_DB_PATH
@@ -95,22 +96,7 @@ print("ok")
 }
 
 async function scanFolder(request: any, folder: string) {
-  const response = await request.post('/api/scan', {
-    data: { folder_path: folder, recursive: true },
-  })
-  expect(response.ok()).toBeTruthy()
-  const { run_id: runId } = await response.json()
-  // Follow this scan's own run: any open page that sees a finished scan
-  // acknowledges it (status back to "idle"), so in a parallel run another
-  // spec's page could clear "done" before this poll saw it (flaked three
-  // times on 2026-11-08). Done, or idle once this run is over, both mean done.
-  await expect.poll(async () => {
-    const progress = await (await request.get('/api/scan/progress')).json()
-    if (progress.run_id === runId && progress.status === 'done') return 'done'
-    if (progress.status === 'idle' && progress.run_id >= runId) return 'done'
-    if (progress.run_id > runId) return 'done'
-    return String(progress.status || '')
-  }, { timeout: 60000 }).toBe('done')
+  await scanAndWait(request, folder)
 }
 
 // The gallery toolbar folds while the library is empty, and other specs clean

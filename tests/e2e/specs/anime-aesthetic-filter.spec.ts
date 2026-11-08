@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
 import { createTestImage } from '../fixtures/test-helpers'
+import { scanAndWait } from '../fixtures/scan-wait'
 
 /**
  * Anime aesthetic filter (2026-09-30): the Filter panel's Aesthetic section
@@ -16,12 +17,7 @@ const fixtureDir = path.join(__dirname, '..', '..', '..', '.tmp', 'manual-test',
 test.beforeAll(async ({ request }) => {
   fs.mkdirSync(fixtureDir, { recursive: true })
   await createTestImage(fixtureDir, 'anime-filter-seed.png', { generator: 'nai', prompt: 'seed picture' })
-  const response = await request.post('/api/scan', { data: { folder_path: fixtureDir, recursive: true } })
-  expect(response.ok()).toBeTruthy()
-  await expect.poll(async () => {
-    const progress = await (await request.get('/api/scan/progress')).json()
-    return String(progress.status || '')
-  }, { timeout: 60_000 }).toBe('done')
+  await scanAndWait(request, fixtureDir)
 })
 
 async function openFilterPanel(page: Page, lang: 'en' | 'zh-CN') {

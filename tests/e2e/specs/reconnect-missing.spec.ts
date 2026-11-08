@@ -146,7 +146,8 @@ test('find moved images reconnects a file through the real gallery UI', async ({
   try {
     await page.locator('#btn-start-scan').click()
     const terminal = await scanObserver.waitForTerminal(90000)
-    expect(terminal.status, terminal.message).toBe('done')
+    // Another page may acknowledge the run first; the import is checked below.
+    expect(['done', 'acknowledged'], terminal.message).toContain(terminal.status)
   } finally {
     scanObserver.stop()
   }

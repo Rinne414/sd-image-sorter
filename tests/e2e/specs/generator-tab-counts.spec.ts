@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
 import { createTestImage } from '../fixtures/test-helpers'
+import { scanAndWait } from '../fixtures/scan-wait'
 
 /**
  * Generator tab counts follow the filters (2026-10-26). The tabs above the
@@ -21,12 +22,7 @@ test.beforeAll(async ({ request }) => {
   await createTestImage(fixtureDir, 'gtc-webui-2.png', { generator: 'webui', prompt: `${PROBE}, smile`, color: 'green' })
   await createTestImage(fixtureDir, 'gtc-nai-1.png', { generator: 'nai', prompt: `${PROBE}, solo`, color: 'yellow' })
   await createTestImage(fixtureDir, 'gtc-forge-1.png', { generator: 'forge', prompt: 'unrelated landscape', color: 'purple' })
-  const response = await request.post('/api/scan', { data: { folder_path: fixtureDir, recursive: true } })
-  expect(response.ok()).toBeTruthy()
-  await expect.poll(async () => {
-    const progress = await (await request.get('/api/scan/progress')).json()
-    return String(progress.status || '')
-  }, { timeout: 60_000 }).toBe('done')
+  await scanAndWait(request, fixtureDir)
 })
 
 async function openGallery(page: Page, lang: 'en' | 'zh-CN') {
@@ -79,8 +75,14 @@ for (const run of [
     await expect(page.locator('#count-forge')).toHaveText('0')
     await expect(page.locator('#count-all')).toHaveText('3')
     await expect(page.locator('#count-webui')).toHaveAttribute('title', new RegExp(run.filteredTitle))
-    // The image-count label still compares with the whole library.
-    await expect(page.locator('#image-count')).toContainText(String(library.total))
+    // The image-count label still compares with the whole library. Other
+    // workers add and remove pictures meanwhile, so the total may have moved
+    // since it was read: accept the total from before or from now.
+    await expect.poll(async () => {
+      const numbers = ((await page.locator('#image-count').textContent()) || '').match(/\d+/g)?.map(Number) || []
+      const now = (await libraryCounts(page)).total
+      return numbers.includes(3) && numbers.some((n) => n === library.total || n === now)
+    }).toBe(true)
     await page.locator('#generator-tabs').screenshot({
       path: testInfo.outputPath(`generator-tabs-filtered-${run.lang}-${run.viewport.width}.png`),
     })

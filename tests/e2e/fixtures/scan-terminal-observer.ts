@@ -8,9 +8,16 @@ type ManualScanIdentity = Readonly<{
   source: 'manual'
 }>
 
+/**
+ * "acknowledged": the run ended and another page acknowledged it (the progress
+ * went back to the default idle state, run_id 0) before this page saw its
+ * terminal response. In a parallel run every open page acknowledges finished
+ * manual scans, so this happens; the caller proves the outcome (the imported
+ * pictures) instead.
+ */
 export type ManualScanTerminal = ManualScanIdentity & Readonly<{
   message: string
-  status: 'cancelled' | 'done' | 'error'
+  status: 'acknowledged' | 'cancelled' | 'done' | 'error'
 }>
 
 export type ManualScanTerminalObserver = Readonly<{
@@ -21,6 +28,7 @@ export type ManualScanTerminalObserver = Readonly<{
 type ScanObservation =
   | Readonly<{ kind: 'start'; value: ManualScanIdentity }>
   | Readonly<{ kind: 'terminal'; value: ManualScanTerminal }>
+  | Readonly<{ kind: 'idle' }>
 
 const TERMINAL_SCAN_STATUSES = new Set(['cancelled', 'done', 'error'])
 
@@ -88,6 +96,7 @@ async function readScanObservation(response: Response): Promise<ScanObservation 
     })
   }
 
+  if (status === 'idle') return Object.freeze({ kind: 'idle' })
   if (!TERMINAL_SCAN_STATUSES.has(status)) return null
   const message = typeof payload.message === 'string' ? payload.message : ''
   return Object.freeze({
@@ -109,6 +118,7 @@ export function observeManualScanTerminal(page: Page): ManualScanTerminalObserve
   let startIdentity: ManualScanIdentity | null = null
   let terminalResponses: readonly ManualScanTerminal[] = Object.freeze([])
   let observerError: Error | null = null
+  let sawIdleAfterStart = false
   let stopped = false
 
   const onResponse = (response: Response): void => {
@@ -123,6 +133,10 @@ export function observeManualScanTerminal(page: Page): ManualScanTerminalObserve
             return
           }
           startIdentity = observation.value
+          return
+        }
+        if (observation.kind === 'idle') {
+          if (startIdentity) sawIdleAfterStart = true
           return
         }
         terminalResponses = Object.freeze([...terminalResponses, observation.value])
@@ -149,12 +163,20 @@ export function observeManualScanTerminal(page: Page): ManualScanTerminalObserve
           terminal.run_id === startIdentity?.run_id
           && terminal.source === startIdentity.source
         )) ?? null
-        return matchingTerminal?.status ?? 'waiting_for_terminal'
-      }, { timeout: timeoutMs }).toMatch(/^(cancelled|done|error|observer_error)$/)
+        if (matchingTerminal) return matchingTerminal.status
+        return sawIdleAfterStart ? 'acknowledged' : 'waiting_for_terminal'
+      }, { timeout: timeoutMs }).toMatch(/^(acknowledged|cancelled|done|error|observer_error)$/)
 
       if (observerError) throw observerError
       if (!startIdentity) {
         throw new Error('Manual scan terminal arrived without a matching start response')
+      }
+      if (!matchingTerminal && sawIdleAfterStart) {
+        return Object.freeze({
+          ...startIdentity,
+          status: 'acknowledged',
+          message: 'Acknowledged by another page before this page saw the result',
+        })
       }
       if (!matchingTerminal) {
         throw new Error(`Manual scan ${startIdentity.run_id}/${startIdentity.source} produced no terminal response`)

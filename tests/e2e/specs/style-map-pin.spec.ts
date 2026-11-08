@@ -4,6 +4,7 @@ import zlib from 'node:zlib'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
 import { StyleMapPage } from '../pages/StyleMapPage'
+import { scanAndWait } from '../fixtures/scan-wait'
 
 /**
  * "View in Gallery" from a Style Map box selection (S4b): the Gallery shows
@@ -32,9 +33,7 @@ function png(shade: number): Buffer {
 async function seedPictures(request: any): Promise<number[]> {
   fs.mkdirSync(folder, { recursive: true })
   for (let i = 0; i < COUNT; i += 1) fs.writeFileSync(path.join(folder, `s4bpin_${String(i).padStart(3, '0')}.png`), png(i * 3))
-  const started = await request.post('/api/scan', { data: { folder_path: folder, recursive: true } })
-  expect(started.ok()).toBeTruthy()
-  await expect.poll(async () => String((await (await request.get('/api/scan/progress')).json()).status || ''), { timeout: 60000 }).toBe('done')
+  await scanAndWait(request, folder)
   const listed = await (await request.get('/api/images?search=s4bpin_&limit=200')).json()
   const ids = (listed.images as Array<{ id: number }>).map((image) => image.id)
   expect(ids).toHaveLength(COUNT)
