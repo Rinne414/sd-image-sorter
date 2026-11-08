@@ -496,7 +496,13 @@ def _find_kaloscope_dir(artist_root: Path) -> Optional[Path]:
         return canonical.parent
 
     # 2) Case-insensitive kaloscope* directory, checkpoint at the HF subpath.
-    for child in sorted(artist_root.iterdir()):
+    # The folder can go away after the exists() check (moved, deleted, a
+    # drive disconnected): then the model is simply not there.
+    try:
+        children = sorted(artist_root.iterdir())
+    except OSError:
+        return None
+    for child in children:
         if not child.is_dir():
             continue
         normalized = child.name.lower().replace("-", "").replace("_", "").replace(".", "")
@@ -506,7 +512,11 @@ def _find_kaloscope_dir(artist_root: Path) -> Optional[Path]:
                 return checkpoint.parent
 
     # 3) Recursive search by basename (any manual placement depth).
-    for checkpoint in sorted(artist_root.rglob(checkpoint_basename)):
+    try:
+        found = sorted(artist_root.rglob(checkpoint_basename))
+    except OSError:
+        return None
+    for checkpoint in found:
         if is_nonempty_model_file(checkpoint):
             return checkpoint.parent
     return None

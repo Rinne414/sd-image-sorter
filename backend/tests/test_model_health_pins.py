@@ -547,6 +547,22 @@ def test_find_kaloscope_dir_none_when_root_absent(tmp_path):
     assert model_health._find_kaloscope_dir(tmp_path / "does-not-exist") is None
 
 
+def test_find_kaloscope_dir_none_when_root_vanishes_after_check(monkeypatch, tmp_path):
+    # The folder can go away between the exists() check and the listing (moved,
+    # deleted, a drive disconnected); /api/models/status answered 500 then.
+    artist_root = tmp_path / "artist"
+    artist_root.mkdir()
+    real_iterdir = Path.iterdir
+
+    def vanished(self):
+        if self == artist_root:
+            raise FileNotFoundError(2, "The system cannot find the path specified", str(self))
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", vanished)
+    assert model_health._find_kaloscope_dir(artist_root) is None
+
+
 def test_resolve_artist_runtime_accepts_model_marker(monkeypatch, tmp_path):
     # The resolver accepts EITHER a "lsnet_model" OR a bare "model" subdir as
     # the runtime marker; pin the less-obvious "model" acceptance.
