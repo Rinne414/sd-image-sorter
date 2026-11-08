@@ -32,6 +32,10 @@ export const enBrowse: Record<keyof typeof zhCNBrowse, string> = {
   'browse.tile.stars': '{n} stars',
   'browse.tile.favorite': 'favourite',
   'browse.tile.picked': 'picked',
+  'browse.tile.stack': '{n} pictures from one run',
+  'browse.run.open': '{n} pictures from one run: show them all',
+  'browse.run.fold': 'Fold',
+  'browse.run.foldTitle': 'Fold the {n} pictures of this run back into one stack',
   'browse.tile.sep': ', ',
 
   'browse.resume.back': 'Back where you left off',

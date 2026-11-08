@@ -44,6 +44,8 @@ interface Options {
   hasMore: boolean
   isFetchingMore: boolean
   fetchMore: () => void
+  /** Where a picture is shown (a closed run's stack shows all of its pictures); -1: not loaded. */
+  indexOf?: (id: number) => number
 }
 
 export function useScrollMemory(o: Options): void {
@@ -51,6 +53,8 @@ export function useScrollMemory(o: Options): void {
   const libraryId = useApp((s) => s.libraryId)
   const imagesRef = useRef(o.images)
   imagesRef.current = o.images
+  const indexOfRef = useRef(o.indexOf)
+  indexOfRef.current = o.indexOf
   // Decided once per grid (the grid remounts for another search or library).
   const pending = useRef<ScrollSpot | null | undefined>(undefined)
   if (pending.current === undefined) pending.current = o.scrollKey ? spotToResume(readStore(), libraryId, o.scrollKey, Date.now()) : null
@@ -59,7 +63,8 @@ export function useScrollMemory(o: Options): void {
   useEffect(() => {
     const spot = pending.current
     if (!spot || !ready || images.length === 0) return
-    const at = resumeIndex(spot, images.map((img) => img.id))
+    const shownAt = indexOfRef.current?.(spot.id) ?? -1
+    const at = shownAt >= 0 ? shownAt : resumeIndex(spot, images.map((img) => img.id))
     if (at === null && hasMore) {
       if (!isFetchingMore) fetchMore()
       return

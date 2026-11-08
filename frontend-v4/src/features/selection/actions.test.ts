@@ -50,6 +50,19 @@ describe('right-click target', () => {
   it('the only pick is just that card', () => {
     expect(menuTarget(4, [4])).toEqual({ ids: [4], picks: false })
   })
+
+  it("a run's stack acts on every picture of the run, unless it is among several picks", () => {
+    expect(menuTarget(7, [], [7, 8, 9])).toEqual({ ids: [7, 8, 9], picks: true, run: true })
+    expect(menuTarget(7, [], [7])).toEqual({ ids: [7], picks: false })
+    // only its cover picked among other picks: the stack looks unpicked, so the menu is the run's
+    expect(menuTarget(7, [1, 7], [7, 8, 9])).toEqual({ ids: [7, 8, 9], picks: true, run: true })
+    expect(menuTarget(7, [1, 7, 8, 9], [7, 8, 9])).toEqual({ ids: [1, 7, 8, 9], picks: true })
+  })
+
+  it("the menu on a run's stack says it acts on the run", () => {
+    const plan = cardMenu({ ids: [7, 8, 9], picks: true, run: true }, [], [], 'a.png')
+    expect(plan.header).toEqual({ key: 'lib.menu.run', params: { n: 3 } })
+  })
 })
 
 describe('bulk actions', () => {

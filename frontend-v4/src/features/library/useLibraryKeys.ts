@@ -35,9 +35,14 @@ function run(action: LibraryKey, d: Deps): boolean {
     case 'open':
       if (id !== null) s.openLightbox(id)
       return true
-    case 'pick':
-      if (id !== null) s.togglePick(id)
+    case 'pick': {
+      if (id === null) return true
+      // A closed run's stack picks every picture in it.
+      const ids = d.gallery.current?.picksFor(id) ?? [id]
+      if (ids.length > 1) s.togglePicks(ids)
+      else s.togglePick(id)
       return true
+    }
     case 'escape':
       if (s.selection.length) s.clearSelection()
       else if (useSimilar.getState().query) useSimilar.getState().clear()

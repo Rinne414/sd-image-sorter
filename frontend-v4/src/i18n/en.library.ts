@@ -3,6 +3,9 @@ import type { zhCNLibrary } from './zh-CN.library'
 export const enLibrary: Record<keyof typeof zhCNLibrary, string> = {
   'lib.menu.label': 'Image menu',
   'lib.menu.picks': 'Acts on the {n} picked images',
+  'lib.menu.run': 'Acts on the {n} pictures of this run',
+  'lib.menu.pickRun': 'Pick the {n} pictures of this run',
+  'lib.menu.unpickRun': 'Unpick the {n} pictures of this run',
   'lib.menu.thisImage': 'This image',
   'lib.menu.pick': 'Pick',
   'lib.palette.filterModel': "Filter the library by this image's model",

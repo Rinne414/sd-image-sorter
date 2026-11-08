@@ -170,6 +170,9 @@ export const zhCN = {
   'view.size.m': '中',
   'view.size.l': '大',
   'view.card': '右侧生成卡',
+  'view.groupRuns': '同批合并',
+  'view.groupRunsTitle': '同一批生成的图（提示词、模型和尺寸相同，相隔几分钟）合成一叠',
+  'view.groupRunsDateOnly': '同批合并（按日期排序时）',
 
   'grid.count': '{n} 张',
   'grid.countAbout': '约 {n} 张',
@@ -484,6 +487,7 @@ export const zhCN = {
   'palette.cmd.toggleRail': '显示或收起左栏',
   'palette.cmd.masonry': '瀑布排列',
   'palette.cmd.grid': '方格排列',
+  'palette.cmd.groupRuns': '开关同批合并',
   'palette.cmd.switchTo': '切换到 {name}',
   'palette.cmd.onlyFavorites': '只看收藏',
   'palette.cmd.clearFilters': '清空所有筛选',

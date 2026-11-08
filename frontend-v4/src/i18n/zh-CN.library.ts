@@ -4,6 +4,9 @@
 export const zhCNLibrary = {
   'lib.menu.label': '图片菜单',
   'lib.menu.picks': '作用于已选的 {n} 张',
+  'lib.menu.run': '作用于这一批的 {n} 张',
+  'lib.menu.pickRun': '挑选这一批的 {n} 张',
+  'lib.menu.unpickRun': '取消挑选这一批的 {n} 张',
   'lib.menu.thisImage': '这张图',
   'lib.menu.pick': '挑选',
   'lib.palette.filterModel': '按这张图的模型筛选图库',

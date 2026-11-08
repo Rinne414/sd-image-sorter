@@ -1,5 +1,5 @@
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import { thumbnailUrl } from '../../api/client'
 import type { ImageSummary } from '../../api/types'
 import { useT, type MessageKey, type Params } from '../../i18n'
@@ -16,6 +16,7 @@ import { formatDuration, isVideo } from '../video/videoMedia'
 import { useCardMenu } from './CardMenu'
 import { dragPayload, INTERNAL_DRAG } from './drag'
 import styles from './Gallery.module.css'
+import { displayIndexOf, flatItems, groupRuns as groupRunItems, pickLabel, widenToStacks } from './runGroups'
 import { useFlinging } from './useFlinging'
 import { useScrollMemory } from './useScrollMemory'
 
@@ -30,6 +31,8 @@ export type TileLook = 'film' | 'plain'
 
 export interface GalleryHandle {
   move: (dir: 'left' | 'right' | 'up' | 'down' | 'first' | 'last') => void
+  /** The pictures a pick of this tile means: a closed run's stack picks all of them. */
+  picksFor: (id: number) => number[]
 }
 
 interface Props {
@@ -53,6 +56,8 @@ interface Props {
   gridRatio?: number
   /** Space between tiles and around the grid, in px. */
   gap?: number
+  /** Show each generation run as one stack ("Group runs", runGroups.ts); the caller keeps it to date order. */
+  groupRuns?: boolean
 }
 
 function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
@@ -96,9 +101,10 @@ function useRefuseCardDropsInFields(): void {
 type Translate = (key: MessageKey, params?: Params) => string
 
 /** What a screen reader says for a tile: its place in the result, name, stars, marks. */
-function tileLabel(t: Translate, img: ImageSummary, n: number, total: number | null, favorite: boolean, picked: boolean): string {
+function tileLabel(t: Translate, img: ImageSummary, n: number, total: number | null, favorite: boolean, picked: boolean, stackSize = 0): string {
   const name = img.filename ?? ''
   const parts = [total === null ? t('browse.tile.labelOpen', { n, name }) : t('browse.tile.label', { n, total, name })]
+  if (stackSize > 1) parts.push(t('browse.tile.stack', { n: stackSize }))
   if (isVideo(img)) parts.push(t('video.tileSpoken', { time: formatDuration(img.duration_seconds) }))
   if (img.user_rating) parts.push(t('browse.tile.stars', { n: img.user_rating }))
   if (favorite) parts.push(t('browse.tile.favorite'))
@@ -121,6 +127,7 @@ export function Gallery({
   look = 'film',
   gridRatio = 1,
   gap = 6,
+  groupRuns = false,
 }: Props) {
   const t = useT()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -140,40 +147,60 @@ export function Gallery({
   const imagesRef = useRef(images)
   imagesRef.current = images
 
+  // What the grid shows: one item per picture, or with "Group runs" one per run.
+  // The flat list stays the pictures: the lightbox and picks walk every one.
+  const [openRuns, setOpenRuns] = useState<ReadonlySet<string>>(() => new Set())
+  // Turning the switch starts with every run closed (nothing to do when none is open).
+  useEffect(() => setOpenRuns((open) => (open.size ? new Set() : open)), [groupRuns])
+  const display = useMemo(() => (groupRuns ? groupRunItems(images, openRuns) : flatItems(images)), [images, openRuns, groupRuns])
+  const displayRef = useRef(display)
+  displayRef.current = display
+  const shownImages = useMemo(() => display.map((item) => item.img), [display])
+  const onRunOpen = useCallback((key: string, open: boolean) => {
+    setOpenRuns((prev) => {
+      const next = new Set(prev)
+      if (open) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [])
+
   const virtualizer = useVirtualizer({
-    count: images.length,
+    count: display.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (i) => tileHeight(imagesRef.current[i], colW, layout, gridRatio),
+    estimateSize: (i) => tileHeight(displayRef.current[i]?.img, colW, layout, gridRatio),
     overscan: 6,
     lanes,
     gap,
     paddingStart: gap,
     paddingEnd: 96,
-    getItemKey: (i) => imagesRef.current[i]?.id ?? i,
+    getItemKey: (i) => displayRef.current[i]?.img.id ?? i,
   })
 
   useEffect(() => {
     virtualizer.measure()
   }, [virtualizer, lanes, colW, layout, gridRatio])
 
-  useScrollMemory({ scrollRef, virtualizer, images, scrollKey, ready: width > 0, hasMore, isFetchingMore, fetchMore })
+  const shownIndexOf = useCallback((id: number) => displayIndexOf(displayRef.current, id), [])
+  useScrollMemory({ scrollRef, virtualizer, images: shownImages, scrollKey, ready: width > 0, hasMore, isFetchingMore, fetchMore, indexOf: shownIndexOf })
   const flinging = useFlinging(scrollRef)
 
   const items = virtualizer.getVirtualItems()
   const lastIndex = items.at(-1)?.index ?? 0
   useEffect(() => {
-    if (hasMore && !isFetchingMore && images.length > 0 && lastIndex >= images.length - lanes * 6) fetchMore()
-  }, [lastIndex, images.length, hasMore, isFetchingMore, fetchMore, lanes])
+    if (hasMore && !isFetchingMore && display.length > 0 && lastIndex >= display.length - lanes * 6) fetchMore()
+  }, [lastIndex, display.length, hasMore, isFetchingMore, fetchMore, lanes])
 
   // Spatial keyboard movement: up/down stay in the same column, left/right
   // jump to the neighbouring column at the nearest height.
   const move = useCallback(
     (dir: 'left' | 'right' | 'up' | 'down' | 'first' | 'last') => {
-      const list = imagesRef.current
+      const list = displayRef.current
       if (!list.length) return
       const state = useApp.getState()
       const cache = virtualizer.measurementsCache
-      const curIndex = list.findIndex((img) => img.id === state.inspectedId)
+      // A picture inside a closed stack is at the stack.
+      const curIndex = displayIndexOf(list, state.inspectedId)
       let next = -1
       if (curIndex < 0 || dir === 'first') {
         next = dir === 'last' ? list.length - 1 : (items[0]?.index ?? 0)
@@ -211,7 +238,7 @@ export function Gallery({
           }
         }
       }
-      const img = next >= 0 ? list[next] : undefined
+      const img = next >= 0 ? list[next]?.img : undefined
       if (!img) return
       state.inspect(img.id)
       virtualizer.scrollToIndex(next, { align: 'auto' })
@@ -219,27 +246,37 @@ export function Gallery({
     [virtualizer, items, lanes, hasMore, fetchMore],
   )
 
+  const picksFor = useCallback((id: number) => {
+    const list = displayRef.current
+    return list[displayIndexOf(list, id)]?.stack?.ids ?? [id]
+  }, [])
+
   useEffect(() => {
-    onReady?.({ move })
-  }, [onReady, move])
+    onReady?.({ move, picksFor })
+  }, [onReady, move, picksFor])
 
   const onTileClick = useCallback((e: MouseEvent, id: number) => {
     const state = useApp.getState()
+    const list = displayRef.current
+    const tile = list[displayIndexOf(list, id)]
+    const ids = tile?.stack?.ids ?? [id]
+    const pick = () => (ids.length > 1 ? state.togglePicks(ids) : state.togglePick(id))
     if (e.ctrlKey || e.metaKey) {
-      state.togglePick(id)
+      pick()
       state.inspect(id)
       return
     }
     if (e.shiftKey) {
-      const list = imagesRef.current
+      const flat = imagesRef.current
       const anchorId = state.selectionAnchor ?? state.inspectedId
-      const a = list.findIndex((img) => img.id === anchorId)
-      const b = list.findIndex((img) => img.id === id)
+      const a = flat.findIndex((img) => img.id === anchorId)
+      const b = tile ? tile.flatIndex : -1
       if (a >= 0 && b >= 0) {
-        const [lo, hi] = a < b ? [a, b] : [b, a]
-        state.selectRange(list.slice(lo, hi + 1).map((img) => img.id))
+        // A closed stack is whole in a range, at either end.
+        const [lo, hi] = widenToStacks(list, Math.min(a, b), Math.max(a, b))
+        state.selectRange(flat.slice(lo, hi + 1).map((img) => img.id))
       } else {
-        state.togglePick(id)
+        pick()
       }
       state.inspect(id)
       return
@@ -257,7 +294,9 @@ export function Gallery({
   const onTileMenu = useCallback((e: MouseEvent, id: number) => {
     e.preventDefault()
     useApp.getState().inspect(id)
-    useCardMenu.getState().show({ id, x: e.clientX, y: e.clientY, keyboard: false })
+    // A closed run's stack: the menu acts on the whole run.
+    const run = displayRef.current.find((item) => item.img.id === id)?.stack?.ids
+    useCardMenu.getState().show({ id, x: e.clientX, y: e.clientY, keyboard: false, ...(run ? { run } : {}) })
   }, [])
 
   useRefuseCardDropsInFields()
@@ -275,15 +314,23 @@ export function Gallery({
       <div ref={scrollRef} className={styles.scroller} data-testid="gallery-scroller" aria-busy={stale || undefined}>
         <div className={styles.canvas} style={{ height: virtualizer.getTotalSize() }} role="list" aria-label={t('browse.grid.label')}>
           {items.map((item) => {
-            const img = images[item.index]
-            if (!img) return null
+            const shown = display[item.index]
+            if (!shown) return null
+            const { img, stack, member } = shown
+            const pick = pickLabel(stack?.ids ?? [img.id], pickOrder)
+            const inspected = inspectedId !== null && (stack ? stack.ids.includes(inspectedId) : img.id === inspectedId)
             return (
               <Tile
                 key={item.key}
-                label={tileLabel(t, img, item.index + 1, total, favorites.has(img.id), pickOrder.has(img.id))}
-                position={item.index + 1}
+                label={tileLabel(t, img, shown.flatIndex + 1, total, favorites.has(img.id), pick !== '', stack?.size)}
+                position={shown.flatIndex + 1}
                 setSize={total ?? -1}
                 img={img}
+                runKey={stack?.key ?? member?.key}
+                runSize={stack?.size ?? member?.size}
+                runIds={stack?.ids.join(',')}
+                runPlace={member ? (member.position === 0 ? 'first' : member.position === member.size - 1 ? 'last' : 'middle') : undefined}
+                onRunOpen={onRunOpen}
                 left={gap + item.lane * (colW + gap)}
                 top={item.start}
                 width={colW}
@@ -291,8 +338,8 @@ export function Gallery({
                 thumbSize={thumbSize}
                 flinging={flinging}
                 cover={layout === 'grid'}
-                inspected={img.id === inspectedId}
-                pick={pickOrder.get(img.id) ?? 0}
+                inspected={inspected}
+                pick={pick}
                 favorite={favorites.has(img.id)}
                 score={scores?.get(img.id)}
                 look={look}
@@ -320,6 +367,14 @@ interface TileProps {
   position: number
   setSize: number
   img: ImageSummary
+  /** The run this tile belongs to ("Group runs"): its key and size. Primitives, so the memo holds. */
+  runKey: string | undefined
+  runSize: number | undefined
+  /** A closed run's stack: the ids of every picture it stands for, comma-separated. */
+  runIds: string | undefined
+  /** A picture of an open run: where it sits in the run. */
+  runPlace: 'first' | 'middle' | 'last' | undefined
+  onRunOpen: (key: string, open: boolean) => void
   left: number
   top: number
   width: number
@@ -329,7 +384,8 @@ interface TileProps {
   flinging: boolean
   cover: boolean
   inspected: boolean
-  pick: number
+  /** Pick order ("3", or "2–5" for a stack); empty when not picked. */
+  pick: string
   favorite: boolean
   score: number | undefined
   look: TileLook
@@ -357,6 +413,7 @@ const Tile = memo(function Tile(p: TileProps) {
   const stars = p.img.user_rating ?? 0
   const aesthetic = formatScore(p.img.aesthetic_score)
   const heartLabel = p.favorite ? t('card.unfavorite') : t('card.favorite')
+  const isStack = p.runIds !== undefined
   return (
     <div
       className={styles.tile}
@@ -366,7 +423,10 @@ const Tile = memo(function Tile(p: TileProps) {
       aria-setsize={p.setSize}
       aria-current={p.inspected || undefined}
       data-inspected={p.inspected || undefined}
-      data-picked={p.pick > 0 || undefined}
+      data-picked={p.pick !== '' || undefined}
+      data-stack={isStack ? p.runSize : undefined}
+      data-run-ids={p.runIds}
+      data-run-member={p.runPlace}
       data-scored={p.score !== undefined || undefined}
       data-look={p.look}
       data-testid="tile"
@@ -430,7 +490,17 @@ const Tile = memo(function Tile(p: TileProps) {
       >
         <Icon name="heart" filled={p.favorite} size={14} />
       </button>
-      {p.pick > 0 &&
+      {isStack && p.runKey && (
+        <RunButton label={t('browse.run.open', { n: p.runSize ?? 0 })} testId="run-open" onPress={() => p.onRunOpen(p.runKey!, true)}>
+          {`×${p.runSize}`}
+        </RunButton>
+      )}
+      {p.runPlace === 'first' && p.runKey && (
+        <RunButton label={t('browse.run.foldTitle', { n: p.runSize ?? 0 })} testId="run-fold" onPress={() => p.onRunOpen(p.runKey!, false)}>
+          {t('browse.run.fold')}
+        </RunButton>
+      )}
+      {p.pick !== '' &&
         (p.look === 'plain' ? (
           <span className={styles.pickBadge} aria-hidden data-testid="pick-badge">
             {p.pick}
@@ -442,3 +512,25 @@ const Tile = memo(function Tile(p: TileProps) {
     </div>
   )
 })
+
+/** The count on a closed run's stack (opens it in place), or Fold on an open run's first picture. */
+function RunButton({ label, testId, onPress, children }: { label: string; testId: string; onPress: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      className={`${styles.runButton} mono`}
+      title={label}
+      aria-label={label}
+      tabIndex={-1}
+      draggable={false}
+      onClick={(e) => {
+        e.stopPropagation()
+        onPress()
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      data-testid={testId}
+    >
+      {children}
+    </button>
+  )
+}

@@ -170,6 +170,9 @@ export const en: Record<MessageKey, string> = {
   'view.size.m': 'M',
   'view.size.l': 'L',
   'view.card': 'Generation card',
+  'view.groupRuns': 'Group runs',
+  'view.groupRunsTitle': 'Show each generation run (same prompt, model and size, minutes apart) as one stack',
+  'view.groupRunsDateOnly': 'Group runs (when sorted by date)',
 
   'grid.count': '{n} images',
   'grid.countAbout': 'about {n} images',
@@ -484,6 +487,7 @@ export const en: Record<MessageKey, string> = {
   'palette.cmd.toggleRail': 'Show or hide the left panel',
   'palette.cmd.masonry': 'Masonry layout',
   'palette.cmd.grid': 'Grid layout',
+  'palette.cmd.groupRuns': 'Group runs on or off',
   'palette.cmd.switchTo': 'Switch to {name}',
   'palette.cmd.onlyFavorites': 'Only favorites',
   'palette.cmd.clearFilters': 'Clear all filters',

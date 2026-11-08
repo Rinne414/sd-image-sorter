@@ -45,13 +45,22 @@ export const SECTION_ORDER: readonly ActionSection[] = ['image', 'find', 'mark',
 
 export interface ActionTarget {
   ids: number[]
-  /** True when the action applies to the picks rather than to the clicked image alone. */
+  /** True when the action applies to the picks (or a run's stack) rather than to the clicked image alone. */
   picks: boolean
+  /** The ids are one generation run's stack ("Group runs"), not the picks. */
+  run?: boolean
 }
 
-/** Right-click on a picked card acts on all the picks; on any other card, on that card. */
-export function menuTarget(clickedId: number, selection: readonly number[]): ActionTarget {
-  if (selection.length > 1 && selection.includes(clickedId)) return { ids: [...selection], picks: true }
+/**
+ * Right-click on a picked card acts on all the picks; on a closed run's stack
+ * (`run`: its pictures), on the whole run; on any other card, on that card.
+ */
+export function menuTarget(clickedId: number, selection: readonly number[], run?: readonly number[]): ActionTarget {
+  const isRun = run !== undefined && run.length > 1
+  // A stack looks picked only when all of it is; one picked cover does not make it a pick.
+  const looksPicked = isRun ? run.every((id) => selection.includes(id)) : selection.includes(clickedId)
+  if (selection.length > 1 && looksPicked) return { ids: [...selection], picks: true }
+  if (isRun) return { ids: [...run], picks: true, run: true }
   return { ids: [clickedId], picks: false }
 }
 
@@ -411,7 +420,7 @@ function runsOf(actions: readonly ImageAction[], sections: readonly ActionSectio
  */
 export function cardMenu(target: ActionTarget, bulk: readonly ImageAction[], single: readonly ImageAction[], filename: string): MenuPlan {
   if (!target.picks) return { header: text(filename), groups: runsOf([...single, ...bulk], SECTION_ORDER) }
-  const picks = k('lib.menu.picks', { n: target.ids.length })
+  const picks = k(target.run ? 'lib.menu.run' : 'lib.menu.picks', { n: target.ids.length })
   const [first, ...rest] = runsOf(single, ['image', 'find', 'copy', 'file'])
   const own = first ? [{ heading: k('lib.menu.thisImage'), actions: first.actions }, ...rest] : rest
   const danger = bulk.filter((a) => a.section === 'danger')

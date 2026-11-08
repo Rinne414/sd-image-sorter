@@ -52,6 +52,8 @@ export function QueryBar({ total, about = false, inputRef, railToggle = true }: 
   const setLayout = useApp((s) => s.setLayout)
   const tileSize = useApp((s) => s.tileSize)
   const setTileSize = useApp((s) => s.setTileSize)
+  const groupRuns = useApp((s) => s.groupRuns)
+  const setGroupRuns = useApp((s) => s.setGroupRuns)
   const cardOpen = useApp((s) => s.cardOpen)
   const toggleCard = useApp((s) => s.toggleCard)
   const railOpen = useApp((s) => s.railOpen)
@@ -284,6 +286,14 @@ export function QueryBar({ total, about = false, inputRef, railToggle = true }: 
           { id: 'm', label: t('view.size.m'), checked: tileSize === 'm', onSelect: () => setTileSize('m') },
           { id: 'l', label: t('view.size.l'), checked: tileSize === 'l', onSelect: () => setTileSize('l') },
           { id: 'card', label: t('view.card'), checked: cardOpen, onSelect: toggleCard, hint: 'I', divider: true },
+          {
+            id: 'group-runs',
+            // Off date order the switch keeps its state but says why nothing is grouped.
+            label: t(sort === 'newest' ? 'view.groupRuns' : 'view.groupRunsDateOnly'),
+            checked: groupRuns,
+            onSelect: () => setGroupRuns(!groupRuns),
+            title: t('view.groupRunsTitle'),
+          },
         ]}
       />
       <span className={styles.count} data-testid="result-count">

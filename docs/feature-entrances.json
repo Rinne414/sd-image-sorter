@@ -827,7 +827,12 @@
         "#btn-group-runs"
       ],
       "vopus": {
-        "missing": "not ported yet: classic first, V Opus after the owner has seen it (2026-11-08)"
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"query-bar\"] > div:nth-last-child(2) > button"
+        ],
+        "find": "[data-item=\"group-runs\"]",
+        "note": "View menu: Group runs; also the command palette"
       },
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"

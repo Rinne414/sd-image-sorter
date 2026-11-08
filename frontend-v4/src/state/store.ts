@@ -29,6 +29,8 @@ interface Prefs {
   startPage: StartPage
   /** Home shows the ★5 film strip (off while sharing the screen). */
   homeFilm: boolean
+  /** The library shows each generation run as one stack (date order only). */
+  groupRuns: boolean
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -41,6 +43,7 @@ const DEFAULT_PREFS: Prefs = {
   // V3.5 opens on its entry page at launch, with the ★5 cover art on.
   startPage: 'home',
   homeFilm: true,
+  groupRuns: false,
 }
 
 function readJson<T>(key: string): Partial<T> {
@@ -134,8 +137,11 @@ interface AppState extends Prefs {
   toggleRail: () => void
   setStartPage: (startPage: StartPage) => void
   setHomeFilm: (homeFilm: boolean) => void
+  setGroupRuns: (groupRuns: boolean) => void
   inspect: (id: number | null) => void
   togglePick: (id: number) => void
+  /** Pick every one of these (a run's stack), or unpick them all when all were picked. */
+  togglePicks: (ids: number[]) => void
   selectRange: (ids: number[]) => void
   setSelection: (ids: number[]) => void
   clearSelection: () => void
@@ -158,6 +164,7 @@ function loadPrefs(): Prefs {
   else if (raw === 'name_asc') prefs.sort = 'name'
   if (!isStartPage(prefs.startPage)) prefs.startPage = DEFAULT_PREFS.startPage
   if (typeof prefs.homeFilm !== 'boolean') prefs.homeFilm = DEFAULT_PREFS.homeFilm
+  if (typeof prefs.groupRuns !== 'boolean') prefs.groupRuns = DEFAULT_PREFS.groupRuns
   return prefs
 }
 
@@ -189,8 +196,8 @@ function saveBrowse(libraryId: string, state: BrowseState): void {
 const storedBrowse = recallBrowse(readBrowse(), storedLibrary)
 
 function savePrefs(state: Prefs): void {
-  const { layout, tileSize, cardOpen, railOpen, sort, sortReverse, startPage, homeFilm } = state
-  writeJson(PREFS_KEY, { layout, tileSize, cardOpen, railOpen, sort, sortReverse, startPage, homeFilm })
+  const { layout, tileSize, cardOpen, railOpen, sort, sortReverse, startPage, homeFilm, groupRuns } = state
+  writeJson(PREFS_KEY, { layout, tileSize, cardOpen, railOpen, sort, sortReverse, startPage, homeFilm, groupRuns })
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -276,11 +283,23 @@ export const useApp = create<AppState>((set, get) => ({
     set({ homeFilm })
     savePrefs(get())
   },
+  setGroupRuns: (groupRuns) => {
+    set({ groupRuns })
+    savePrefs(get())
+  },
   inspect: (inspectedId) => set({ inspectedId }),
   togglePick: (id) => {
     const { selection } = get()
     const next = selection.includes(id) ? selection.filter((x) => x !== id) : [...selection, id]
     set({ selection: next, selectionAnchor: id })
+  },
+  togglePicks: (ids) => {
+    const { selection } = get()
+    const picked = new Set(selection)
+    const next = ids.every((id) => picked.has(id))
+      ? selection.filter((id) => !ids.includes(id))
+      : [...selection, ...ids.filter((id) => !picked.has(id))]
+    set({ selection: next, selectionAnchor: ids[0] ?? null })
   },
   selectRange: (ids) => {
     const { selection } = get()

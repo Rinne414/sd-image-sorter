@@ -178,6 +178,7 @@ function Palette() {
       mk('rail', 'palette.group.view', 'palette.cmd.toggleRail', () => s.toggleRail()),
       mk('masonry', 'palette.group.view', 'palette.cmd.masonry', () => s.setLayout('masonry')),
       mk('grid', 'palette.group.view', 'palette.cmd.grid', () => s.setLayout('grid')),
+      mk('group-runs', 'palette.group.view', 'palette.cmd.groupRuns', () => s.setGroupRuns(!useApp.getState().groupRuns)),
       mk('theme-dark', 'palette.group.view', 'palette.cmd.themeDark', () => useTheme.getState().setMode('dark')),
       mk('theme-light', 'palette.group.view', 'palette.cmd.themeLight', () => useTheme.getState().setMode('light')),
       mk('theme-system', 'palette.group.view', 'palette.cmd.themeSystem', () => useTheme.getState().setMode('system')),

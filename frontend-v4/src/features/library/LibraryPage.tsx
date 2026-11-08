@@ -35,6 +35,7 @@ export function LibraryPage() {
   const inspectedId = useApp((s) => s.inspectedId)
   const selection = useApp((s) => s.selection)
   const adding = useApp((s) => s.adding)
+  const groupRunsWanted = useApp((s) => s.groupRuns)
   const favorites = useFavorites()
   const setRating = useSetRating()
   const toggleFav = useToggleFavorite()
@@ -115,6 +116,8 @@ export function LibraryPage() {
               onReady={onReady}
               stale={shown.stale}
               scores={shown.scores}
+              // Runs are pictures next to each other in time: date order only, never a likeness ranking.
+              groupRuns={groupRunsWanted && sort === 'newest' && !similar}
             />
           )}
           {selection.length > 0 && (

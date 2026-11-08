@@ -18,13 +18,16 @@ export interface ImageSummary {
   aesthetic_score: number | null
   is_readable: number | null
   metadata_status: string | null
-  created_at: string | null
-  library_order_time: string | null
+  /** Unix seconds or an ISO date, depending on how the row was written. */
+  created_at: string | number | null
+  library_order_time: string | number | null
   /** 'image' or 'video' (a video library item); older rows may leave it out. */
   media_type?: string | null
   duration_seconds?: number | null
   video_codec?: string | null
   video_probe_state?: string | null
+  /** Pictures from one generation run share it (prompt, negative, model, size); null without a prompt. */
+  run_key?: string | null
 }
 
 export interface ImagesPage {

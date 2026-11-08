@@ -37,7 +37,7 @@ export function markerPath(seed: number): string {
   return `M${first![0].toFixed(1)} ${first![1].toFixed(1)}` + rest.map(([x, y]) => `L${x.toFixed(1)} ${y.toFixed(1)}`).join('')
 }
 
-export const PickMark = memo(function PickMark({ seed, order }: { seed: number; order: number }) {
+export const PickMark = memo(function PickMark({ seed, order }: { seed: number; order: number | string }) {
   // The new interface marks a pick with a ring and a numbered badge, not a hand-drawn box.
   if (isNextUi()) {
     return (

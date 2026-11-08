@@ -58,8 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **自动检查更新**（经典界面）：每天检查一次新版本，只提醒，不按“更新”就什么都不会变。可以在设置里关闭。
 - **A reload returns to the page you were on** instead of the Gallery.
   - 刷新页面后会回到原来所在的页面，而不是回到图库。
-- **Group runs** (classic gallery, off by default): pictures from one generation run (same prompt, negative prompt, model and size, each made within 10 minutes of the previous) show as one stack with a count; the count opens the run in place and Fold closes it. Selecting a stack selects every picture in it, preview still walks every picture, and batch actions work on pictures as before. Runs are grouped only when the gallery is sorted by date. The switch sits next to the view buttons and is remembered.
-  - **同批合并**（经典图库，默认关闭）：同一批生成的图片（提示词、负面提示词、模型和尺寸相同，每张与上一张相隔不到 10 分钟）显示成一叠，带张数；点张数就地展开，点“收起”合回去。选中一叠就是选中其中每一张，预览照样一张张翻，批量操作照常按图片执行。只有按日期排序时才合并。开关在视图按钮旁边，会记住你的选择。
+- **Group runs** (classic gallery and V Opus, off by default): pictures from one generation run (same prompt, negative prompt, model and size, each made within 10 minutes of the previous) show as one stack with a count; the count opens the run in place and Fold closes it. Selecting a stack selects every picture in it, preview still walks every picture, and batch actions work on pictures as before. Runs are grouped only when the gallery is sorted by date. The switch sits next to the view buttons in classic and in the View menu (and Ctrl K) in V Opus, and is remembered; in V Opus right-clicking a stack acts on the whole run.
+  - **同批合并**（经典图库和 V Opus，默认关闭）：同一批生成的图片（提示词、负面提示词、模型和尺寸相同，每张与上一张相隔不到 10 分钟）显示成一叠，带张数；点张数就地展开，点“收起”合回去。选中一叠就是选中其中每一张，预览照样一张张翻，批量操作照常按图片执行。只有按日期排序时才合并。经典界面的开关在视图按钮旁边，V Opus 在“显示”菜单里（也可以用 Ctrl K），都会记住你的选择；V Opus 里右键一叠就是对整批操作。
 
 ### Changed / 变更
 

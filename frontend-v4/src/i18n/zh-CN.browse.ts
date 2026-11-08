@@ -34,6 +34,10 @@ export const zhCNBrowse = {
   'browse.tile.stars': '{n} 星',
   'browse.tile.favorite': '已收藏',
   'browse.tile.picked': '已挑选',
+  'browse.tile.stack': '同一批 {n} 张',
+  'browse.run.open': '这一批共 {n} 张：全部展开',
+  'browse.run.fold': '收起',
+  'browse.run.foldTitle': '把这 {n} 张收回成一叠',
   'browse.tile.sep': '，',
 
   'browse.resume.back': '回到了上次看到的位置',
