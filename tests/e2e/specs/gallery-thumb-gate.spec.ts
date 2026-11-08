@@ -45,6 +45,8 @@ test('the gate defers a flick, waits for a real stop, and loads the nearest card
     const step = (ms: number, px: number) => { clock += ms; top += px; gate.noteScroll() }
 
     step(0, 0)
+    step(2000, 50000) // one jump after a pause: a scrollbar click, End
+    const deferAfterJump = gate.shouldDefer()
     step(100, 100) // 1 px/ms: reading
     const deferWhileReading = gate.shouldDefer()
     step(16, 600) // 37 px/ms: a flick
@@ -67,12 +69,13 @@ test('the gate defers a flick, waits for a real stop, and loads the nearest card
     step(20, 0) // the late event arrives, then nothing more
     clock += 120
     runDue()
-    const result = { deferWhileReading, deferWhileFlinging, loadedDuringBusyFrame, loaded: [...loaded], flushes: [...flushes] }
+    const result = { deferAfterJump, deferWhileReading, deferWhileFlinging, loadedDuringBusyFrame, loaded: [...loaded], flushes: [...flushes] }
     far.remove()
     near.remove()
     return result
   })
   expect(result).toEqual({
+    deferAfterJump: false,
     deferWhileReading: false,
     deferWhileFlinging: true,
     loadedDuringBusyFrame: 0,
@@ -110,8 +113,24 @@ test('a fling that slows to a reading pace shows its cards while still moving', 
 })
 
 async function mockLargeGallery(page: Page, count: number, thumbnailDelayMs: number) {
+  // The full summary both interfaces read (V Opus needs every field present).
   const images = Array.from({ length: count }, (_, index) => ({
-    id: 70001 + index, filename: `flick-${index}.png`, path: `/mock/flick-${index}.png`, width: 512, height: 512,
+    id: 70001 + index,
+    filename: `flick-${index}.png`,
+    path: `/mock/flick-${index}.png`,
+    generator: 'webui',
+    width: 512,
+    height: 512,
+    file_size: 1000,
+    checkpoint: null,
+    checkpoint_normalized: null,
+    loras: null,
+    user_rating: null,
+    aesthetic_score: null,
+    is_readable: 1,
+    metadata_status: 'complete',
+    created_at: '2026-11-08T00:00:00',
+    library_order_time: '2026-11-08T00:00:00',
   }))
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#468"/></svg>'
   await page.route(/\/api\/image-thumbnail\/\d+/, async (route) => {
@@ -171,4 +190,35 @@ test('a fast flick asks for few thumbnails, cancels the ones it passed, and fill
   // The few cards drawn before the flick was recognised scrolled away while
   // their thumbnails were still on the way: those requests were cancelled.
   expect(cancelled).toBeGreaterThan(0)
+})
+
+test('Vopus: a fast flick asks for few thumbnails and fills the screen when it stops', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('sd-image-sorter-lang', 'en'))
+  await mockLargeGallery(page, 1200, 400)
+  await page.goto('/vopus/#/library')
+  await expect(page.locator('[data-testid="tile"] img').first()).toBeVisible()
+  await page.waitForTimeout(1500)
+
+  let duringFlick = 0
+  let flinging = true
+  page.on('request', (request) => { if (flinging && /\/api\/image-thumbnail\//.test(request.url())) duringFlick += 1 })
+  const box = await page.locator('[data-testid="gallery-scroller"]').boundingBox()
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + 400)
+  const startTop = await page.locator('[data-testid="gallery-scroller"]').evaluate((element) => element.scrollTop)
+  for (let i = 0; i < 40; i += 1) {
+    await page.mouse.wheel(0, 600)
+    await page.waitForTimeout(16)
+  }
+  flinging = false
+  const travelled = await page.locator('[data-testid="gallery-scroller"]').evaluate((element, start) => element.scrollTop - start, startTop)
+  // The flick crossed many screens of tiles but asked for a small part of them.
+  expect(travelled).toBeGreaterThan(8000)
+  expect(duringFlick).toBeLessThan(60)
+
+  await expect.poll(() => page.evaluate(() => {
+    const scroller = document.querySelector('[data-testid="gallery-scroller"]')!.getBoundingClientRect()
+    return [...document.querySelectorAll('[data-testid="tile"]')]
+      .filter((tile) => { const rect = tile.getBoundingClientRect(); return rect.bottom > scroller.top && rect.top < scroller.bottom })
+      .filter((tile) => { const img = tile.querySelector('img') as HTMLImageElement | null; return !img || !img.getAttribute('src') || !img.complete || img.naturalWidth === 0 }).length
+  }), { timeout: 15000 }).toBe(0)
 })

@@ -89,9 +89,11 @@
             noteScroll() {
                 const top = getScrollTop();
                 const at = now();
-                // A jump after a pause (a dragged scrollbar, a restored position)
-                // has a long gap, so it reads as slow and loads at once.
-                if (lastTop !== null && at > lastAt) {
+                // The first event after a pause starts afresh: a single jump (a
+                // click on the scrollbar, End, a restored position) loads at
+                // once, while dragging the scrollbar thumb sends a stream of
+                // events and counts as a flick.
+                if (lastTop !== null && at > lastAt && at - lastAt <= SETTLE_MS) {
                     const speed = Math.abs(top - lastTop) / (at - lastAt);
                     if (speed > FAST_PX_PER_MS) {
                         isFast = true;

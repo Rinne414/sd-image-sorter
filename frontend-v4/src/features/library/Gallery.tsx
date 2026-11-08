@@ -16,6 +16,7 @@ import { formatDuration, isVideo } from '../video/videoMedia'
 import { useCardMenu } from './CardMenu'
 import { dragPayload, INTERNAL_DRAG } from './drag'
 import styles from './Gallery.module.css'
+import { useFlinging } from './useFlinging'
 import { useScrollMemory } from './useScrollMemory'
 
 const TILE_TARGET: Record<TileSize, number> = { s: 170, m: 236, l: 330 }
@@ -156,6 +157,7 @@ export function Gallery({
   }, [virtualizer, lanes, colW, layout, gridRatio])
 
   useScrollMemory({ scrollRef, virtualizer, images, scrollKey, ready: width > 0, hasMore, isFetchingMore, fetchMore })
+  const flinging = useFlinging(scrollRef)
 
   const items = virtualizer.getVirtualItems()
   const lastIndex = items.at(-1)?.index ?? 0
@@ -287,6 +289,7 @@ export function Gallery({
                 width={colW}
                 height={item.size}
                 thumbSize={thumbSize}
+                flinging={flinging}
                 cover={layout === 'grid'}
                 inspected={img.id === inspectedId}
                 pick={pickOrder.get(img.id) ?? 0}
@@ -322,6 +325,8 @@ interface TileProps {
   width: number
   height: number
   thumbSize: number
+  /** While true, a tile that has no picture yet waits for one (a flick passes most tiles unseen). */
+  flinging: boolean
   cover: boolean
   inspected: boolean
   pick: number
@@ -336,6 +341,19 @@ interface TileProps {
 
 const Tile = memo(function Tile(p: TileProps) {
   const t = useT()
+  // Drawn mid-flick: no picture until the gallery settles; once shown it stays.
+  const [showPicture, setShowPicture] = useState(!p.flinging)
+  useEffect(() => {
+    if (!p.flinging) setShowPicture(true)
+  }, [p.flinging])
+  // A tile that leaves the page cancels a thumbnail still on the way.
+  const pictureRef = useRef<HTMLImageElement>(null)
+  useLayoutEffect(() => {
+    const picture = pictureRef.current
+    return () => {
+      if (picture && !picture.complete && picture.getAttribute('src')) picture.removeAttribute('src')
+    }
+  }, [])
   const stars = p.img.user_rating ?? 0
   const aesthetic = formatScore(p.img.aesthetic_score)
   const heartLabel = p.favorite ? t('card.unfavorite') : t('card.favorite')
@@ -362,9 +380,10 @@ const Tile = memo(function Tile(p: TileProps) {
       title={p.img.filename}
     >
       <img
+        ref={pictureRef}
         className={styles.img}
         data-cover={p.cover || undefined}
-        src={thumbnailUrl(p.img.id, p.thumbSize)}
+        src={showPicture ? thumbnailUrl(p.img.id, p.thumbSize) : undefined}
         alt=""
         loading="lazy"
         decoding="async"
