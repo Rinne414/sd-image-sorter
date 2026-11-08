@@ -61,15 +61,6 @@
   display: none;
 }
 
-.version {
-  font-size: var(--fs-1);
-  color: var(--accent);
-  border: 1px solid var(--accent-line);
-  padding: 0 4px;
-  line-height: 15px;
-  border-radius: var(--radius);
-}
-
 .tabs {
   display: flex;
   /* never squeezed: a Chinese tab name would break between its characters */

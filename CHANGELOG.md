@@ -65,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed / 变更
 
+- **V Opus has one logo**: the browser tab icon was a purple-to-cyan gradient grid, a different mark from the top bar's; it is now the same frame mark. The "Vopus" badge beside the name is gone (it is the build's code name); the version is in Settings › About.
+  - **V Opus 只用一个标志**：浏览器标签页上的图标以前是紫到青的渐变方格，和顶栏的标志不一样；现在统一成同一个。名字旁边的“Vopus”标签已去掉（那是内部代号）；版本号在“设置 › 关于”里。
 - **Search at 100,000 pictures**: a text index makes the search box and prompt filters about ten times faster on large libraries (prompt search 1.2 s to about 0.1 s), with the same results. A word nearly every picture contains, such as `1girl`, still takes about 0.2 s to count exactly.
   - **10 万张图的搜索**：新增的文本索引让搜索框和提示词筛选在大图库上快了约十倍（提示词搜索从 1.2 秒降到约 0.1 秒），结果完全相同。像 `1girl` 这种几乎每张图都有的词，精确计数仍要约 0.2 秒。
 - **Model Center puts the model cards first**: download source, model folders and the proxy fold into one line that says their state, and it opens by itself when something there needs a look.
