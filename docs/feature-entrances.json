@@ -1550,6 +1550,7 @@
       "zh": "标签、提示词、LoRA 与模型库",
       "classic": [
         "#btn-tags-library",
+        "#nav-tools-tags-library",
         "#btn-open-library-from-filter",
         "#library-tab-tags",
         "#library-tab-prompts",
@@ -1575,6 +1576,7 @@
       "zh": "批量标签编辑（查找替换、添加、删除）",
       "classic": [
         "#btn-mass-tag-editor",
+        "#nav-tools-mass-tag",
         "#btn-selection-mass-tag-editor",
         "#btn-filter-mass-tag-editor",
         "#btn-mass-tag-dry-run",
