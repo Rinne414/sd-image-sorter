@@ -13526,3 +13526,9 @@ html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
 .pro-filter-popover[hidden] {
     display: none;
 }
+
+/* The pro look's details panel and its toggle (js/modules/pro-inspector.js). */
+.pro-inspector-btn,
+.pro-inspector {
+    display: none;
+}

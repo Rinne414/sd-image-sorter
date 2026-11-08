@@ -52,6 +52,7 @@
     <script src="/static/js/modules/nav-more-proxies.js"></script>
     <script src="/static/js/modules/pro-filter-popover.js"></script>
     <script src="/static/js/modules/pro-toolbar.js"></script>
+    <script src="/static/js/modules/pro-inspector.js"></script>
     <!-- First: an error nothing else caught is said on screen, never silent (error-fallback.js). -->
     <script src="/static/js/error-fallback.js"></script>
 </head>
@@ -1091,6 +1092,15 @@
                             <button type="button" class="view-btn group-runs-btn" id="btn-group-runs" aria-pressed="false"
                                     title="Show each generation run (same prompt, model and size, minutes apart) as one stack"
                                     data-i18n="gallery.groupRuns">Group runs</button>
+                            <!-- Pro look: the details panel beside the grid (js/modules/pro-inspector.js); today's look hides it. -->
+                            <button type="button" class="view-btn pro-inspector-btn" id="btn-pro-inspector" aria-pressed="false" aria-controls="pro-inspector"
+                                    title="Show or hide the details panel" aria-label="Show or hide the details panel"
+                                    data-i18n-title="inspector.toggle" data-i18n-aria="inspector.toggle">
+                                <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+                            </button>
+                            <aside class="pro-inspector" id="pro-inspector" aria-label="Picture details" data-i18n-aria="inspector.title">
+                                <div class="pro-inspector-body" id="pro-inspector-body"></div>
+                            </aside>
                             <!-- Owner FB-3: visible thumbnail-size control. Same state as the
                                  [ / ] shortcuts (app.js updateGridSize, 'sd-sorter:grid-size'). -->
                             <div class="grid-size-control" role="group" aria-label="Thumbnail size"

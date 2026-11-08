@@ -1028,6 +1028,21 @@
       }
     },
     {
+      "id": "gallery.details-panel",
+      "area": "gallery",
+      "en": "Details panel beside the grid (pro look): the picture under the pointer",
+      "zh": "图库旁的资讯面板（专业外观）：指向的图片",
+      "classic": [
+        "#btn-pro-inspector"
+      ],
+      "vopus": {
+        "missing": "V Opus has no details panel beside its grid; its preview shows the details (2026-11-08)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
+    },
+    {
       "id": "gallery.sidebar-collapse",
       "area": "gallery",
       "en": "Collapse / expand the sidebar",

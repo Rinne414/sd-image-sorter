@@ -322,3 +322,28 @@ test('pro look: one labelled Filter button holds the quick filters; today’s lo
   await expect(page.locator('#btn-toolbar-filters')).toBeVisible()
 })
 
+test('pro look: the details panel follows the picture under the pointer and can be hidden', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await open(page, 'pro')
+  const tile = page.locator('#gallery-grid .gallery-item').nth(1)
+  await expect(tile).toBeVisible()
+  const panel = page.locator('#pro-inspector')
+  await expect(panel).toBeVisible()
+  const panelBox = (await panel.boundingBox())!
+  const gridRight = await page.evaluate(() => Math.max(...[...document.querySelectorAll('#gallery-grid .gallery-item')].map((el) => el.getBoundingClientRect().right)))
+  expect(gridRight).toBeLessThanOrEqual(panelBox.x + 1)
+
+  await tile.hover()
+  const name = await tile.evaluate((el) => (window as any).App.AppState.images.find((img: any) => String(img.id) === (el as HTMLElement).dataset.id)?.filename)
+  await expect(page.locator('.pro-inspector-name')).toHaveText(name)
+
+  await page.locator('#btn-pro-inspector').click()
+  await expect(panel).toBeHidden()
+  await page.locator('#btn-pro-inspector').click()
+  await expect(panel).toBeVisible()
+
+  await page.evaluate(() => (window as any).SdLook.set(null))
+  await expect(panel).toBeHidden()
+  await expect(page.locator('#btn-pro-inspector')).toBeHidden()
+})
+

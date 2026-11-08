@@ -1644,3 +1644,146 @@ html[data-look="pro"] #view-gallery #btn-group-runs::before {
 html[data-look="pro"] #view-gallery #gallery-grid {
     padding-top: 14px;
 }
+
+/* ---- Details panel beside the grid (blind judge round 9) ----
+   Under the full-width toolbar, on the right; only the grid gives it room
+   (js/modules/pro-inspector.js). */
+html[data-look="pro"] {
+    --pro-inspector-w: 300px;
+}
+
+html[data-look="pro"] #view-gallery .pro-inspector-btn {
+    display: inline-flex;
+}
+
+html[data-look="pro"].pro-inspector-open .pro-inspector {
+    position: fixed;
+    top: var(--pro-inspector-top, 160px);
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    display: block;
+    width: var(--pro-inspector-w);
+    overflow-y: auto;
+    border-left: 1px solid var(--hairline-2);
+    background: var(--pro-chrome);
+}
+
+html[data-look="pro"].pro-inspector-open #view-gallery #gallery-grid {
+    margin-right: var(--pro-inspector-w);
+}
+
+html[data-look="pro"] .pro-inspector-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+}
+
+html[data-look="pro"] .pro-inspector-empty {
+    margin: 24px 0 0;
+    color: var(--muted);
+    font-size: var(--pro-fs-label);
+    line-height: 1.6;
+    text-align: center;
+}
+
+html[data-look="pro"] .pro-inspector-thumb {
+    width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+    border-radius: var(--pro-r-control);
+    background: var(--pro-stage);
+}
+
+html[data-look="pro"] .pro-inspector-name {
+    margin: 0;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+html[data-look="pro"] .pro-inspector-facts {
+    display: grid;
+    gap: 6px;
+}
+
+html[data-look="pro"] .pro-inspector-fact {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 8px;
+    font-size: var(--pro-fs-label);
+}
+
+html[data-look="pro"] .pro-inspector-fact-label {
+    color: var(--muted);
+}
+
+html[data-look="pro"] .pro-inspector-fact-value {
+    overflow: hidden;
+    color: var(--text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] .pro-inspector-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] .pro-inspector-copy {
+    padding: 2px 8px;
+    border: 1px solid var(--hairline-2);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+html[data-look="pro"] .pro-inspector-copy:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+html[data-look="pro"] .pro-inspector-prompt {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    color: var(--text);
+    font-size: var(--pro-fs-label);
+    line-height: 1.55;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 8;
+    word-break: break-word;
+}
+
+html[data-look="pro"] .pro-inspector-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+html[data-look="pro"] .pro-inspector-tag {
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: var(--surface-3);
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+html[data-look="pro"] .pro-inspector-open {
+    align-self: stretch;
+    justify-content: center;
+    margin-top: 4px;
+}
