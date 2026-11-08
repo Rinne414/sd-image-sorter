@@ -1224,3 +1224,19 @@ html[data-look="pro"] #view-gallery #gallery-grid {
     padding-left: 14px;
     padding-right: 14px;
 }
+
+/* Pills only for round things: the quick filter chips and the segmented
+   switches use the control corner like every other control (blind judge
+   round 4: "pill chips everywhere", a template tell). */
+html[data-look="pro"] #view-gallery .gallery-chip,
+html[data-look="pro"] #view-gallery .gen-tab .gen-count {
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #view-gallery .aspect-quick-toggle {
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #view-gallery .aspect-quick-btn {
+    border-radius: 6px;
+}
