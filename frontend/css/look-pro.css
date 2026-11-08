@@ -40,7 +40,7 @@ html[data-look="pro"] {
 
     /* A chosen tab, segment or view: lifted and white, never the accent
        (blind judges 2026-11-08 counted the accent in nine places at once). */
-    --pro-chosen-bg: var(--surface-3);
+    --pro-chosen-bg: #38383E;
     --pro-chosen-line: var(--border-strong);
 }
 
@@ -815,4 +815,111 @@ html[data-look="pro"] #model-manager-modal [data-settings-panel="audit"] {
 /* Focus is the cyan outline everywhere; the close buttons drew an accent glow too. */
 html[data-look="pro"] .modal-close:focus-visible {
     box-shadow: none;
+}
+
+/* ---- Organize (Auto-Separate): one frame per column, no boxes in boxes ----
+   UI audit #8: the action column held a dashed card around a segmented
+   control with empty space under it, the preview was a frame in a frame in
+   a panel, and each filter took two lines. */
+html[data-look="pro"] .sorting-sub-tabs {
+    border-color: var(--hairline-2);
+    background: transparent;
+    box-shadow: none;
+}
+
+html[data-look="pro"] .sorting-sub-tabs .btn.sorting-sub-tab {
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+}
+
+html[data-look="pro"] .sorting-sub-tabs .btn.sorting-sub-tab.active {
+    border-color: transparent;
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+}
+
+/* Filters: one grouped list, one line per condition. */
+html[data-look="pro"] #autosep-filter-summary {
+    gap: 0;
+    padding: 0;
+    border-color: var(--hairline-2);
+    border-radius: var(--pro-r-panel);
+    overflow: hidden;
+}
+
+html[data-look="pro"] #autosep-filter-summary .summary-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    min-height: 36px;
+    padding: 0 36px 0 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: inset 0 -1px 0 var(--hairline-2);
+    font-size: var(--pro-fs-label);
+}
+
+html[data-look="pro"] #autosep-filter-summary .summary-item:last-child {
+    box-shadow: none;
+}
+
+html[data-look="pro"] #autosep-filter-summary .summary-item:hover {
+    background: var(--surface-3);
+}
+
+/* Saved setups: a section under the list, not a card inside the column. */
+html[data-look="pro"] #autosep-configs-card {
+    border: 0;
+    border-top: 1px solid var(--hairline-2);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+/* Preview: the column is the only frame. */
+html[data-look="pro"] #autosep-preview-list,
+html[data-look="pro"] #autosep-preview-list .autosep-preview-empty {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+/* Action: the file operation is a section of the column, sized to its content. */
+html[data-look="pro"] #autosep-action-mode-panel {
+    min-height: 0;
+    padding: 0 0 4px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+html[data-look="pro"] .segmented-control {
+    border-color: var(--hairline-2);
+    background: var(--surface-2);
+}
+
+html[data-look="pro"] .segmented-option input:checked + span {
+    border-color: transparent;
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Without its box, the stretched file-operation section left a gap inside
+   the column; the sections stay together and the spare room sits above the
+   main button. */
+html[data-look="pro"] .autosep-pane-action-body .autosep-action-settings {
+    flex: 0 0 auto;
+}
+
+html[data-look="pro"] .autosep-pane-action-body #btn-execute-autosep {
+    margin-top: auto;
+}
+
+/* An empty collection shows no "0": a column of zeros read as noise, and as
+   counts that contradict the open collection (blind judges, round 2). */
+html[data-look="pro"] #collections-list .collection-row-count.is-zero {
+    visibility: hidden;
 }

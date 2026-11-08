@@ -128,3 +128,24 @@ test('the confirm dialog shows rows and a note, and the next question starts wit
   await expect(modal.locator('#confirm-note')).toBeHidden()
   await page.click('#btn-confirm-cancel')
 })
+
+test('pro look: Organize has one frame per column and shows which mode is chosen', async ({ page }) => {
+  await open(page, 'pro')
+  await page.evaluate(() => (window as any).App.switchView('sorting'))
+  await expect(page.locator('#autosep-preview-list')).toBeVisible()
+  const look = await page.evaluate(() => {
+    const cs = (sel: string) => getComputedStyle(document.querySelector(sel)!)
+    const dashed = [...document.querySelectorAll('#view-sorting *')].filter((el) => {
+      const r = el.getBoundingClientRect()
+      return r.width > 4 && r.height > 4 && getComputedStyle(el).borderTopStyle === 'dashed'
+    }).length
+    const [chosen, other] = [...document.querySelectorAll('.sorting-sub-tab')].map((el) => getComputedStyle(el).backgroundColor)
+    return {
+      dashed,
+      previewFramed: cs('#autosep-preview-list').borderTopStyle !== 'none' && parseFloat(cs('#autosep-preview-list').borderTopWidth) > 0,
+      chosenStandsOut: chosen !== other,
+      filterRowHeight: Math.round(document.querySelector('#autosep-filter-summary .summary-item')!.getBoundingClientRect().height),
+    }
+  })
+  expect(look).toEqual({ dashed: 0, previewFramed: false, chosenStandsOut: true, filterRowHeight: 36 })
+})

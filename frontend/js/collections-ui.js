@@ -192,7 +192,7 @@
                 + `aria-pressed="${isActive ? 'true' : 'false'}">`
                 + `<span class="collection-row-icon" aria-hidden="true">${icon}</span>`
                 + `<span class="collection-row-name">${escapeHtml(name)}</span>`
-                + `<span class="collection-row-count">${count}</span>`
+                + `<span class="collection-row-count${count === 0 ? ' is-zero' : ''}">${count}</span>`
                 + `</button>`
                 + `<div class="collection-row-actions">${moreBtn}${renameBtn}${deleteBtn}</div>`
                 + `</div>`;
