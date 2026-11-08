@@ -97,7 +97,7 @@
         _setFaviconRedDot(true);
         _blinkTimer = setInterval(() => {
             on = !on;
-            document.title = on ? `✅ ${message}` : _originalTitle;
+            document.title = on ? `✓ ${message}` : _originalTitle;
         }, 800);
         // Stop blinking the moment the user looks at the tab again.
         const stopOnVisible = () => {

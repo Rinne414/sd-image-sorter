@@ -313,8 +313,8 @@
             summary.className = 'ccip-summary';
             summary.textContent = outliers.length === 0
                 ? I18n.format(t(
-                    `✅ {extracted} images analyzed — all within threshold {threshold}.`,
-                    `✅ 已分析 {extracted} 张图 — 全部在阈值 {threshold} 以内。`,
+                    `{extracted} images analyzed — all within threshold {threshold}.`,
+                    `已分析 {extracted} 张图 — 全部在阈值 {threshold} 以内。`,
                 ), { extracted: result.extracted, threshold })
                 : I18n.format(t(
                     `{extracted} images analyzed — {lengthCount} suspected outliers above threshold {threshold}:`,

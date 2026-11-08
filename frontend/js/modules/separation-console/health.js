@@ -88,8 +88,8 @@ Object.assign(SeparationConsole, {
             const findingCount = (report.findings || []).length;
             summary.textContent = findingCount === 0
                 ? I18n.format(sepconT(
-                    `✅ {images} images checked — no issues found.`,
-                    `✅ 已检查 {images} 张图 — 未发现问题。`,
+                    `{images} images checked — no issues found.`,
+                    `已检查 {images} 张图 — 未发现问题。`,
                 ), { images: report.images })
                 : I18n.format(sepconT(
                     `{images} images checked — {findingCount} findings:`,

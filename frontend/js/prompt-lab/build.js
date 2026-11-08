@@ -82,7 +82,7 @@ Object.assign(window.PromptLab, {
         if (negativeArea) negativeArea.value = '';
         if (infoEl) {
             infoEl.textContent = [
-                checkpoint ? `🧠 ${checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || checkpoint}` : '',
+                checkpoint ? `${checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || checkpoint}` : '',
                 this._t('promptlab.recipeLoaded', 'Loaded from recipe suggestion'),
             ].filter(Boolean).join(' · ');
         }
@@ -320,7 +320,7 @@ Object.assign(window.PromptLab, {
             ? (checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || checkpoint)
             : '';
         const info = [
-            checkpointLabel ? `🧠 ${checkpointLabel}` : '',
+            checkpointLabel || '',
             this._t('promptlab.randomDraftLoaded', 'Loaded data insight into Random'),
             assigned.length ? `${assigned.length}` : '',
         ].filter(Boolean).join(' · ');
@@ -372,8 +372,8 @@ Object.assign(window.PromptLab, {
             document.getElementById('pl-build-prompt').value = img.prompt || '';
             document.getElementById('pl-build-negative').value = img.negative_prompt || '';
             const info = [];
-            if (img.checkpoint) info.push(`🧠 ${img.checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '')}`);
-            if (img.width && img.height) info.push(`📐 ${img.width}×${img.height}`);
+            if (img.checkpoint) info.push(`${img.checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '')}`);
+            if (img.width && img.height) info.push(`${img.width}×${img.height}`);
             if (img.aesthetic_score != null) info.push(`★ ${Number(img.aesthetic_score).toFixed(1)}`);
             document.getElementById('pl-build-info').textContent = info.join(' · ') || '';
             await this._prepareBuildCategoryWorkbench(imageId, img, result.tags || img.tags || []);

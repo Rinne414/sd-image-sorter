@@ -533,7 +533,7 @@
         });
         if (result.caption_file) {
             box.appendChild(makeEl('div', 'pub-result-line',
-                '📝 ' + t('pub.captionWritten', 'Caption saved as {name}', { name: result.caption_file })));
+                t('pub.captionWritten', 'Caption saved as {name}', { name: result.caption_file })));
         }
         if (leftOut > 0) {
             box.appendChild(makeEl('div', 'pub-result-line pub-result-warn',

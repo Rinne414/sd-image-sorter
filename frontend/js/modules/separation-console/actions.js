@@ -94,7 +94,7 @@ Object.assign(SeparationConsole, {
             const seen = this._loadSeen();
             const next = this._queueIds().find(id => !seen[id]);
             if (next == null) {
-                window.App?.showToast?.(sepconT('All images reviewed 🎉', '全部图片都已过目 🎉'), 'success');
+                window.App?.showToast?.(sepconT('All images reviewed', '全部图片都已过目'), 'success');
                 return;
             }
             dm._setActive?.(next);

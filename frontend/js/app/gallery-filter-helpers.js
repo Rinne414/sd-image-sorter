@@ -127,7 +127,7 @@ function _applyGalleryEmptyStateVariant(emptyState) {
                 const labelSpan = document.createElement('span');
                 labelSpan.setAttribute('data-i18n', 'gallery.clearFilters');
                 labelSpan.textContent = t('gallery.clearFilters', 'Clear all filters');
-                cta.append(document.createTextNode('🧹 '));
+                if (window.UiIcon) cta.append(window.UiIcon.svg('i-broom'), document.createTextNode(' '));
                 cta.appendChild(labelSpan);
                 cta.addEventListener('click', () => {
                     if (typeof window.resetFilters === 'function') {

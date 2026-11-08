@@ -35,20 +35,20 @@
     // the same pill rule from frontend/css/dataset-maker.css, so there is one
     // source of truth for the palette.
     const CATEGORY_META = [
-        { key: 'quality',    emoji: '🛡️', i18n: 'dataset.cat.quality',    desc: 'dataset.cat.qualityDesc' },
-        { key: 'meta',       emoji: '🏷️', i18n: 'dataset.cat.meta',       desc: 'dataset.cat.metaDesc' },
-        { key: 'rating',     emoji: '🔞', i18n: 'dataset.cat.rating',     desc: 'dataset.cat.ratingDesc' },
-        { key: 'character',  emoji: '🪪', i18n: 'dataset.cat.character',  desc: 'dataset.cat.characterDesc' },
-        { key: 'body',       emoji: '👤', i18n: 'dataset.cat.body',       desc: 'dataset.cat.bodyDesc' },
-        { key: 'outfit',     emoji: '👗', i18n: 'dataset.cat.outfit',     desc: 'dataset.cat.outfitDesc' },
-        { key: 'expression', emoji: '😊', i18n: 'dataset.cat.expression', desc: 'dataset.cat.expressionDesc' },
-        { key: 'pose',       emoji: '🧍', i18n: 'dataset.cat.pose',       desc: 'dataset.cat.poseDesc' },
-        { key: 'action',     emoji: '🏃', i18n: 'dataset.cat.action',     desc: 'dataset.cat.actionDesc' },
-        { key: 'angle',      emoji: '🎥', i18n: 'dataset.cat.angle',      desc: 'dataset.cat.angleDesc' },
-        { key: 'background', emoji: '🏞️', i18n: 'dataset.cat.background', desc: 'dataset.cat.backgroundDesc' },
-        { key: 'style',      emoji: '🎨', i18n: 'dataset.cat.style',      desc: 'dataset.cat.styleDesc' },
-        { key: 'artist',     emoji: '🖌️', i18n: 'dataset.cat.artist',     desc: 'dataset.cat.artistDesc' },
-        { key: 'unknown',    emoji: '❓', i18n: 'dataset.cat.unknown',    desc: 'dataset.cat.unknownDesc' },
+        { key: 'quality',    i18n: 'dataset.cat.quality',    desc: 'dataset.cat.qualityDesc' },
+        { key: 'meta',       i18n: 'dataset.cat.meta',       desc: 'dataset.cat.metaDesc' },
+        { key: 'rating',     i18n: 'dataset.cat.rating',     desc: 'dataset.cat.ratingDesc' },
+        { key: 'character',  i18n: 'dataset.cat.character',  desc: 'dataset.cat.characterDesc' },
+        { key: 'body',       i18n: 'dataset.cat.body',       desc: 'dataset.cat.bodyDesc' },
+        { key: 'outfit',     i18n: 'dataset.cat.outfit',     desc: 'dataset.cat.outfitDesc' },
+        { key: 'expression', i18n: 'dataset.cat.expression', desc: 'dataset.cat.expressionDesc' },
+        { key: 'pose',       i18n: 'dataset.cat.pose',       desc: 'dataset.cat.poseDesc' },
+        { key: 'action',     i18n: 'dataset.cat.action',     desc: 'dataset.cat.actionDesc' },
+        { key: 'angle',      i18n: 'dataset.cat.angle',      desc: 'dataset.cat.angleDesc' },
+        { key: 'background', i18n: 'dataset.cat.background', desc: 'dataset.cat.backgroundDesc' },
+        { key: 'style',      i18n: 'dataset.cat.style',      desc: 'dataset.cat.styleDesc' },
+        { key: 'artist',     i18n: 'dataset.cat.artist',     desc: 'dataset.cat.artistDesc' },
+        { key: 'unknown',    i18n: 'dataset.cat.unknown',    desc: 'dataset.cat.unknownDesc' },
     ];
     const PRUNABLE = CATEGORY_META.filter((c) => c.key !== 'unknown');
     const PRUNABLE_KEYS = new Set(PRUNABLE.map((c) => c.key));
@@ -146,7 +146,7 @@
 
             const name = document.createElement('span');
             name.className = 'dataset-lora-cat-name';
-            name.textContent = `${meta.emoji} ${t(meta.i18n, meta.key)}`;
+            name.textContent = t(meta.i18n, meta.key);
 
             const count = document.createElement('span');
             count.className = 'dataset-lora-cat-count';
@@ -169,7 +169,7 @@
 
             const swatch = document.createElement('span');
             swatch.className = `dataset-tag-legend-swatch dataset-tag-pill-category-${meta.key}`;
-            swatch.textContent = `${meta.emoji} ${t(meta.i18n, meta.key)}`;
+            swatch.textContent = t(meta.i18n, meta.key);
 
             const desc = document.createElement('span');
             desc.className = 'dataset-tag-legend-desc';
@@ -361,7 +361,7 @@
             const nameEl = document.querySelector(
                 `#dataset-lora-prune-cats input[data-cat="${meta.key}"]`
             )?.parentElement?.querySelector('.dataset-lora-cat-name');
-            if (nameEl) nameEl.textContent = `${meta.emoji} ${t(meta.i18n, meta.key)}`;
+            if (nameEl) nameEl.textContent = t(meta.i18n, meta.key);
         }
         renderColorLegend();
         applyTypeText(document.getElementById('dataset-lora-type')?.value || 'custom');

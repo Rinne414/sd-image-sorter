@@ -376,7 +376,7 @@ test('the localized dialog has an accessible name and traps focus inside its con
   const tourButton = dialog.locator('.guide-modal-tour')
   const actionButton = dialog.locator('.guide-modal-action')
   await expect(closeButton).toHaveAttribute('aria-label', '关闭指南')
-  await expect(tourButton).toHaveText('🎓 重新开始引导')
+  await expect(tourButton).toHaveText('重新开始引导')
   await expect(tourButton).toHaveAttribute('title', '从头重新开始新手引导')
   await expect(actionButton).toBeFocused()
 

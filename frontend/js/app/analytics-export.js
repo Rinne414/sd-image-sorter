@@ -395,8 +395,8 @@ function setExportModalMode(mode) {
     exportAltBtn.dataset.exportView = normalizedMode;
     exportAltBtn.dataset.i18nLocked = '1';
     exportAltBtn.innerHTML = normalizedMode === 'prompts'
-        ? `🏷️ ${appT('export.tagsInstead', 'Show Tags')}`
-        : `📤 ${appT('export.promptsInstead', 'Show Prompt Text')}`;
+        ? appT('export.tagsInstead', 'Show Tags')
+        : appT('export.promptsInstead', 'Show Prompt Text');
 }
 
 function renderExportModalText(format = null) {

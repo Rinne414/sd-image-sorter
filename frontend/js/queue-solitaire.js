@@ -1343,7 +1343,7 @@
             <span class="qs-preview-filename">${filename}</span>
             ${dims ? `<span>${escapeQueueHtml(dims)}</span>` : ''}
             ${aesthetic ? `<span>${escapeQueueHtml(aesthetic)}</span>` : ''}
-            ${checkpoint ? `<span>🧠 ${escapeQueueHtml(checkpoint)}</span>` : ''}
+            ${checkpoint ? `<span>${escapeQueueHtml(checkpoint)}</span>` : ''}
         `;
     }
 

@@ -116,7 +116,7 @@ Object.assign(window.PromptLab, {
                             </div>
                             <div class="promptlab-action-main">
                                 <div class="promptlab-action-title">${escapeHtml(entry.filename)} · <svg class="icon" aria-hidden="true"><use href="#i-star"/></svg> ${Number(entry.aesthetic_score || 0).toFixed(2)}</div>
-                                <div class="promptlab-action-meta">${cleanCheckpoint ? `🧠 ${escapeHtml(cleanCheckpoint)}<br>` : ''}${promptPreview}</div>
+                                <div class="promptlab-action-meta">${cleanCheckpoint ? `${escapeHtml(cleanCheckpoint)}<br>` : ''}${promptPreview}</div>
                                 <div class="promptlab-action-buttons">
                                     <button class="btn btn-primary btn-small" data-action="build" data-image-id="${entry.id}">${this._t('promptlab.openInBuild', 'Open in Build')}</button>
                                     <button class="btn btn-ghost btn-small" data-action="reader" data-image-id="${entry.id}" data-filename="${escapeHtml(entry.filename || '')}">${this._t('promptlab.openInReader', 'Open in Reader')}</button>

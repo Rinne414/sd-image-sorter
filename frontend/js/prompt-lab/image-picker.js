@@ -65,11 +65,11 @@ Object.assign(window.PromptLab, {
         if (!image) return '';
         const parts = [];
         if (image.aesthetic_score != null) parts.push(`★ ${Number(image.aesthetic_score).toFixed(1)}`);
-        if (image.width && image.height) parts.push(`📐 ${image.width}×${image.height}`);
+        if (image.width && image.height) parts.push(`${image.width}×${image.height}`);
         if (image.generator) parts.push(String(image.generator));
         if (image.checkpoint) {
             const checkpoint = String(image.checkpoint).replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || String(image.checkpoint);
-            parts.push(`🧠 ${checkpoint}`);
+            parts.push(checkpoint);
         }
         return parts.join(' · ');
     },

@@ -102,7 +102,7 @@ Object.assign(SeparationConsole, {
                 const label = document.createElement('span');
                 label.textContent = `${gap.filename} · ${Number(gap.score).toFixed(2)}`;
                 line.appendChild(label);
-                line.appendChild(this._actionBtn('📍',
+                line.appendChild(this._actionBtn('i-pin',
                     sepconT('Open this image in the editor', '在编辑器中打开这张图'),
                     () => this.dm?._setActive?.(Number(gap.image_id))));
                 panel.appendChild(line);

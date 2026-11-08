@@ -226,17 +226,17 @@ Object.assign(SeparationConsole, {
                     ? sepconT('Un-prune (remove from blacklist)', '取消剪除（移出黑名单）')
                     : sepconT('Prune: blacklist at export so the trigger absorbs it', '剪除：加入导出黑名单，让触发词吸收'),
                 () => this.togglePrune(row.key)));
-            actions.appendChild(this._actionBtn('🗑',
+            actions.appendChild(this._actionBtn('i-trash',
                 sepconT('Remove this tag from every caption (session edit, Ctrl+Z-able per image)', '从所有 caption 中移除此标签（会话级编辑）'),
                 () => this.removeEverywhere(row)));
-            actions.appendChild(this._actionBtn('📍',
+            actions.appendChild(this._actionBtn('i-pin',
                 sepconT('Jump to the next image carrying this tag', '跳到下一张含此标签的图'),
                 () => this.locateNext(row)));
-            actions.appendChild(this._actionBtn('🔍',
+            actions.appendChild(this._actionBtn('i-search',
                 sepconT('Find missed images: tagger scores just under the threshold without this tag',
                   '找漏打：分数卡在门槛下、该有却没有此标签的图'),
                 () => this.findGaps(row)));
-            actions.appendChild(this._actionBtn('🧪',
+            actions.appendChild(this._actionBtn('i-flask',
                 sepconT('Model audit: which tagger scored this tag, at what confidence',
                   '模型视角：这个标签是谁打的、信心多高'),
                 () => this.auditTag(row)));
@@ -248,7 +248,13 @@ Object.assign(SeparationConsole, {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'sepcon-btn';
-            btn.textContent = label;
+            // A sprite name draws a line icon; other labels stay text (UiIcon).
+            if (window.UiIcon && window.UiIcon.isSpriteName(label)) {
+                window.UiIcon.fill(btn, label);
+                btn.setAttribute('aria-label', title);
+            } else {
+                btn.textContent = label;
+            }
             btn.title = title;
             btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
             return btn;
