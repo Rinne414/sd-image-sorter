@@ -37,6 +37,11 @@ html[data-look="pro"] {
     --pro-fs-body: 14px;
     --pro-fs-label: 12.5px;
     --pro-fs-title: 17px;
+
+    /* A chosen tab, segment or view: lifted and white, never the accent
+       (blind judges 2026-11-08 counted the accent in nine places at once). */
+    --pro-chosen-bg: var(--surface-3);
+    --pro-chosen-line: var(--border-strong);
 }
 
 html[data-look="pro"] *:focus-visible {
@@ -44,7 +49,7 @@ html[data-look="pro"] *:focus-visible {
     outline-offset: 2px;
 }
 
-/* ---- Top bar: quiet tabs, the place you are in marked by the accent ---- */
+/* ---- Top bar: quiet tabs, the page you are on lifted, not coloured ---- */
 
 html[data-look="pro"] .nav-bar .nav-tab {
     border-radius: var(--pro-r-control);
@@ -52,13 +57,60 @@ html[data-look="pro"] .nav-bar .nav-tab {
 }
 
 html[data-look="pro"] .nav-bar .nav-tab.active {
-    background: var(--accent-soft);
-    color: #FFFFFF;
-    box-shadow: inset 0 -2px 0 var(--accent);
+    background: var(--pro-chosen-bg);
+    border-color: transparent;
+    color: var(--text);
+    box-shadow: none;
 }
 
 html[data-look="pro"] .nav-library-chip {
     border-radius: var(--pro-r-control);
+    border-color: var(--hairline-2);
+    background: transparent;
+}
+
+html[data-look="pro"] .nav-library-chip:hover {
+    background: var(--surface-3);
+}
+
+/* Two button styles in the chrome, as the professional tools have: the main
+   action filled, a text secondary framed, and icon buttons bare until pointed
+   at (blind judges 2026-11-08: "five button styles side by side"). */
+html[data-look="pro"] #nav-tools-toggle,
+html[data-look="pro"] .nav-actions .btn-icon-only:not(.nav-ai-busy-chip):not(.nav-color-chip),
+html[data-look="pro"] .nav-actions .btn-help,
+html[data-look="pro"] #view-gallery .gallery-header .btn-icon-only,
+html[data-look="pro"] #view-gallery .gallery-search-side-btn,
+html[data-look="pro"] #view-gallery .view-btn[data-size],
+html[data-look="pro"] #view-gallery #sort-reverse-btn {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #nav-tools-toggle:hover,
+html[data-look="pro"] .nav-actions .btn-icon-only:not(.nav-ai-busy-chip):not(.nav-color-chip):hover,
+html[data-look="pro"] .nav-actions .btn-help:hover,
+html[data-look="pro"] #view-gallery .gallery-header .btn-icon-only:hover,
+html[data-look="pro"] #view-gallery .gallery-search-side-btn:hover,
+html[data-look="pro"] #view-gallery .view-btn[data-size]:hover,
+html[data-look="pro"] #view-gallery #sort-reverse-btn:hover {
+    background: var(--surface-3);
+}
+
+html[data-look="pro"] #view-gallery .view-btn[data-size][aria-pressed="true"],
+html[data-look="pro"] #view-gallery #sort-reverse-btn[aria-pressed="true"] {
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+}
+
+/* The version and the Ctrl K key are set in the interface font, quietly. */
+html[data-look="pro"] .brand-version,
+html[data-look="pro"] .nav-catalog-key kbd {
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
 }
 
 html[data-look="pro"] .btn.btn-primary:not(.btn-icon-only):not(#btn-toggle-select) {
@@ -161,9 +213,14 @@ html[data-look="pro"] .view-btn {
 html[data-look="pro"] .gen-tab.active,
 html[data-look="pro"] .view-btn.active,
 html[data-look="pro"] .view-btn[aria-pressed="true"] {
-    background: var(--accent-soft);
-    border-color: var(--accent-line);
-    color: #FFFFFF;
+    background: var(--pro-chosen-bg);
+    border-color: var(--pro-chosen-line);
+    color: var(--text);
+}
+
+html[data-look="pro"] .gen-tab .gen-count {
+    font-size: var(--pro-fs-label);
+    font-variant-numeric: tabular-nums;
 }
 
 html[data-look="pro"] #gallery-search-input {
@@ -208,11 +265,15 @@ html[data-look="pro"] #image-count {
 }
 
 /* Every segmented switch marks its chosen part the same soft way. */
+html[data-look="pro"] #view-gallery .aspect-quick-toggle {
+    border-color: var(--hairline-2);
+}
+
 html[data-look="pro"] #view-gallery .aspect-quick-btn.is-active,
 html[data-look="pro"] #view-gallery .media-quick-btn.is-active {
-    background: var(--accent-soft);
-    color: #FFFFFF;
-    box-shadow: inset 0 0 0 1px var(--accent-line);
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--pro-chosen-line);
 }
 
 /* The sidebar's collapse control is a small icon button, not a large triangle. */
@@ -353,3 +414,87 @@ html[data-look="pro"] :is(
     letter-spacing: normal;
 }
 
+/* ---- Pass 3: what the blind judges still saw (2026-11-08) ---- */
+
+/* The page you are on is lifted, without the accent underline. */
+html[data-look="pro"] .nav-tab::after {
+    display: none;
+}
+
+/* The size slider is a light control, not an accent one (the browser draws it
+   in accent-color). */
+html[data-look="pro"] #grid-size-slider {
+    accent-color: #D4D4D8;
+}
+
+/* The size slider's knob is a plain light knob on a quiet track. */
+html[data-look="pro"] #grid-size-slider::-webkit-slider-thumb {
+    background: var(--text);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+html[data-look="pro"] #grid-size-slider::-moz-range-thumb {
+    background: var(--text);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+html[data-look="pro"] #grid-size-slider:hover {
+    background: var(--surface-3);
+}
+
+/* The sort menu draws its own arrow instead of the browser's white one. */
+html[data-look="pro"] #gallery-sort {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 30px;
+    border-radius: var(--pro-r-control);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A6A6AB' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+    background-size: 14px 14px;
+}
+
+/* "Clear library" stays on the page but is not the brightest thing on it:
+   quiet until pointed at, then the warning red. */
+html[data-look="pro"] #btn-sidebar-clear-library {
+    color: var(--muted);
+}
+
+html[data-look="pro"] #btn-sidebar-clear-library:hover,
+html[data-look="pro"] #btn-sidebar-clear-library:focus-visible {
+    color: var(--danger, #DE6B66);
+}
+
+/* Favourites uses the line heart in the row's own colour, not a yellow one. */
+html[data-look="pro"] #collections-list .collection-row-icon,
+html[data-look="pro"] #collections-list .collection-row.is-favorites .collection-row-icon {
+    color: var(--muted);
+}
+
+/* "Browsing: name" repeats the highlighted row, so it is a quiet line. */
+html[data-look="pro"] .collections-browsing {
+    background: transparent;
+    border-color: var(--hairline-2);
+    font-size: var(--pro-fs-label);
+}
+
+
+/* Every slider the same way: a light knob, so the accent stays for the main
+   action and the picked pictures. */
+html[data-look="pro"] input[type="range"] {
+    accent-color: #D4D4D8;
+}
+
+html[data-look="pro"] input[type="range"]::-webkit-slider-thumb {
+    background: var(--text);
+}
+
+/* The language button had its own accent tint (an id rule in ui-refresh.css). */
+html[data-look="pro"] #btn-language-toggle {
+    border-color: transparent;
+    background: transparent;
+}
+
+html[data-look="pro"] #btn-language-toggle:hover {
+    background: var(--surface-3);
+}

@@ -8752,6 +8752,16 @@ input[type="radio"] {
     transform: rotate(-90deg);
 }
 
+#collections-list .collection-row-fold .icon {
+    width: 12px;
+    height: 12px;
+}
+
+#collections-list .collection-row-fold span {
+    display: inline-grid;
+    place-items: center;
+}
+
 #collections-list .collection-row.is-drop-target {
     border-color: var(--accent-primary);
     background: rgba(var(--accent-primary-rgb), 0.14);

@@ -165,7 +165,7 @@
                     button.type = 'button';
                     button.className = 'gallery-stack-open gallery-stack-close';
                     button.textContent = t('gallery.stackFold', 'Fold');
-                    const label = t('gallery.stackClose', 'Fold these {count} pictures back into one stack', { count: size });
+                    const label = t('gallery.stackClose', 'Fold the {count} pictures back into one stack', { count: size });
                     button.title = label;
                     button.setAttribute('aria-label', label);
                     button.addEventListener('click', (event) => {

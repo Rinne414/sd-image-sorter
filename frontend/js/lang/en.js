@@ -657,7 +657,7 @@ window.I18nLang_en = {
     'gallery.groupRunsTitle': 'Show each generation run (same prompt, model and size, minutes apart) as one stack',
     'gallery.groupRunsTimeOnly': 'Runs are grouped only when sorted by date',
     'gallery.stackOpen': '{count} pictures from one run: show them all',
-    'gallery.stackClose': 'Fold these {count} pictures back into one stack',
+    'gallery.stackClose': 'Fold the {count} pictures back into one stack',
     'gallery.stackFold': 'Fold',
     'gallery.viewWaterfallSmall': 'Small waterfall view',
     'gallery.aspectToggle': 'Filter by aspect ratio',

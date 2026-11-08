@@ -150,8 +150,9 @@
                 ? t('collections.favorites', 'Favorites')
                 : (collection.name || '');
             const count = Number(collection.item_count || 0);
-            // A line folder like the rest of the interface (it was a yellow emoji); Favorites keeps its heart.
-            const icon = isFavorites ? '♥' : (window.UiIcon ? window.UiIcon.html('i-folder') : '');
+            // Line icons like the rest of the interface: a folder, and Favorites' heart.
+            const iconName = isFavorites ? 'i-heart' : 'i-folder';
+            const icon = window.UiIcon ? window.UiIcon.html(iconName) : (isFavorites ? '♥' : '');
 
             const renameBtn = isFavorites ? '' : (
                 `<button type="button" class="collection-row-action" data-action="rename" `
@@ -172,7 +173,7 @@
                     : t('collections.fold', 'Hide the collections inside');
                 foldSlot = `<button type="button" class="collection-row-fold" data-action="fold" data-id="${collection.id}" `
                     + `aria-expanded="${row.folded ? 'false' : 'true'}" title="${escapeHtml(foldLabel)}" aria-label="${escapeHtml(foldLabel)}">`
-                    + `<span aria-hidden="true">▾</span></button>`;
+                    + `<span aria-hidden="true">${window.UiIcon ? window.UiIcon.html('i-chevron-down') : '▾'}</span></button>`;
             } else if (nested && !isFavorites) {
                 foldSlot = '<span class="collection-row-fold-slot" aria-hidden="true"></span>';
             }

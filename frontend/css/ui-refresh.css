@@ -10797,9 +10797,15 @@ html.lang-zh #view-censor .queue-action-btn span {
     box-shadow: inset 0 0 0 1px rgba(var(--accent-primary-rgb), 0.12);
 }
 .nav-tools-caret {
+    display: inline-grid;
+    place-items: center;
     font-size: var(--fs-footnote);
     opacity: 0.7;
     transition: transform var(--transition-normal);
+}
+.nav-tools-caret .icon {
+    width: 12px;
+    height: 12px;
 }
 .nav-tools-toggle.menu-open .nav-tools-caret {
     transform: rotate(180deg);
@@ -13343,4 +13349,21 @@ html .nav-bar.nav-measuring * {
     #view-artist .artist-controls-actions .control-section > h4 {
         display: none;
     }
+}
+
+/* Line icons that replaced text symbols (2026-11-08): sizes that match the
+   glyphs they replaced. */
+.sidebar-section-caret .icon {
+    width: 12px;
+    height: 12px;
+    vertical-align: -0.1em;
+}
+.filter-choice-icon .icon {
+    width: 18px;
+    height: 18px;
+}
+#btn-collapse-desktop-sidebar .icon,
+#btn-restore-desktop-sidebar .icon {
+    width: 16px;
+    height: 16px;
 }

@@ -78,6 +78,14 @@
       <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="17" rx="2"/><circle cx="8.5" cy="9" r="1.6"/><path d="m21 15.5-5.2-5.2L5 20.5"/></symbol>
       <symbol id="i-images" viewBox="0 0 24 24"><rect x="7" y="3" width="14" height="14" rx="2"/><path d="M17 21H5a2 2 0 0 1-2-2V7"/><path d="m21 12-3.5-3.5L11 15"/></symbol>
       <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1"/><rect x="13.5" y="3.5" width="7" height="7" rx="1"/><rect x="3.5" y="13.5" width="7" height="7" rx="1"/><rect x="13.5" y="13.5" width="7" height="7" rx="1"/></symbol>
+      <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M9.5 4v16"/></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-rect-wide" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="1.5"/></symbol>
+      <symbol id="i-rect-tall" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="1.5"/></symbol>
+      <symbol id="i-ratio" viewBox="0 0 24 24"><rect x="3" y="8" width="12" height="9" rx="1.5"/><path d="M11 5.5A1.5 1.5 0 0 1 12.5 4h7A1.5 1.5 0 0 1 21 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 11 18.5V17"/></symbol>
+      <symbol id="i-masonry" viewBox="0 0 24 24"><rect x="3" y="3.5" width="4.6" height="9" rx="1"/><rect x="9.7" y="3.5" width="4.6" height="5" rx="1"/><rect x="16.4" y="3.5" width="4.6" height="11" rx="1"/><rect x="3" y="15" width="4.6" height="5.5" rx="1"/><rect x="9.7" y="11" width="4.6" height="9.5" rx="1"/><rect x="16.4" y="17" width="4.6" height="3.5" rx="1"/></symbol>
+      <symbol id="i-sort" viewBox="0 0 24 24"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7.5 4.8v14.4L19 12z"/></symbol>
       <symbol id="i-square" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/></symbol>
       <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 16.5 9 4.5 9-4.5"/><path d="m3 12 9 4.5L21 12"/></symbol>
       <symbol id="i-tag" viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><path d="M7.5 7.5h.01"/></symbol>
@@ -484,7 +492,7 @@
                                 data-i18n-title="nav.moreTools" title="More Tools">
                             <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span>
                             <span class="tab-text" data-i18n="nav.more">More</span>
-                            <span class="nav-tools-caret" aria-hidden="true">▾</span>
+                            <span class="nav-tools-caret" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span>
                         </button>
                         <div class="nav-tools-menu" id="nav-tools-menu" aria-label="More tools" data-i18n-aria="a11y.moreTools" hidden>
                             <!-- data-mirror-view, NOT data-view: page objects click plain
@@ -781,10 +789,10 @@
                     <div class="sidebar-section" data-sidebar-section="filters">
                         <div class="sidebar-section-head">
                             <button id="btn-collapse-desktop-sidebar" class="btn btn-ghost btn-small btn-icon-only" title="Collapse Sidebar" data-i18n-title="tip.collapseSidebar" aria-label="Collapse sidebar" data-i18n-aria="a11y.collapseSidebar">
-                                <span aria-hidden="true">◀</span>
+                                <svg class="icon" aria-hidden="true"><use href="#i-sidebar"/></svg>
                             </button>
                             <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-filters">
-                                <span class="sidebar-section-caret" aria-hidden="true">▾</span>
+                                <span class="sidebar-section-caret" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span>
                                 <span class="sidebar-section-title" id="filter-sidebar-title" data-i18n="filter.title">Filters</span>
                             </button>
                             <div class="sidebar-section-actions">
@@ -850,7 +858,7 @@
                     <div class="sidebar-section" data-sidebar-section="folders" aria-label="Folders" data-i18n-aria="folders.title">
                         <div class="sidebar-section-head">
                             <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-folders">
-                                <span class="sidebar-section-caret" aria-hidden="true">▾</span>
+                                <span class="sidebar-section-caret" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span>
                                 <span class="sidebar-section-title" data-i18n="folders.title">Folders</span>
                             </button>
                             <div class="sidebar-section-actions">
@@ -872,7 +880,7 @@
                     <div class="sidebar-section" data-sidebar-section="collections" aria-label="Collections" data-i18n-aria="collections.title">
                         <div class="sidebar-section-head">
                             <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-collections">
-                                <span class="sidebar-section-caret" aria-hidden="true">▾</span>
+                                <span class="sidebar-section-caret" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span>
                                 <span class="sidebar-section-title" data-i18n="collections.title">Collections</span>
                             </button>
                             <div class="sidebar-section-actions">
@@ -894,7 +902,7 @@
                     <div class="sidebar-section" data-sidebar-section="smart-folders" id="smart-folders-section" aria-label="Smart folders" data-i18n-aria="a11y.smartFolders" hidden>
                         <div class="sidebar-section-head">
                             <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-smart-folders">
-                                <span class="sidebar-section-caret" aria-hidden="true">▾</span>
+                                <span class="sidebar-section-caret" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span>
                                 <span class="sidebar-section-title" data-i18n="smartFolders.title">Smart Folders</span>
                             </button>
                             <div class="sidebar-section-actions">
@@ -951,7 +959,7 @@
                 <!-- Positioning lives in ui-refresh.css (#btn-restore-desktop-sidebar,
                      pinned below the fixed top bar); JS only toggles display. -->
                 <button id="btn-restore-desktop-sidebar" class="btn btn-secondary" title="Expand Sidebar" data-i18n-title="tip.expandSidebar" style="display: none;">
-                    <span aria-hidden="true">▶</span>
+                    <svg class="icon" aria-hidden="true"><use href="#i-sidebar"/></svg>
                 </button>
 
                 <div class="gallery-container">
@@ -1046,13 +1054,13 @@
                         </div>
                         <div class="view-options">
                             <button class="view-btn" data-size="grid" title="Grid view" aria-label="Grid view" aria-pressed="true" data-i18n-title="gallery.viewGrid" data-i18n-aria="gallery.viewGrid">
-                                <span>◼◼</span>
+                                <svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>
                             </button>
                             <button class="view-btn" data-size="large" title="Large view" aria-label="Large view" aria-pressed="false" data-i18n-title="gallery.viewLarge" data-i18n-aria="gallery.viewLarge">
-                                <span aria-hidden="true">◼</span>
+                                <svg class="icon" aria-hidden="true"><use href="#i-square"/></svg>
                             </button>
                             <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false" data-i18n-title="gallery.viewWaterfall" data-i18n-aria="gallery.viewWaterfall">
-                                <span aria-hidden="true">▥</span>
+                                <svg class="icon" aria-hidden="true"><use href="#i-masonry"/></svg>
                             </button>
                             <!-- Group runs (gallery/run-stack-view.js): one stack per generation run. -->
                             <button type="button" class="view-btn group-runs-btn" id="btn-group-runs" aria-pressed="false"
@@ -1132,31 +1140,31 @@
                         <div class="gallery-search-tools">
                             <div class="media-quick-toggle aspect-quick-toggle" id="media-quick-toggle" role="group" aria-label="Filter by media type" data-i18n-aria="gallery.mediaToggle">
                                 <button class="aspect-quick-btn media-quick-btn is-active" data-media="" type="button" aria-pressed="true" title="Pictures and videos" data-i18n-title="gallery.mediaAllTitle" aria-label="Pictures and videos" data-i18n-aria="gallery.mediaAllTitle">
-                                    <span aria-hidden="true">◫</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-images"/></svg>
                                     <span class="media-quick-label" data-i18n="gallery.mediaAll">All</span>
                                 </button>
                                 <button class="aspect-quick-btn media-quick-btn" data-media="image" type="button" aria-pressed="false" title="Pictures only" data-i18n-title="gallery.mediaPicturesTitle" aria-label="Pictures only" data-i18n-aria="gallery.mediaPicturesTitle">
-                                    <span aria-hidden="true">▣</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-image"/></svg>
                                     <span class="media-quick-label" data-i18n="gallery.mediaPictures">Pictures</span>
                                 </button>
                                 <button class="aspect-quick-btn media-quick-btn" data-media="video" type="button" aria-pressed="false" title="Videos only" data-i18n-title="gallery.mediaVideosTitle" aria-label="Videos only" data-i18n-aria="gallery.mediaVideosTitle">
-                                    <span aria-hidden="true">▶</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>
                                     <span class="media-quick-label" data-i18n="gallery.mediaVideos">Videos</span>
                                 </button>
                             </div>
                             <div class="aspect-quick-toggle" id="aspect-quick-toggle" role="group" aria-label="Filter by aspect ratio" data-i18n-aria="gallery.aspectToggle">
                                 <button class="aspect-quick-btn is-active" data-aspect="" type="button" aria-pressed="true" title="Any aspect ratio" data-i18n-title="gallery.aspectAll">
-                                    <span aria-hidden="true">▦</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-ratio"/></svg>
                                     <span data-i18n="common.all">All</span>
                                 </button>
                                 <button class="aspect-quick-btn" data-aspect="square" type="button" aria-pressed="false" title="Square" data-i18n-title="filter.square" aria-label="Square" data-i18n-aria="filter.square">
-                                    <span aria-hidden="true">■</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-square"/></svg>
                                 </button>
                                 <button class="aspect-quick-btn" data-aspect="landscape" type="button" aria-pressed="false" title="Landscape" data-i18n-title="filter.landscape" aria-label="Landscape" data-i18n-aria="filter.landscape">
-                                    <span aria-hidden="true">▬</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-rect-wide"/></svg>
                                 </button>
                                 <button class="aspect-quick-btn" data-aspect="portrait" type="button" aria-pressed="false" title="Portrait" data-i18n-title="filter.portrait" aria-label="Portrait" data-i18n-aria="filter.portrait">
-                                    <span aria-hidden="true">▮</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-rect-tall"/></svg>
                                 </button>
                             </div>
                             <select id="gallery-sort" class="sort-dropdown" aria-label="Sort images" data-i18n-aria="a11y.sortImages">
@@ -1178,7 +1186,7 @@
                                 <option value="random" data-i18n="sort.random">Random</option>
                             </select>
                             <button class="view-btn sort-reverse-btn" id="sort-reverse-btn" title="Reverse sort order" data-i18n-title="tip.reverseSortOrder" aria-label="Reverse sort order" data-i18n-aria="tip.reverseSortOrder" aria-pressed="false">
-                                <span aria-hidden="true">↕</span>
+                                <svg class="icon" aria-hidden="true"><use href="#i-sort"/></svg>
                             </button>
                         </div>
                     </div>
@@ -8007,21 +8015,21 @@
                                 <label class="filter-choice">
                                     <input type="radio" name="aspect-ratio" value="square">
                                     <span class="filter-choice-card">
-                                        <span class="filter-choice-icon">■</span>
+                                        <span class="filter-choice-icon"><svg class="icon" aria-hidden="true"><use href="#i-square"/></svg></span>
                                         <span data-i18n="filter.square">Square</span>
                                     </span>
                                 </label>
                                 <label class="filter-choice">
                                     <input type="radio" name="aspect-ratio" value="landscape">
                                     <span class="filter-choice-card">
-                                        <span class="filter-choice-icon">▬</span>
+                                        <span class="filter-choice-icon"><svg class="icon" aria-hidden="true"><use href="#i-rect-wide"/></svg></span>
                                         <span data-i18n="filter.landscape">Landscape</span>
                                     </span>
                                 </label>
                                 <label class="filter-choice">
                                     <input type="radio" name="aspect-ratio" value="portrait">
                                     <span class="filter-choice-card">
-                                        <span class="filter-choice-icon">▮</span>
+                                        <span class="filter-choice-icon"><svg class="icon" aria-hidden="true"><use href="#i-rect-tall"/></svg></span>
                                         <span data-i18n="filter.portrait">Portrait</span>
                                     </span>
                                 </label>
