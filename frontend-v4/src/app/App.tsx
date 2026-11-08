@@ -28,6 +28,9 @@ import { SettingsPage } from '../features/settings/SettingsPage'
 import '../features/settings/uiScaleStore'
 import { ToolPage } from '../features/tools/ToolPage'
 import { useLang } from '../i18n'
+// The /next/ interface's fallback, shared: a render error says what failed in place of the screen
+// (never a white program), and an error outside rendering is said in a toast.
+import { ErrorBoundary, useBackgroundErrors } from '../next/ErrorFallback'
 import { useApp } from '../state/store'
 import styles from './App.module.css'
 import { TopBar } from './TopBar'
@@ -58,6 +61,8 @@ export function App() {
   // After it: a library deleted elsewhere (or a stale stored id) is left for one that exists.
   useLibraryExists()
 
+  useBackgroundErrors()
+
   // Ctrl K opens the palette from anywhere, even while typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -72,30 +77,35 @@ export function App() {
   }, [])
 
   return (
-    <div className={styles.app}>
-      <TopBar />
-      <div className={styles.body}>
-        {page === 'library' && <LibraryPage />}
-        {page === 'batch' && <BatchPage />}
-        {page === 'sort' && <SortPage />}
-        {page === 'home' && <HomePage />}
-        {page === 'settings' && <SettingsPage />}
-        {page === 'tools' && <ToolPage />}
+    <ErrorBoundary>
+      <div className={styles.app}>
+        <TopBar />
+        <div className={styles.body}>
+          {/* One page failing leaves the top bar and the other pages working. */}
+          <ErrorBoundary key={page} home>
+            {page === 'library' && <LibraryPage />}
+            {page === 'batch' && <BatchPage />}
+            {page === 'sort' && <SortPage />}
+            {page === 'home' && <HomePage />}
+            {page === 'settings' && <SettingsPage />}
+            {page === 'tools' && <ToolPage />}
+          </ErrorBoundary>
+        </div>
+        <CommandPalette />
+        <ShortcutSheet />
+        <CompareDialog />
+        <DuplicatesDialog />
+        <HealthDialog />
+        <JobsRunner />
+        <DropImport />
+        <CollectHost />
+        <SelectionDialogs />
+        <MediaCensorHost />
+        <GeneratorDialog />
+        <BatchDialogs />
+        <RestartOverlay />
+        <Toasts />
       </div>
-      <CommandPalette />
-      <ShortcutSheet />
-      <CompareDialog />
-      <DuplicatesDialog />
-      <HealthDialog />
-      <JobsRunner />
-      <DropImport />
-      <CollectHost />
-      <SelectionDialogs />
-      <MediaCensorHost />
-      <GeneratorDialog />
-      <BatchDialogs />
-      <RestartOverlay />
-      <Toasts />
-    </div>
+    </ErrorBoundary>
   )
 }

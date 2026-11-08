@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **A V Opus page that fails no longer blanks the program**: an error while a page draws now shows what failed, the reason, Reload and Back to the library in place of that page, and the top bar keeps working; errors outside drawing are said in a message. Before, one such error left the whole V Opus window empty.
+  - V Opus 某一页画面出错时不再整个程序变空白：会在那一页的位置说明出了什么错、原因，并提供“刷新”和“回到图库”，顶栏照常能用；画面以外的错误会用提示说明。以前只要出一次这种错，整个 V Opus 窗口就会变成空白。
 - **Main colours**: the gallery, Reader and Censor palettes and the colour filter now find main colours in HSV. RGB filled the top places with light and dark versions of one colour; on 400 real pictures near-duplicate pairs fell from 2.04 to 0.82 per picture and colour-filter tags a picture should have but did not from 54.1% to 15.2%. Pictures analysed before count as needing analysis; their old colours keep working until then.
   - 图库、图片读取器和打码页的色板，以及颜色筛选，现在用 HSV 找主色。RGB 会让同一种颜色的深浅版本占满前几名；在 400 张真实图片上，每张图的近似重复色从 2.04 对降到 0.82 对，该有却没有的颜色标签从 54.1% 降到 15.2%。之前分析过的图会显示为需要分析，分析前旧颜色继续可用。
 - **Install progress**: installing a feature shows the real file, megabytes, percent, speed and time left, for Python packages and Hugging Face downloads alike. Steps with no percentage say what they are doing and the bar moves.
