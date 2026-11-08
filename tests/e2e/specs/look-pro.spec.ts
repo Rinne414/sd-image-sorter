@@ -168,3 +168,18 @@ test('pro look folds the tag tools into More; today\'s look keeps them in the ba
   await page.click('#nav-tools-toggle')
   await expect(page.locator('#nav-tools-tags-library')).toBeHidden()
 })
+
+test('pro look: the sidebar and gallery first rows share one line; the pinned toolbar covers the grid', async ({ page }) => {
+  await open(page, 'pro')
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+  const look = await page.evaluate(() => {
+    const middle = (sel: string) => { const r = document.querySelector(sel)!.getBoundingClientRect(); return (r.top + r.bottom) / 2 }
+    const bg = getComputedStyle(document.getElementById('gallery-toolbar')!).backgroundColor
+    return {
+      offset: Math.abs(middle('#sidebar-library-line') - middle('#view-gallery .gallery-header')),
+      toolbarSeeThrough: bg === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(bg),
+    }
+  })
+  expect(look.offset).toBeLessThanOrEqual(2)
+  expect(look.toolbarSeeThrough).toBe(false)
+})

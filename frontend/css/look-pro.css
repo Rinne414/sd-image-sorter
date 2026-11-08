@@ -249,9 +249,11 @@ html[data-look="pro"] #view-gallery .gallery-container {
     background: transparent;
 }
 
-/* The toolbar is part of the window, not a boxed panel above the pictures. */
+/* The toolbar is part of the window, not a boxed panel above the pictures.
+   It stays pinned while the grid scrolls, so it has the window's own solid
+   background (transparent let the pictures run behind its controls). */
 html[data-look="pro"] #gallery-toolbar {
-    background: transparent;
+    background: var(--bg);
     border-color: transparent;
     box-shadow: none;
 }
@@ -1030,4 +1032,40 @@ html[data-look="pro"] .nav-actions #btn-mass-tag-editor {
 
 html[data-look="pro"] .nav-tools-item.nav-tools-proxy {
     display: flex;
+}
+
+/* ---- One line across the window, one readable type scale (round 3) ----
+   The gallery started 18 px lower than the sidebar, so the sidebar's first
+   row (library) and the gallery's first row (count, sources, views) sat on
+   different lines. The gallery now starts under the top bar and the
+   sidebar's first row is as tall as the gallery header. */
+html[data-look="pro"] #view-gallery .gallery-container {
+    padding-top: 0;
+}
+
+html[data-look="pro"] #sidebar-library-line {
+    box-sizing: border-box;
+    min-height: 66px;
+    align-items: center;
+}
+
+html[data-look="pro"] #sidebar-library-name {
+    font-size: var(--pro-fs-body);
+}
+
+html[data-look="pro"] .sidebar-section-title {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+html[data-look="pro"] .gen-tab {
+    font-size: 13px;
+}
+
+html[data-look="pro"] .brand-version {
+    font-size: 12px;
+}
+
+html[data-look="pro"] #image-count {
+    font-size: 18px;
 }
