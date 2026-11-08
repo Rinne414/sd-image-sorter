@@ -126,11 +126,15 @@ try:
     result["torch_version"] = getattr(torch, "__version__", result["torch_version"])
     result["torch_cuda_build"] = getattr(getattr(torch, "version", None), "cuda", None)
     result["torch_cuda_available"] = bool(torch.cuda.is_available())
-    if result["torch_cuda_available"]:
-        result["gpu_name"] = torch.cuda.get_device_name(0)
-        result["gpu_vram_total_mb"] = round(torch.cuda.get_device_properties(0).total_memory / (1024 ** 2))
 except Exception as exc:
     result["torch_probe_error"] = str(exc)
+# The card's name and memory are extras: torch works even when they cannot be read.
+if result["torch_cuda_available"] and not result["torch_probe_error"]:
+    try:
+        result["gpu_name"] = torch.cuda.get_device_name(0)
+        result["gpu_vram_total_mb"] = round(torch.cuda.get_device_properties(0).total_memory / (1024 ** 2))
+    except Exception:
+        pass
 print(json.dumps(result))
 '''.strip()
     try:

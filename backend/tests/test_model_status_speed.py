@@ -65,6 +65,30 @@ def test_a_failed_torch_probe_is_tried_again(monkeypatch):
     probes.clear_torch_probe_cache()
 
 
+def test_torch_counts_as_working_when_the_card_name_cannot_be_read(
+    monkeypatch, tmp_path
+):
+    # A torch whose CUDA works but cannot name the card (seen with the E2E
+    # stand-in; a driver hiccup does the same) must not read as a failed import:
+    # that hid Aesthetic Score as "torch import failed".
+    stub = (
+        "__version__ = '2.7.0+cu128'",
+        "class version:",
+        "    cuda = '12.8'",
+        "class cuda:",
+        "    @staticmethod",
+        "    def is_available():",
+        "        return True",
+    )
+    (tmp_path / "torch.py").write_text("\n".join(stub) + "\n", encoding="utf-8")
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    result, answered = probes._run_torch_probe()
+    assert answered is True
+    assert result["torch_probe_error"] is None
+    assert result["torch_cuda_available"] is True
+    assert result.get("gpu_name") is None
+
+
 def test_the_sam3_readiness_check_does_not_import_transformers(monkeypatch):
     for name in list(sys.modules):
         if name == "transformers" or name.startswith("transformers."):
