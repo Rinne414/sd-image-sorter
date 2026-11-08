@@ -13519,3 +13519,10 @@ html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
     flex: none;
     color: var(--text-muted);
 }
+
+/* The pro look's Filter button and its panel (js/modules/pro-filter-popover.js);
+   today's look keeps the quick filters in the toolbar. */
+.gallery-pro-filters-btn,
+.pro-filter-popover[hidden] {
+    display: none;
+}

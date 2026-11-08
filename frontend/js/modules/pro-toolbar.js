@@ -33,8 +33,11 @@
     }
 
     function restore() {
+        const header = document.querySelector('#view-gallery .gallery-header');
         while (moved.length) {
             const { node, parent, next } = moved.pop();
+            // A node another module took meanwhile (the pro Filter panel) stays there.
+            if (header && !header.contains(node)) continue;
             parent.insertBefore(node, next && next.parentNode === parent ? next : null);
         }
         document.documentElement.classList.remove(ONE_ROW);

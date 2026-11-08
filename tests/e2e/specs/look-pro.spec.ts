@@ -193,7 +193,7 @@ test('pro look: the gallery toolbar has one control height and the grid starts w
   await open(page, 'pro')
   await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
   const look = await page.evaluate(() => {
-    const controls = ['#generator-tabs', '.view-btn[data-size="grid"]', '#btn-group-runs', '#gallery-search-input', '#btn-search-help', '.gallery-chip', '#aspect-quick-toggle', '#gallery-sort', '#sort-reverse-btn']
+    const controls = ['#generator-tabs', '.view-btn[data-size="grid"]', '#btn-group-runs', '#gallery-search-input', '#btn-search-help', '#btn-pro-filters', '#gallery-sort', '#sort-reverse-btn']
     const heights = [...new Set(controls.map((sel) => Math.round(document.querySelector(sel)!.getBoundingClientRect().height)))]
     const left = (sel: string) => Math.round(document.querySelector(sel)!.getBoundingClientRect().left)
     return { heights, edgeGap: Math.abs(left('#gallery-grid .gallery-item') - left('#gallery-search-input')) }
@@ -250,7 +250,7 @@ test.describe('pro look gallery toolbar in one row when it fits', () => {
     await expect(page.locator('#gallery-search-row')).toBeHidden()
     const layout = await page.evaluate(() => {
       const header = document.querySelector('#view-gallery .gallery-header')!.getBoundingClientRect()
-      const ids = ['#image-count', '#generator-tabs', '#gallery-search-input', '#chip-has-metadata', '#chip-aesthetic-7', '#chip-no-caption', '#aspect-quick-toggle', '#gallery-sort', '#sort-reverse-btn', '#btn-group-runs', '#grid-size-slider']
+      const ids = ['#image-count', '#generator-tabs', '#gallery-search-input', '#btn-pro-filters', '#gallery-sort', '#sort-reverse-btn', '#btn-group-runs', '#grid-size-slider']
       const boxes = ids.map((sel) => document.querySelector(sel)!.getBoundingClientRect())
       return {
         oneLine: boxes.every((b) => b.top >= header.top - 1 && b.bottom <= header.bottom + 1),
@@ -293,3 +293,32 @@ test('pro look: one library switcher, the sidebar name; today\'s look keeps the 
   await expect(page.locator('#nav-library-chip')).toBeVisible()
   await expect(page.locator('#btn-sidebar-library')).toBeVisible()
 })
+
+test('pro look: one labelled Filter button holds the quick filters; today’s look keeps them in the toolbar', async ({ page }) => {
+  await open(page, 'pro')
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+  const button = page.locator('#btn-pro-filters')
+  await expect(button).toBeVisible()
+  await expect(page.locator('#chip-aesthetic-7')).toBeHidden()
+  await expect(page.locator('#btn-toolbar-filters')).toBeHidden()
+
+  await button.click()
+  const panel = page.locator('#pro-filter-popover')
+  await expect(panel).toBeVisible()
+  await page.locator('#chip-no-caption').click()
+  await expect(page.locator('#pro-filters-count')).toHaveText('1')
+  await page.keyboard.press('Escape')
+  await expect(panel).toBeHidden()
+  await button.click()
+  await page.locator('#chip-no-caption').click()
+  await expect(page.locator('#pro-filters-count')).toBeHidden()
+  await page.locator('#btn-pro-filters-more').click()
+  await expect(panel).toBeHidden()
+
+  await page.keyboard.press('Escape')
+  await page.evaluate(() => (window as any).SdLook.set(null))
+  await expect(page.locator('#btn-pro-filters')).toBeHidden()
+  await expect(page.locator('#chip-aesthetic-7')).toBeVisible()
+  await expect(page.locator('#btn-toolbar-filters')).toBeVisible()
+})
+

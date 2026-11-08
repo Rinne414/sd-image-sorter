@@ -260,6 +260,8 @@ window.I18nLang_zhCN = {
     'action.library': '词库',
     'nav.tagLibrary': '标签与提示词',
     'library.switchTitle': '切换或管理图库',
+    'gallerySearch.filterButton': '筛选',
+    'gallerySearch.moreConditions': '更多条件…',
     'action.libraryTooltip': '浏览词库中所有标签和提示词',
     'action.help': '帮助',
     'action.clearGallery': '清空当前图库…',

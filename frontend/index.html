@@ -50,6 +50,7 @@
     <script src="/static/js/modules/ui-icon.js"></script>
     <script src="/static/js/modules/confirm-details.js"></script>
     <script src="/static/js/modules/nav-more-proxies.js"></script>
+    <script src="/static/js/modules/pro-filter-popover.js"></script>
     <script src="/static/js/modules/pro-toolbar.js"></script>
     <!-- First: an error nothing else caught is said on screen, never silent (error-fallback.js). -->
     <script src="/static/js/error-fallback.js"></script>
@@ -1146,6 +1147,17 @@
                                     data-i18n-title="gallery.editFiltersTooltip" data-i18n-aria="gallery.editFiltersTooltip">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span>
                             </button>
+                            <!-- Pro look: one labelled Filter button holding the quick filters
+                                 (js/modules/pro-filter-popover.js); today's look hides it. -->
+                            <button type="button" id="btn-pro-filters" class="gallery-pro-filters-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="pro-filter-popover">
+                                <svg class="icon" aria-hidden="true"><use href="#i-filter"/></svg>
+                                <span data-i18n="gallerySearch.filterButton">Filter</span>
+                                <span class="gallery-pro-filters-count" id="pro-filters-count" hidden></span>
+                            </button>
+                        </div>
+                        <div class="pro-filter-popover" id="pro-filter-popover" role="dialog" aria-label="Quick filters" data-i18n-aria="gallerySearch.quickFilters" hidden>
+                            <div class="pro-filter-popover-body" id="pro-filter-popover-body"></div>
+                            <button type="button" class="btn btn-ghost btn-small pro-filter-popover-more" id="btn-pro-filters-more" data-i18n="gallerySearch.moreConditions">More conditions…</button>
                         </div>
                         <div class="gallery-quick-chips" role="group" aria-label="Quick filters" data-i18n-aria="gallerySearch.quickFilters">
                             <button type="button" class="gallery-chip" id="chip-has-metadata" aria-pressed="false">

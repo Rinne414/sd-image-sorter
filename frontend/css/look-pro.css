@@ -1506,3 +1506,86 @@ html[data-look="pro"] .nav-bar .nav-tab .tab-icon .icon {
     width: 18px;
     height: 18px;
 }
+
+/* ---- One labelled Filter button (blind judges, rounds 6-8) ----
+   The quick chips and the media / aspect switches live in its panel; the
+   badge counts the ones that are on. "More conditions" opens the filter
+   editor, so its separate icon leaves the toolbar. */
+html[data-look="pro"] #view-gallery #btn-toolbar-filters {
+    display: none;
+}
+
+html[data-look="pro"] .gallery-pro-filters-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-sizing: border-box;
+    height: var(--pro-control-h);
+    padding: 0 12px;
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+html[data-look="pro"] .gallery-pro-filters-btn:hover,
+html[data-look="pro"] .gallery-pro-filters-btn[aria-expanded="true"] {
+    background: var(--surface-3);
+}
+
+html[data-look="pro"] .gallery-pro-filters-btn.has-active {
+    border-color: var(--text-secondary);
+}
+
+html[data-look="pro"] .gallery-pro-filters-count {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--text);
+    color: var(--bg);
+    font-size: 11.5px;
+    font-weight: 650;
+    line-height: 18px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] .pro-filter-popover {
+    position: fixed;
+    z-index: 3000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 260px;
+    padding: 14px;
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--pro-r-panel);
+    background: var(--surface-2);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+html[data-look="pro"] .pro-filter-popover-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+html[data-look="pro"] .pro-filter-popover-body .gallery-quick-chips {
+    flex-wrap: wrap;
+    overflow: visible;
+}
+
+html[data-look="pro"] .pro-filter-popover .pro-filter-popover-more {
+    align-self: stretch;
+    justify-content: center;
+}
+
+/* A closed panel stays closed (the display rule above outranked [hidden]). */
+html[data-look="pro"] .pro-filter-popover[hidden] {
+    display: none;
+}

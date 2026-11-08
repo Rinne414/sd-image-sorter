@@ -900,6 +900,8 @@
       "classic": [
         "#btn-open-filters",
         "#btn-toolbar-filters",
+        "#btn-pro-filters",
+        "#btn-pro-filters-more",
         "#btn-apply-modal-filters",
         "#btn-reset-filters"
       ],
