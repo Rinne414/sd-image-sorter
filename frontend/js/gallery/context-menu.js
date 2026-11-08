@@ -50,8 +50,8 @@ Object.assign(window.Gallery, {
         const tagCopySource = { imageId: image.id, image };
 
         const items = [
-            { label: t('gallery.contextPreview', 'Preview'), icon: '\u{1F5BC}', action: () => this.openPreview(image.id) },
-            { label: isSelected ? t('gallery.contextDeselectImage', 'Deselect Image') : t('gallery.contextSelectImage', 'Select Image'), icon: isSelected ? '\u2715' : '\u2713', action: () => {
+            { label: t('gallery.contextPreview', 'Preview'), icon: 'i-eye', action: () => this.openPreview(image.id) },
+            { label: isSelected ? t('gallery.contextDeselectImage', 'Deselect Image') : t('gallery.contextSelectImage', 'Select Image'), icon: isSelected ? 'i-close' : 'i-check', action: () => {
                 if (tokenActive) {
                     this.toggleSelection(image.id);
                     return;
@@ -59,7 +59,7 @@ Object.assign(window.Gallery, {
                 this._setContextImageSelection(image.id, !isSelected);
             } },
             { type: 'separator' },
-            { label: t('gallery.contextCopyTags', 'Copy Tags'), icon: '\u{1F3F7}', action: async () => {
+            { label: t('gallery.contextCopyTags', 'Copy Tags'), icon: 'i-tag', action: async () => {
                 const copy = window.TagCategoryCopy;
                 if (!copy) {
                     app.showToast?.(t('modal.copyFailed', 'Failed to copy text'), 'error');
@@ -68,7 +68,7 @@ Object.assign(window.Gallery, {
                 const tags = await copy.getTagsFromSource(tagCopySource);
                 await copy.copyTags(tags, t('modal.tagsCopied', 'Tags copied'));
             }},
-            { label: t('gallery.contextCopyTagCategory', 'Copy Tag Category...'), icon: '\u25BE', action: (event) => {
+            { label: t('gallery.contextCopyTagCategory', 'Copy Tag Category...'), icon: 'i-layers', action: (event) => {
                 if (!window.TagCategoryCopy?.showMenu) {
                     app.showToast?.(t('modal.copyFailed', 'Failed to copy text'), 'error');
                     return;
@@ -84,34 +84,34 @@ Object.assign(window.Gallery, {
             { label: this.isFavorited(image.id)
                 ? t('collections.contextUnfavorite', 'Remove from Favorites')
                 : t('collections.contextFavorite', 'Add to Favorites'),
-              icon: this.isFavorited(image.id) ? '\u{1F494}' : '♥',
+              icon: 'i-heart',
               action: () => this.toggleFavorite(image.id) },
-            { label: labelWithScope('collections.contextAddTo', 'Add to collection…'), icon: '\u{1F4DA}',
+            { label: labelWithScope('collections.contextAddTo', 'Add to collection…'), icon: 'i-folders',
               action: () => window.CollectionsUI?.openAddToCollectionPicker?.(actionImageIds) },
             { type: 'separator' },
-            { label: labelWithScope('gallery.contextMoveImage', 'Move...'), icon: '\u{1F4C1}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'move', { source: 'context' }) },
-            { label: labelWithScope('gallery.contextCopyImage', 'Copy...'), icon: '\u{1F4C4}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'copy', { source: 'context' }) },
+            { label: labelWithScope('gallery.contextMoveImage', 'Move...'), icon: 'i-arrow-right', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'move', { source: 'context' }) },
+            { label: labelWithScope('gallery.contextCopyImage', 'Copy...'), icon: 'i-file', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'copy', { source: 'context' }) },
             { type: 'separator' },
-            { pictureOnly: true, label: labelWithScope('gallery.contextSendToCensor', 'Send to Censor'), icon: '\u{1F533}', action: () => {
+            { pictureOnly: true, label: labelWithScope('gallery.contextSendToCensor', 'Send to Censor'), icon: 'i-grid', action: () => {
                 if (typeof app.addToCensorQueue === 'function') {
                     app.addToCensorQueue(actionImageIds);
                 } else {
                     app.showToast?.(t('gallery.contextSendToCensorFailed', 'Failed to send image to Edit'), 'error');
                 }
             }},
-            { pictureOnly: true, label: labelWithScope('modal.addToDataset', 'Add to dataset'), icon: '\u{1F4E6}', action: () => app.addToDatasetMaker?.(actionImageIds, { switchView: true, showToast: true }) },
-            { pictureOnly: true, label: t('gallery.contextFindSimilar', 'Find Similar'), icon: '\u{1F50E}', action: () => app.openSimilarFromImage?.(image.id) },
-            { pictureOnly: true, label: t('gallery.contextViewOnStyleMap', 'View on the Style Map'), icon: '🧭', action: () => window.StyleMap?.locateImage?.(image.id) },
-            { pictureOnly: true, label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: '\u{1F46F}', action: () => window.ClipTools?.near?.(image.id) },
+            { pictureOnly: true, label: labelWithScope('modal.addToDataset', 'Add to dataset'), icon: 'i-package', action: () => app.addToDatasetMaker?.(actionImageIds, { switchView: true, showToast: true }) },
+            { pictureOnly: true, label: t('gallery.contextFindSimilar', 'Find Similar'), icon: 'i-images', action: () => app.openSimilarFromImage?.(image.id) },
+            { pictureOnly: true, label: t('gallery.contextViewOnStyleMap', 'View on the Style Map'), icon: 'i-compass', action: () => window.StyleMap?.locateImage?.(image.id) },
+            { pictureOnly: true, label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: 'i-layers', action: () => window.ClipTools?.near?.(image.id) },
             actionCount === 2
-                ? { pictureOnly: true, label: t('gallery.contextCompareTwo', 'Compare 2 images (CLIP)'), icon: '⚖️', action: () => window.ClipTools?.compare?.(actionImageIds[0], actionImageIds[1]) }
+                ? { pictureOnly: true, label: t('gallery.contextCompareTwo', 'Compare 2 images (CLIP)'), icon: 'i-scale', action: () => window.ClipTools?.compare?.(actionImageIds[0], actionImageIds[1]) }
                 : null,
-            { label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: '\u{1F9EA}', action: () => app.openPromptBuildFromImage?.(image.id) },
-            { label: t('gallery.contextSendToGenerator', 'Send to generator…'), icon: '\u21AA', action: () => window.SendToGenerator?.open?.(image.id, { x: e.clientX, y: e.clientY }) },
-            { label: t('gallery.contextReadMetadata', 'Metadata / Info'), icon: '\u{1F4D6}', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
-            { pictureOnly: true, label: t('gallery.contextReversePrompt', 'Send to Reverse Prompt'), icon: '\u{1F504}', action: () => app.openReversePromptFromImage?.(image.id, image.filename || '') },
-            { pictureOnly: true, label: labelWithScope('gallery.contextPrivacy', 'Send to Privacy Tools'), icon: '\u{1F6E1}', action: () => app.openPrivacyFromImages?.(actionImageIds) },
-            checkpointFilterValue ? { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: '\u{1F50D}', action: () => {
+            { label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: 'i-flask', action: () => app.openPromptBuildFromImage?.(image.id) },
+            { label: t('gallery.contextSendToGenerator', 'Send to generator…'), icon: 'i-upload', action: () => window.SendToGenerator?.open?.(image.id, { x: e.clientX, y: e.clientY }) },
+            { label: t('gallery.contextReadMetadata', 'Metadata / Info'), icon: 'i-info', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
+            { pictureOnly: true, label: t('gallery.contextReversePrompt', 'Send to Reverse Prompt'), icon: 'i-refresh', action: () => app.openReversePromptFromImage?.(image.id, image.filename || '') },
+            { pictureOnly: true, label: labelWithScope('gallery.contextPrivacy', 'Send to Privacy Tools'), icon: 'i-shield', action: () => app.openPrivacyFromImages?.(actionImageIds) },
+            checkpointFilterValue ? { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: 'i-filter', action: () => {
                 if (app.AppState) {
                     app.updateFilters?.((filters) => {
                         if (!filters.checkpoints.includes(checkpointFilterValue)) {
@@ -123,10 +123,10 @@ Object.assign(window.Gallery, {
                 }
             }} : null,
             { type: 'separator' },
-            { label: t('gallery.contextOpenFolder', 'Open in Folder'), icon: '\u{1F4C2}', action: () => {
+            { label: t('gallery.contextOpenFolder', 'Open in Folder'), icon: 'i-folder', action: () => {
                 app.API?.openFolder?.(image.id);
             }},
-            { label: t('gallery.contextCopyPath', 'Copy Path'), icon: '\u{1F4CB}', action: () => {
+            { label: t('gallery.contextCopyPath', 'Copy Path'), icon: 'i-clipboard', action: () => {
                 if (typeof app.copyTextToClipboard === 'function') {
                     app.copyTextToClipboard(image.path || '', t('gallery.pathCopied', 'Path copied'));
                 } else {
@@ -135,8 +135,8 @@ Object.assign(window.Gallery, {
                 }
             }},
             { type: 'separator' },
-            { label: labelWithScope('gallery.contextRemoveFromGallery', 'Remove from Gallery'), icon: '\u{1F9F9}', danger: true, action: () => app.removeGalleryImagesByIds?.(actionImageIds) },
-            { label: labelWithScope('gallery.contextMoveToTrash', 'Move to Trash...'), icon: '\u{1F5D1}', danger: true, action: () => app.deleteGalleryImagesByIds?.(actionImageIds) },
+            { label: labelWithScope('gallery.contextRemoveFromGallery', 'Remove from Gallery'), icon: 'i-broom', danger: true, action: () => app.removeGalleryImagesByIds?.(actionImageIds) },
+            { label: labelWithScope('gallery.contextMoveToTrash', 'Move to Trash...'), icon: 'i-trash', danger: true, action: () => app.deleteGalleryImagesByIds?.(actionImageIds) },
         ].filter(Boolean);
 
         items.forEach((item) => {
@@ -156,7 +156,7 @@ Object.assign(window.Gallery, {
             const icon = document.createElement('span');
             icon.className = 'context-menu-icon';
             icon.setAttribute('aria-hidden', 'true');
-            icon.textContent = item.icon;
+            window.UiIcon ? window.UiIcon.fill(icon, item.icon) : (icon.textContent = item.icon);
 
             const label = document.createElement('span');
             label.className = 'context-menu-label';

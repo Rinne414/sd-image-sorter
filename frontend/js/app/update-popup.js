@@ -340,7 +340,7 @@ async function _showUpdatePopup(anchorBtn) {
         </div>
         <div class="update-popup-row">
             <span class="update-popup-label">${escapeHtml(appT('update.latestLabel', 'Latest Version'))}</span>
-            <span class="update-popup-value${hasUpdate ? ' has-update' : ''}">${fmtVersion(latestVersion)}${hasUpdate ? ' <svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg>' : ''}</span>
+            <span class="update-popup-value${hasUpdate ? ' has-update' : ''}">${fmtVersion(latestVersion)}${hasUpdate ? ' <svg class="icon" aria-hidden="true"><use href="#i-arrow-up"/></svg>' : ''}</span>
         </div>
         ${releaseUrl ? `<div class="update-popup-row">
             <span class="update-popup-label">${escapeHtml(appT('update.releasePageLabel', 'Release Page'))}</span>

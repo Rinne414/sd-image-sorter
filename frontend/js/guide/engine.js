@@ -345,7 +345,7 @@
                     ? document.activeElement
                     : null;
             }
-            modal.querySelector('.guide-modal-icon').textContent = tab.icon;
+            { const guideIcon = modal.querySelector('.guide-modal-icon'); window.UiIcon ? window.UiIcon.fill(guideIcon, tab.icon) : (guideIcon.textContent = tab.icon); }
             modal.querySelector('.guide-modal-title').textContent = tab.title;
             modal.querySelector('.guide-modal-subtitle').textContent = copy.subtitle;
             const closeButton = modal.querySelector('.guide-modal-close');

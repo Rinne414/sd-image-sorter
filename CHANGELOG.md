@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed / 变更
 
+- **One icon style** (classic): the right-click menu, the feature catalog (Ctrl K), the help guide and the shortcut sheet used multi-colour emoji next to the line icons of the top bar; they all use the same line icons now. The sparkle icon that marked "AI" buttons is gone: each button shows what it does (tag, star, brush, target, search).
+  - **统一图标风格**（经典界面）：右键菜单、功能目录（Ctrl K）、帮助引导和快捷键表以前用彩色表情图标，和顶栏的线条图标混在一起；现在全部用同一套线条图标。标记“AI”按钮的闪光图标已去掉，每个按钮改用说明它作用的图标（标签、星、画笔、靶心、搜索）。
 - **V Opus has one logo, in the owner's brand colours**: the browser tab icon was a purple-to-cyan gradient grid, a different mark from the top bar's. Both are now one mark: a frame circled by the pick marker on a magenta tile (white, black and magenta from the owner's brand). The "Vopus" badge beside the name is gone (it is the build's code name); the version is in Settings › About.
   - **V Opus 只用一个标志，用作者的品牌色**：浏览器标签页上的图标以前是紫到青的渐变方格，和顶栏的标志不一样；现在两处统一成同一个：洋红底块上，一格画面被挑选记号圈起来（用作者品牌的白、黑、洋红）。名字旁边的“Vopus”标签已去掉（那是内部代号）；版本号在“设置 › 关于”里。
 - **Search at 100,000 pictures**: a text index makes the search box and prompt filters about ten times faster on large libraries (prompt search 1.2 s to about 0.1 s), with the same results. A word nearly every picture contains, such as `1girl`, still takes about 0.2 s to count exactly.

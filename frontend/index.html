@@ -47,6 +47,7 @@
          (pre-paint) so the root zoom is set before first render. -->
     <script src="/static/js/ui-scale.js"></script>
     <script src="/static/js/look.js"></script>
+    <script src="/static/js/modules/ui-icon.js"></script>
     <!-- First: an error nothing else caught is said on screen, never silent (error-fallback.js). -->
     <script src="/static/js/error-fallback.js"></script>
 </head>
@@ -1116,7 +1117,7 @@
                         </div>
                         <div class="gallery-quick-chips" role="group" aria-label="Quick filters" data-i18n-aria="gallerySearch.quickFilters">
                             <button type="button" class="gallery-chip" id="chip-has-metadata" aria-pressed="false">
-                                <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span> <span data-i18n="gallerySearch.chipHasParams">Has params</span>
+                                <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg></span> <span data-i18n="gallerySearch.chipHasParams">Has params</span>
                             </button>
                             <button type="button" class="gallery-chip" id="chip-aesthetic-7" aria-pressed="false">
                                 <span data-i18n="gallerySearch.chipAesthetic7">Aesthetic 7+</span>
@@ -2891,7 +2892,7 @@
                             <small class="helper-text" id="censor-face-guard-help" hidden data-i18n="censor.faceGuardHelp">With the anime face model (Model Center, "Anime Censor + Face Guard"), detections that are really a face, such as a mouth read as a private part, are skipped. A penis or cum on a face is never skipped.</small>
                             <small class="helper-text" id="censor-mask-shape-help" hidden data-i18n="censor.maskShapeHelp">Precise follows the exact shape from the model mask (YOLO-seg / SAM3); Box censors a rectangle. Takes effect on the next detect.</small>
                             <div class="censor-side-row" id="censor-sam3-refine-row">
-                                <button class="btn btn-secondary btn-small" id="btn-sam3-refine-all-sidebar" style="flex:1;"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> <span data-i18n="censor.sam3RefineAllSidebar">Refine all with SAM3</span></button>
+                                <button class="btn btn-secondary btn-small" id="btn-sam3-refine-all-sidebar" style="flex:1;"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg> <span data-i18n="censor.sam3RefineAllSidebar">Refine all with SAM3</span></button>
                                 <button type="button" class="censor-help-toggle" aria-controls="censor-sam3-refine-help" aria-expanded="false"
                                         title="About SAM3 refine" aria-label="About SAM3 refine"
                                         data-i18n-title="censor.sam3RefineHelpToggle" data-i18n-aria="censor.sam3RefineHelpToggle"><span aria-hidden="true">?</span></button>
@@ -2960,13 +2961,13 @@
                             </div>
                             <div class="censor-filter-apply-group">
                                 <button class="btn btn-primary btn-small censor-apply-filters-btn" id="btn-apply-filters">
-                                    <svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> <span data-i18n="censor.applyToCurrent">Apply to Current</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg> <span data-i18n="censor.applyToCurrent">Apply to Current</span>
                                 </button>
                                 <button class="btn btn-secondary btn-small censor-apply-filters-btn" id="btn-apply-filters-selected">
-                                    <svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> <span data-i18n="censor.applyToSelected">Apply to Selected</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg> <span data-i18n="censor.applyToSelected">Apply to Selected</span>
                                 </button>
                                 <button class="btn btn-ghost btn-small censor-apply-filters-btn" id="btn-apply-filters-all">
-                                    <svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> <span data-i18n="censor.applyToAll">Apply to All</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg> <span data-i18n="censor.applyToAll">Apply to All</span>
                                 </button>
                             </div>
                             <div class="filter-color-preview censor-filter-preview" id="filter-color-preview" style="display:none;">
@@ -3132,7 +3133,7 @@
 
                         <details class="censor-detect-section censor-detect-section-pro" id="censor-pro-segmentation-group" style="margin-top:4px;">
                             <summary style="cursor:pointer; font-weight:600; font-size:13px; padding:8px 0; color:var(--text-secondary);">
-                                <svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> <span data-i18n="censor.proSegmentation">SAM3 Text Segmentation</span>
+                                <svg class="icon" aria-hidden="true"><use href="#i-target"/></svg> <span data-i18n="censor.proSegmentation">SAM3 Text Segmentation</span>
                             </summary>
 
                             <div class="form-group" style="margin-top:6px;">
@@ -3149,7 +3150,7 @@
 
                             <div class="modal-actions censor-detect-actions">
                                 <button class="btn btn-secondary" id="btn-segment-text-current" style="flex: 1;">
-                                    <svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> <span data-i18n="censor.segmentText">Segment by Text</span>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-target"/></svg> <span data-i18n="censor.segmentText">Segment by Text</span>
                                 </button>
                                 <button class="btn btn-primary" id="btn-sam3-batch-refine" style="flex: 1;">
                                     <svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg> <span data-i18n="censor.sam3BatchRefine">SAM3 Refine All</span>
@@ -3233,7 +3234,7 @@
                                     <input type="text" id="similar-search-text" class="input" style="flex:1;"
                                            placeholder="Describe it: red dress, smiling, garden…"
                                            data-i18n-placeholder="similar.searchTextPlaceholder" autocomplete="off">
-                                    <button class="btn btn-primary" id="btn-similar-search-text"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> <span data-i18n="similar.searchTextButton">Semantic search</span></button>
+                                    <button class="btn btn-primary" id="btn-similar-search-text"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg> <span data-i18n="similar.searchTextButton">Semantic search</span></button>
                                 </div>
                                 <input type="number" id="similar-search-id" class="input" placeholder="Image ID" data-i18n-placeholder="similar.searchById">
                                 <button class="btn btn-primary" id="btn-similar-search" data-i18n="similar.searchById">Search by ID</button>
@@ -4647,7 +4648,7 @@
                                     Run Smart Tag after setup. It writes first-draft captions; then check and edit each one in the middle pane.
                                 </p>
                                 <button class="btn btn-primary full-width" id="btn-dataset-smart-tag" style="margin-top: 8px;">
-                                    <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
+                                    <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span>
                                     <span data-i18n="dataset.smartTag">Smart Tag (WD14 + VLM)</span>
                                 </button>
                                 <p class="dataset-card-help" data-i18n="dataset.smartTagHelp" style="margin-top: 6px; font-size: 12px; opacity: 0.75;">
@@ -6800,7 +6801,7 @@
                 <!-- v3.2.2 task #5: Smart Tag wizard discoverability hint.
                      Returning users dismiss it once and never see it again. -->
                 <div class="smart-tag-hint-banner smart-tag-hint-banner-primary" id="tag-modal-smart-tag-hint" role="region" aria-labelledby="tag-modal-smart-tag-hint-title">
-                    <div class="smart-tag-hint-banner-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></div>
+                    <div class="smart-tag-hint-banner-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></div>
                     <div class="smart-tag-hint-banner-copy">
                         <strong id="tag-modal-smart-tag-hint-title" data-i18n="tagModal.smartTagTitle">Smart Tag: WD14 + VLM in one run</strong>
                         <span data-i18n="tagModal.smartTagBody">Use the current Gallery selection or filtered scope. Smart Tag can generate Danbooru tags, natural-language captions, trigger words, and cleaned training captions together.</span>
@@ -6815,7 +6816,7 @@
                      first tab — the recommended entry — with Local / VLM / Aesthetic / Color after it. -->
                 <div class="tagger-tabs" role="tablist" aria-label="Tagger mode" data-i18n-aria="a11y.taggerMode">
                     <button type="button" class="tagger-tab active" data-tagger-tab="smart" role="tab" aria-selected="true">
-                        <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
+                        <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span>
                         <span data-i18n="tagger.tabSmart">Smart Tag</span>
                     </button>
                     <button type="button" class="tagger-tab" data-tagger-tab="local" role="tab" aria-selected="false">
@@ -6827,7 +6828,7 @@
                         <span data-i18n="tagger.tabNl">Natural Language</span>
                     </button>
                     <button type="button" class="tagger-tab" data-tagger-tab="aesthetic" role="tab" aria-selected="false">
-                        <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
+                        <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-message"/></svg></span>
                         <span data-i18n="tagger.tabAesthetic">Aesthetic Score</span>
                     </button>
                     <button type="button" class="tagger-tab" data-tagger-tab="color" role="tab" aria-selected="false">
@@ -6853,7 +6854,7 @@
                      cleanup + optional VLM) is already live there. -->
                 <div class="tagger-smart-launch" data-tagger-shows="smart">
                     <div class="tagger-smart-hero">
-                        <span class="tagger-smart-hero-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
+                        <span class="tagger-smart-hero-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span>
                         <div class="tagger-smart-hero-copy">
                             <strong data-i18n="tagger.smartHeroTitle">Captions that are ready for training</strong>
                             <p data-i18n="tagger.smartHeroBody">Runs one or two booru taggers (voting optional), adds an optional natural-language caption and strips noise tags. Pick a training purpose and it also cleans artist/character tags and adds your trigger word.</p>
@@ -6862,7 +6863,7 @@
                     <div class="tagger-smart-scope" id="tagger-smart-scope" role="status" aria-live="polite"></div>
                     <div class="tagger-smart-actions">
                         <button type="button" class="btn btn-primary btn-large" id="btn-tagger-smart-go">
-                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
+                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span>
                             <span data-i18n="tagger.smartOpen">Start Smart Tag</span>
                         </button>
                     </div>
@@ -6945,7 +6946,7 @@
                 <!-- Aesthetic tab content -->
                 <div class="tagger-aesthetic-panel" id="tagger-aesthetic-panel" data-tagger-shows="aesthetic" style="display:none">
                     <div class="tagger-aesthetic-status-card">
-                        <span class="tagger-aesthetic-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
+                        <span class="tagger-aesthetic-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg></span>
                         <div class="tagger-aesthetic-status-copy">
                             <strong id="tagger-aesthetic-status-title" data-i18n="tagger.aestheticReady">Aesthetic scoring is ready on this machine.</strong>
                             <p class="tagger-aesthetic-status-hint" id="tagger-aesthetic-status-hint" data-i18n="tagger.tabAestheticDesc">CLIP + LAION scoring head, scores from 1 to 10.</p>
@@ -6958,7 +6959,7 @@
                             <span data-i18n="tagger.aestheticOpenSetup">Open Setup to install</span>
                         </button>
                         <button class="btn btn-primary" id="btn-tagger-aesthetic-start" type="button">
-                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
+                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg></span>
                             <span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span>
                         </button>
                         <button class="btn btn-ghost danger" id="btn-tagger-aesthetic-cancel" type="button" style="display:none">
@@ -8039,7 +8040,7 @@
                                 <label class="filter-choice">
                                     <input type="radio" name="has-metadata" value="true">
                                     <span class="filter-choice-card">
-                                        <span class="filter-choice-icon"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
+                                        <span class="filter-choice-icon"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg></span>
                                         <span data-i18n="filter.metadataWith">Has parameters</span>
                                     </span>
                                 </label>
@@ -9174,7 +9175,7 @@
         <div class="modal-content modal-large smart-tag-modal-content">
             <button class="modal-close" id="btn-smart-tag-close" aria-label="Close" data-i18n-aria="a11y.close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
             <h3 id="smart-tag-modal-title">
-                <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
+                <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span>
                 <span data-i18n="smartTag.title">Smart Tag (WD14 + VLM)</span>
             </h3>
             <p class="modal-description" data-i18n="smartTag.description">
@@ -9369,7 +9370,7 @@
                 <button class="btn btn-ghost" id="btn-smart-tag-cancel-modal" data-i18n="smartTag.cancel">Cancel</button>
                 <button class="btn btn-danger" id="btn-smart-tag-cancel-job" hidden data-i18n="smartTag.cancelJob">Stop</button>
                 <button class="btn btn-primary" id="btn-smart-tag-run">
-                    <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
+                    <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span>
                     <span data-i18n="smartTag.run">Run Smart Tag</span>
                 </button>
             </div>

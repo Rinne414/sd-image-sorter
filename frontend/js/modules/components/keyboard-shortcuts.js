@@ -53,13 +53,14 @@ const KeyboardShortcutsPanel = (function () {
 
     function getSectionLabel(section) {
         const labels = {
-            global: { key: 'shortcuts.section.global', fallback: 'Global', icon: '🌐' },
-            gallery: { key: 'shortcuts.section.gallery', fallback: 'Gallery', icon: '🖼️' },
-            manual: { key: 'shortcuts.section.manual', fallback: 'Manual Sort', icon: '🎮' },
-            censor: { key: 'shortcuts.section.censor', fallback: 'Censor Edit', icon: '🔳' },
+            global: { key: 'shortcuts.section.global', fallback: 'Global', icon: 'i-globe' },
+            gallery: { key: 'shortcuts.section.gallery', fallback: 'Gallery', icon: 'i-image' },
+            manual: { key: 'shortcuts.section.manual', fallback: 'Manual Sort', icon: 'i-layers' },
+            censor: { key: 'shortcuts.section.censor', fallback: 'Censor Edit', icon: 'i-grid' },
         };
-        const label = labels[section] || { key: section, fallback: section, icon: '⌨️' };
-        return `${label.icon} ${t(label.key, label.fallback)}`;
+        const label = labels[section] || { key: section, fallback: section, icon: 'i-menu' };
+        const iconHtml = window.UiIcon ? window.UiIcon.html(label.icon) : '';
+        return `${iconHtml} ${escapeText(t(label.key, label.fallback))}`;
     }
 
     // Keys and descriptions are text (", / .", "collected/<date>"), not markup.

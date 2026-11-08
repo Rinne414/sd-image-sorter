@@ -48,7 +48,7 @@
             },
             tabs: {
                 gallery: {
-                    icon: '🖼️',
+                    icon: 'i-image',
                     title: 'Gallery',
                     purpose: [
                         'Browse every scanned image in one place, inspect prompts and metadata, and narrow the list with filters before you move or edit anything.',
@@ -71,7 +71,7 @@
                     ],
                 },
                 reader: {
-                    icon: '📖',
+                    icon: 'i-book',
                     title: 'Read Image',
                     purpose: [
                         'Inspect one image in depth — including images that are NOT in your library — read its full SD metadata, edit generation info, and use the Privacy / obfuscation tools.',
@@ -92,7 +92,7 @@
                     ],
                 },
                 dataset: {
-                    icon: '📦',
+                    icon: 'i-package',
                     title: 'Dataset',
                     purpose: [
                         'Turn a set of images into a LoRA-training-ready dataset: import, caption (booru tags + natural language), tidy captions, then export images and matching .txt files to one folder.',
@@ -113,7 +113,7 @@
                     ],
                 },
                 autosep: {
-                    icon: '📁',
+                    icon: 'i-folder',
                     title: 'Auto-Separate',
                     purpose: [
                         'Move every image that matches the Auto-Separate filters into a destination folder in one batch operation, without touching the Gallery or Manual Sort filter state.',
@@ -136,7 +136,7 @@
                     ],
                 },
                 manual: {
-                    icon: '🎮',
+                    icon: 'i-layers',
                     title: 'Manual Sort',
                     purpose: [
                         'Review images with Slot sort (WASD), A/B Showdown, or Keep / Reject while keeping a dedicated Manual Sort filter state.',
@@ -163,7 +163,7 @@
                     ],
                 },
                 censor: {
-                    icon: '🔳',
+                    icon: 'i-grid',
                     title: 'Censor Edit',
                     purpose: [
                         'Apply mosaic, blur, bars, or manual painting to one or many selected images.',
@@ -185,7 +185,7 @@
                     ],
                 },
                 similar: {
-                    icon: '🔍',
+                    icon: 'i-search',
                     title: 'Similar Images',
                     purpose: [
                         'Find visually similar images or near-duplicates using embeddings.',
@@ -207,7 +207,7 @@
                     ],
                 },
                 promptlab: {
-                    icon: '🧪',
+                    icon: 'i-flask',
                     title: 'Prompt Helper',
                     purpose: [
                         'Turn your own library data into usable prompt drafts, recipes, comparisons, and reusable Random/Build starting points.',
@@ -230,7 +230,7 @@
                     ],
                 },
                 artist: {
-                    icon: '🎨',
+                    icon: 'i-palette',
                     title: 'Artist ID',
                     purpose: [
                         'Estimate likely artist or style labels across the image library and then drill back into Gallery with that filter applied.',
@@ -272,7 +272,7 @@
             },
             tabs: {
                 gallery: {
-                    icon: '🖼️',
+                    icon: 'i-image',
                     title: '图库',
                     purpose: [
                         '在一个地方浏览所有已扫描图片，查看提示词与元数据，并先用筛选器缩小范围，再决定移动、导出或编辑。',
@@ -295,7 +295,7 @@
                     ],
                 },
                 reader: {
-                    icon: '📖',
+                    icon: 'i-book',
                     title: '读图',
                     purpose: [
                         '深入查看单张图片（包括不在图库里的图片），读取完整 SD 元数据、编辑生成信息，并使用隐私 / 混淆工具。',
@@ -316,7 +316,7 @@
                     ],
                 },
                 dataset: {
-                    icon: '📦',
+                    icon: 'i-package',
                     title: '数据集',
                     purpose: [
                         '把一批图片做成可直接训练 LoRA 的数据集：导入、打标（booru 标签 + 自然语言描述）、整理 caption，再把图片和对应的 .txt 一起导出到同一个文件夹。',
@@ -337,7 +337,7 @@
                     ],
                 },
                 autosep: {
-                    icon: '📁',
+                    icon: 'i-folder',
                     title: '自动分类',
                     purpose: [
                         '把所有符合自动分类筛选条件的图片一次性移动到目标文件夹，而且不会再污染图库或手动排序的筛选状态。',
@@ -360,7 +360,7 @@
                     ],
                 },
                 manual: {
-                    icon: '🎮',
+                    icon: 'i-layers',
                     title: '手动排序',
                     purpose: [
                         '使用槽位整理（WASD）、A/B 擂台或留 / 汰来审核图片，同时保留独立的手动排序筛选状态。',
@@ -387,7 +387,7 @@
                     ],
                 },
                 censor: {
-                    icon: '🔳',
+                    icon: 'i-grid',
                     title: '打码编辑',
                     purpose: [
                         '对一张或多张图片应用马赛克、模糊、黑条或手动涂抹。',
@@ -409,7 +409,7 @@
                     ],
                 },
                 similar: {
-                    icon: '🔍',
+                    icon: 'i-search',
                     title: '相似图片',
                     purpose: [
                         '用嵌入向量查找视觉上相似的图片，或找出接近重复的图。',
@@ -431,7 +431,7 @@
                     ],
                 },
                 promptlab: {
-                    icon: '🧪',
+                    icon: 'i-flask',
                     title: '提示词助手',
                     purpose: [
                         '把你自己的图库数据转成可直接使用的提示词草稿、配方、对比结果，以及可复用的 Random / Build 起手模板。',
@@ -454,7 +454,7 @@
                     ],
                 },
                 artist: {
-                    icon: '🎨',
+                    icon: 'i-palette',
                     title: '画师识别',
                     purpose: [
                         '对图库中的图片做画师/风格预测，再一键回到图库按该结果继续筛图。',
