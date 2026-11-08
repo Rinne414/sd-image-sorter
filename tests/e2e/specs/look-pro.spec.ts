@@ -149,3 +149,22 @@ test('pro look: Organize has one frame per column and shows which mode is chosen
   })
   expect(look).toEqual({ dashed: 0, previewFramed: false, chosenStandsOut: true, filterRowHeight: 36 })
 })
+
+test('pro look folds the tag tools into More; today\'s look keeps them in the bar', async ({ page }) => {
+  await open(page, 'pro')
+  await expect(page.locator('#btn-tags-library')).toBeHidden()
+  await expect(page.locator('#btn-mass-tag-editor')).toBeHidden()
+  await page.click('#nav-tools-toggle')
+  const entry = page.locator('#nav-tools-tags-library')
+  await expect(entry).toBeVisible()
+  await expect(page.locator('#nav-tools-mass-tag')).toBeVisible()
+  await entry.click()
+  await expect(page.locator('#tags-library-modal')).toHaveClass(/visible/)
+  await expect(page.locator('#nav-tools-menu')).toBeHidden()
+
+  await page.evaluate(() => (window as any).SdLook.set(null))
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#btn-tags-library')).toBeVisible()
+  await page.click('#nav-tools-toggle')
+  await expect(page.locator('#nav-tools-tags-library')).toBeHidden()
+})

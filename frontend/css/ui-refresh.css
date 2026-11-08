@@ -13467,3 +13467,9 @@ html .nav-bar.nav-measuring * {
 html:lang(zh) {
     font-synthesis-style: none;
 }
+
+/* More-menu entries that stand in for top-bar buttons: only the pro look
+   folds those buttons into the menu (look-pro.css). */
+.nav-tools-item.nav-tools-proxy {
+    display: none;
+}

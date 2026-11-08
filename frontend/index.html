@@ -49,6 +49,7 @@
     <script src="/static/js/look.js"></script>
     <script src="/static/js/modules/ui-icon.js"></script>
     <script src="/static/js/modules/confirm-details.js"></script>
+    <script src="/static/js/modules/nav-more-proxies.js"></script>
     <!-- First: an error nothing else caught is said on screen, never silent (error-fallback.js). -->
     <script src="/static/js/error-fallback.js"></script>
 </head>
@@ -568,6 +569,18 @@
                             <!-- Owner 2026-07-07: 成套发布 left the More menu — the Pixiv
                                  mission, the gallery batch bar's publish button, and the
                                  function catalog are its entrances now. -->
+                            <!-- Pro look: the top bar's tag tools fold in here (js/modules/nav-more-proxies.js
+                                 presses the bar button, which look-pro.css hides). Today's look hides these. -->
+                            <button class="nav-tab nav-tools-item nav-tools-proxy" id="nav-tools-tags-library" type="button" data-proxy-click="btn-tags-library"
+                                    data-i18n-title="action.libraryTooltip" title="Browse all tags and prompts">
+                                <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
+                                <span class="tab-text" data-i18n="nav.tagLibrary">Tags and prompts</span>
+                            </button>
+                            <button class="nav-tab nav-tools-item nav-tools-proxy" id="nav-tools-mass-tag" type="button" data-proxy-click="btn-mass-tag-editor"
+                                    data-i18n-title="massTag.openTooltip" title="Mass tag editor: find/replace, add, remove, cleanup">
+                                <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg></span>
+                                <span class="tab-text" data-i18n="massTag.title">Mass Tag Editor</span>
+                            </button>
                             <button class="nav-tab nav-tools-item" id="nav-tools-customize" type="button"
                                     data-i18n-title="navCustom.open" title="Customize tabs">
                                 <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span>
@@ -1101,7 +1114,7 @@
                         <div class="gallery-search-box">
                             <span class="gallery-search-icon" aria-hidden="true">⌕</span>
                             <input type="text" id="gallery-search-input" class="input-field gallery-search-input"
-                                   placeholder="tag:silver_hair score>=7 -tag:blurry free text…"
+                                   placeholder="Search prompts, models and file names…"
                                    data-i18n-placeholder="gallerySearch.placeholder"
                                    data-i18n-placeholder-short="gallerySearch.placeholderMedium gallerySearch.placeholderShort"
                                    aria-label="Search gallery (supports key:value)" data-i18n-aria="gallerySearch.aria"

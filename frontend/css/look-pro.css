@@ -1019,3 +1019,15 @@ html[data-look="pro"] #view-artist .artist-images-preview {
     border: 0;
     background: transparent;
 }
+
+/* ---- Top bar: fewer unlabelled icons (blind judges, round 3) ----
+   The tag library and the mass tag editor live in the More menu, where they
+   have names (js/modules/nav-more-proxies.js presses these buttons). */
+html[data-look="pro"] .nav-actions #btn-tags-library,
+html[data-look="pro"] .nav-actions #btn-mass-tag-editor {
+    display: none;
+}
+
+html[data-look="pro"] .nav-tools-item.nav-tools-proxy {
+    display: flex;
+}

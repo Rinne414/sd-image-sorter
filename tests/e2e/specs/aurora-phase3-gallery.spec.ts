@@ -14,6 +14,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test } from '../fixtures/click-ledger'
+import { cleanupImages, seedImages } from '../fixtures/v4-seed'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const runtimeDatabasePath = process.env.SD_IMAGE_SORTER_DB_PATH
@@ -103,6 +104,11 @@ async function scanFolder(request: any, folder: string) {
     return String(progress.status || '')
   }, { timeout: 60000 }).toBe('done')
 }
+
+// The gallery toolbar folds while the library is empty, and other specs clean
+// their pictures up mid-run: bring our own (flaked 2026-11-08 in a parallel run).
+test.beforeAll(() => seedImages({ prefix: 'aurora3-', token: 'aurora3token', count: 3, dir: 'aurora-phase3' }))
+test.afterAll(() => cleanupImages('aurora3-', ['aurora-phase3']))
 
 async function openMainPage(page: any) {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
