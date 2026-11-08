@@ -188,3 +188,16 @@ test('pro look: the sidebar and gallery first rows share one line; the pinned to
   expect(look.heightGap).toBeLessThanOrEqual(2)
   expect(look.toolbarSeeThrough).toBe(false)
 })
+
+test('pro look: the gallery toolbar has one control height and the grid starts where the toolbar starts', async ({ page }) => {
+  await open(page, 'pro')
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+  const look = await page.evaluate(() => {
+    const controls = ['.gen-tab', '.view-btn[data-size="grid"]', '#btn-group-runs', '#gallery-search-input', '#btn-search-help', '.gallery-chip', '#aspect-quick-toggle', '#gallery-sort', '#sort-reverse-btn']
+    const heights = [...new Set(controls.map((sel) => Math.round(document.querySelector(sel)!.getBoundingClientRect().height)))]
+    const left = (sel: string) => Math.round(document.querySelector(sel)!.getBoundingClientRect().left)
+    return { heights, edgeGap: Math.abs(left('#gallery-grid .gallery-item') - left('#gallery-search-input')) }
+  })
+  expect(look.heights).toEqual([32])
+  expect(look.edgeGap).toBeLessThanOrEqual(1)
+})

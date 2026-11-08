@@ -46,6 +46,11 @@ html[data-look="pro"] {
        (blind judges 2026-11-08 counted the accent in nine places at once). */
     --pro-chosen-bg: #38383E;
     --pro-chosen-line: var(--border-strong);
+
+    /* One control height in the gallery toolbar, and the first row's height
+       (gallery header and the sidebar's library row share it). */
+    --pro-control-h: 32px;
+    --pro-header-row: 54px;
 }
 
 html[data-look="pro"] *:focus-visible {
@@ -1045,7 +1050,7 @@ html[data-look="pro"] #view-gallery .gallery-container {
 
 html[data-look="pro"] #sidebar-library-line {
     box-sizing: border-box;
-    min-height: 66px;
+    min-height: var(--pro-header-row);
     align-items: center;
 }
 
@@ -1083,11 +1088,13 @@ html[data-look="pro"] #view-similar .similar-header > .guide-btn {
     margin: 0;
 }
 
-/* The library picker in the top bar names the library; the gallery title
-   already shows how many pictures it holds ("68" appeared five times,
-   blind judge round 3). The sidebar's row keeps the count: it says what
-   Clear library would empty. */
-html[data-look="pro"] #nav-library-chip-label .library-name-count {
+/* The picture count is shown once, in the gallery title ("68" appeared five
+   times, blind judges rounds 3 and 4): not beside the library's name in the
+   top bar or the sidebar (Clear library's question still names the count),
+   nor on the "All" source tab. */
+html[data-look="pro"] #nav-library-chip-label .library-name-count,
+html[data-look="pro"] #sidebar-library-name .library-name-count,
+html[data-look="pro"] #generator-tabs .gen-tab[data-gen="all"] .gen-count {
     display: none;
 }
 
@@ -1153,4 +1160,67 @@ html[data-look="pro"] .onboarding-step-num {
 html[data-look="pro"] .onboarding-step-icon {
     align-self: flex-start;
     margin-top: 2px;
+}
+
+/* ---- Gallery toolbar: one control height, edges on one line (round 4) ----
+   Seven heights sat side by side (29-46 px), the sort menu was 166 px wide
+   for two characters, and the grid started 10 px left of the title. */
+html[data-look="pro"] #view-gallery .gallery-header {
+    box-sizing: border-box;
+    min-height: var(--pro-header-row);
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+html[data-look="pro"] #view-gallery .gen-tab,
+html[data-look="pro"] #view-gallery .view-btn,
+html[data-look="pro"] #view-gallery #btn-group-runs,
+html[data-look="pro"] #view-gallery .gallery-header .btn-icon-only,
+html[data-look="pro"] #view-gallery .gallery-search-side-btn,
+html[data-look="pro"] #view-gallery .gallery-chip,
+html[data-look="pro"] #view-gallery #gallery-sort,
+html[data-look="pro"] #view-gallery #sort-reverse-btn {
+    box-sizing: border-box;
+    height: var(--pro-control-h);
+    min-height: var(--pro-control-h);
+}
+
+html[data-look="pro"] #view-gallery .aspect-quick-toggle {
+    box-sizing: border-box;
+    height: var(--pro-control-h);
+    min-height: var(--pro-control-h);
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+html[data-look="pro"] #view-gallery .aspect-quick-btn {
+    height: 100%;
+    min-height: 0;
+}
+
+html[data-look="pro"] #view-gallery #gallery-search-input {
+    box-sizing: border-box;
+    height: var(--pro-control-h);
+    min-height: var(--pro-control-h);
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+html[data-look="pro"] #view-gallery #gallery-sort {
+    width: auto;
+    min-width: 0;
+    flex: 0 0 auto;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+html[data-look="pro"] #view-gallery #gallery-search-row {
+    padding-top: 8px;
+    padding-bottom: 10px;
+}
+
+/* The tiles start where the title and the search box start. */
+html[data-look="pro"] #view-gallery #gallery-grid {
+    padding-left: 14px;
+    padding-right: 14px;
 }
