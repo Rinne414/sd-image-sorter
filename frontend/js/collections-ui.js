@@ -150,7 +150,8 @@
                 ? t('collections.favorites', 'Favorites')
                 : (collection.name || '');
             const count = Number(collection.item_count || 0);
-            const icon = isFavorites ? '♥' : '📁';
+            // A line folder like the rest of the interface (it was a yellow emoji); Favorites keeps its heart.
+            const icon = isFavorites ? '♥' : (window.UiIcon ? window.UiIcon.html('i-folder') : '');
 
             const renameBtn = isFavorites ? '' : (
                 `<button type="button" class="collection-row-action" data-action="rename" `
@@ -394,7 +395,7 @@
                 const name = collection.slug === FAVORITES_SLUG
                     ? t('collections.favorites', 'Favorites')
                     : (collection.name || '');
-                const icon = collection.slug === FAVORITES_SLUG ? '♥' : '📁';
+                const icon = collection.slug === FAVORITES_SLUG ? '♥' : 'i-folder';
                 const item = this._pickerItem(icon, name, () => {
                     menu.remove();
                     this._addToCollection(collection.id, name, ids, selectionToken);
@@ -465,7 +466,8 @@
             const iconEl = document.createElement('span');
             iconEl.className = 'context-menu-icon';
             iconEl.setAttribute('aria-hidden', 'true');
-            iconEl.textContent = icon;
+            if (window.UiIcon) window.UiIcon.fill(iconEl, icon);
+            else iconEl.textContent = icon;
 
             const labelEl = document.createElement('span');
             labelEl.className = 'context-menu-label';
