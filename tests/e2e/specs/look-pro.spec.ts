@@ -226,3 +226,52 @@ test('pro look: the right-click menu keeps its tools behind one Tools row; today
   await expect(menu.locator('.context-menu-item', { hasText: 'Find Similar' })).toBeVisible()
   await expect(menu.locator('.context-menu-item').filter({ has: page.locator('.context-menu-label', { hasText: /^Tools$/ }) })).toHaveCount(0)
 })
+
+test.describe('pro look gallery toolbar in one row when it fits', () => {
+  async function openZh(page: import('@playwright/test').Page, width: number, height: number) {
+    await page.setViewportSize({ width, height })
+    await page.addInitScript(() => {
+      localStorage.setItem('sd-image-sorter-lang', 'zh-CN')
+      localStorage.setItem('aurora-entry-skip', '1')
+      localStorage.setItem('sd-look', 'pro')
+    })
+    await page.goto('/')
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.appReady)).toBe('1')
+    await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+  }
+
+  test('at 2560 the search row joins the header with every control whole; typing keeps focus', async ({ page }) => {
+    await openZh(page, 2560, 1440)
+    // How many source tabs show depends on the shared test library; with only
+    // "All" the row fits at 2560. A width change makes the toolbar ask again.
+    await page.addStyleTag({ content: '#generator-tabs .gen-tab:not([data-gen="all"]) { display: none !important; }' })
+    await page.setViewportSize({ width: 2550, height: 1440 })
+    await expect(page.locator('html')).toHaveClass(/pro-toolbar-one-row/)
+    await expect(page.locator('#gallery-search-row')).toBeHidden()
+    const layout = await page.evaluate(() => {
+      const header = document.querySelector('#view-gallery .gallery-header')!.getBoundingClientRect()
+      const ids = ['#image-count', '#generator-tabs', '#gallery-search-input', '#chip-has-metadata', '#chip-aesthetic-7', '#chip-no-caption', '#aspect-quick-toggle', '#gallery-sort', '#sort-reverse-btn', '#btn-group-runs', '#grid-size-slider']
+      const boxes = ids.map((sel) => document.querySelector(sel)!.getBoundingClientRect())
+      return {
+        oneLine: boxes.every((b) => b.top >= header.top - 1 && b.bottom <= header.bottom + 1),
+        inside: boxes.every((b) => b.width > 0 && b.left >= header.left - 1 && b.right <= header.right + 1),
+        overlaps: boxes.some((a, i) => boxes.some((b, j) => j > i && a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1)),
+      }
+    })
+    expect(layout).toEqual({ oneLine: true, inside: true, overlaps: false })
+
+    const input = page.locator('#gallery-search-input')
+    await input.click()
+    await input.pressSequentially('girl', { delay: 40 })
+    await page.waitForTimeout(1500)
+    await expect(input).toBeFocused()
+    await expect(input).toHaveValue('girl')
+  })
+
+  test('at 1366 the two rows stay', async ({ page }) => {
+    await openZh(page, 1366, 768)
+    await page.waitForTimeout(500)
+    await expect(page.locator('html')).not.toHaveClass(/pro-toolbar-one-row/)
+    await expect(page.locator('#gallery-search-row')).toBeVisible()
+  })
+})

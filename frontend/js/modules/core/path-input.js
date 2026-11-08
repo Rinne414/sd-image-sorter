@@ -54,7 +54,10 @@
         const room = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
         // Hidden for now: the whole text, until the observer sees a size.
         if (!(room > 0)) return texts[0];
-        return texts.find((text) => textWidth(input, text) <= room) ?? texts[texts.length - 1];
+        // The canvas measures Chinese a few pixels narrower than the field draws
+        // it (a cut-off last character, 2026-11-08): keep a little room.
+        const SAFETY = 4;
+        return texts.find((text) => textWidth(input, text) <= room - SAFETY) ?? texts[texts.length - 1];
     }
 
     const observer = typeof ResizeObserver === 'function'

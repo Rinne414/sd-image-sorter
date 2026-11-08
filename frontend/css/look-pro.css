@@ -1350,3 +1350,57 @@ html[data-look="pro"] .nav-catalog-key kbd,
 html[data-look="pro"] #view-gallery .gallery-chip {
     color: var(--text-secondary);
 }
+
+/* ---- One toolbar row when it fits (js/modules/pro-toolbar.js) ----
+   The search row's groups join the gallery header; the module keeps this
+   only when nothing overflows. The size slider's -/+ steppers step back
+   here (the slider and the [ ] keys do the same). */
+html.pro-toolbar-one-row[data-look="pro"] #gallery-search-row {
+    display: none;
+}
+
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .gallery-header {
+    flex-wrap: nowrap;
+    column-gap: 8px;
+}
+
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .gallery-header-left {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 6px;
+}
+
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .gallery-header-left .gallery-search-box {
+    flex: 1 1 240px;
+    min-width: 150px;
+    max-width: 320px;
+    margin-left: 4px;
+}
+
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .gallery-header-left .gallery-search-box #gallery-search-input {
+    width: 100%;
+}
+
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .view-options {
+    flex: 0 0 auto;
+    gap: 6px;
+}
+
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .view-options .gallery-search-tools {
+    margin-right: 6px;
+}
+
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .grid-size-btn {
+    display: none;
+}
+
+/* In the one row only the search box gives way (down to 150 px); the source
+   tabs, the quick chips and the buttons keep their size. */
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .gallery-header-left > * {
+    flex-shrink: 0;
+}
+
+html.pro-toolbar-one-row[data-look="pro"] #view-gallery .gallery-header-left > .gallery-search-box {
+    flex: 1 1 200px;
+    flex-shrink: 1;
+}
