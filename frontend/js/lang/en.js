@@ -390,7 +390,7 @@ window.I18nLang_en = {
     'gallery.comfort.restoredRibbon': 'Restored your place in the library',
     'gallery.comfort.todayRibbon': 'Today · {stats}',
     'gallery.comfort.statFavorites': 'favorited {n}',
-    'gallery.comfort.peekHint': 'Hold Space · release to close · Enter for full details',
+    'gallery.comfort.peekHint': 'Space opens and closes · hold to peek · Enter for full details',
     // Comfort-3 — whole-app studio shell
     'comfort.zenTitle': 'Zen mode',
     'comfort.zenBody': 'Quieter interface so the image stands out (Ctrl+.)',

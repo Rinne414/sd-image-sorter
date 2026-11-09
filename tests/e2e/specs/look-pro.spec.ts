@@ -633,3 +633,32 @@ test('pro look: the viewer keeps the accent for its main action; selection shows
   if (colors.label) expect(colors.label).not.toBe(ACCENT)
   if (colors.negative) expect(colors.negative).not.toBe('rgb(222, 107, 102)')
 })
+
+test('Space: a tap opens the quick look until Space or Esc; a hold closes on release', async ({ page }) => {
+  // Walkthrough 2026-11-09: a tester tapped Space and saw nothing (it only
+  // peeked while held). Eagle and macOS open on a tap and close on the next.
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await open(page, null)
+  const tile = page.locator('#gallery-grid .gallery-item[data-id]').first()
+  await expect(tile).toBeVisible()
+  await tile.hover()
+  const peek = page.locator('#gallery-comfort-peek')
+
+  await page.keyboard.press('Space')
+  await expect(peek).toBeVisible()
+  await page.waitForTimeout(400)
+  await expect(peek).toBeVisible()
+  await page.keyboard.press('Space')
+  await expect(peek).toBeHidden()
+
+  await page.keyboard.press('Space')
+  await expect(peek).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(peek).toBeHidden()
+
+  await page.keyboard.down('Space')
+  await expect(peek).toBeVisible()
+  await page.waitForTimeout(400)
+  await page.keyboard.up('Space')
+  await expect(peek).toBeHidden()
+})

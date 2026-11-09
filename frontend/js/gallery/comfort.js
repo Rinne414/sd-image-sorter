@@ -33,6 +33,10 @@
     let _hoverImageId = null;
     let _peekOpen = false;
     let _spaceHeld = false;
+    // A Space press shorter than this is a tap: the quick look stays open until
+    // Space or Esc (as in Eagle and macOS); a longer hold closes on release.
+    const PEEK_TAP_MS = 250;
+    let _spaceDownAt = 0;
     // Only the first load with pictures is a relaunch worth restoring; later
     // fresh loads are filter changes or refreshes, where re-applying the saved
     // offset dragged the view (to the very bottom in a small library).
@@ -582,7 +586,7 @@
             '<div class="gallery-comfort-peek-scrim" data-peek-dismiss="1"></div>',
             '<div class="gallery-comfort-peek-stage">',
             '  <img class="gallery-comfort-peek-img" alt="" draggable="false" />',
-            '  <div class="gallery-comfort-peek-hint" data-i18n="gallery.comfort.peekHint">Hold Space · release to close · Enter for full details</div>',
+            '  <div class="gallery-comfort-peek-hint" data-i18n="gallery.comfort.peekHint">Space opens and closes · hold to peek · Enter for full details</div>',
             '</div>',
         ].join('');
         document.body.appendChild(el);
@@ -628,11 +632,26 @@
     }
 
     function bindSpacePeek() {
+        // Esc closes a quick look left open by a tap, before anything else uses Esc.
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape' || !_peekOpen) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            hidePeek();
+        }, true);
+
         document.addEventListener('keydown', (e) => {
             if (e.code !== 'Space' && e.key !== ' ') return;
             if (KeyGuard.hasModifier(e)) return;
             if (e.repeat) {
                 if (_peekOpen) e.preventDefault();
+                return;
+            }
+            // A second press closes the quick look a tap opened.
+            if (_peekOpen && !_spaceHeld) {
+                e.preventDefault();
+                e.stopPropagation();
+                hidePeek();
                 return;
             }
             if (!_isGalleryActive()) return;
@@ -647,15 +666,20 @@
             e.preventDefault();
             e.stopPropagation();
             _spaceHeld = true;
+            _spaceDownAt = performance.now();
             showPeek(id);
         }, true);
 
         document.addEventListener('keyup', (e) => {
             if (e.code !== 'Space' && e.key !== ' ') return;
-            if (_spaceHeld || _peekOpen) {
-                e.preventDefault();
-                hidePeek();
+            if (!_spaceHeld) {
+                if (_peekOpen) e.preventDefault();
+                return;
             }
+            e.preventDefault();
+            _spaceHeld = false;
+            // A tap leaves it open; a hold closes on release.
+            if (performance.now() - _spaceDownAt >= PEEK_TAP_MS) hidePeek();
         }, true);
 
         window.addEventListener('blur', hidePeek);
