@@ -91,7 +91,7 @@ function switchView(viewName) {
     // View-specific initialization
     if (viewName === 'gallery') {
         let suppressInitialGalleryAutoLoadMore = false;
-        setGalleryViewMode(AppState.viewMode);
+        setGalleryViewMode(AppState.viewMode, { remember: false });
         // Re-render existing images immediately, only reload from API if needed
         if (AppState.galleryNeedsRefresh) {
             suppressInitialGalleryAutoLoadMore = AppState.gallerySuppressNextAutoLoadMore;

@@ -361,7 +361,7 @@ const SETTING_RESET_KEYS = [
     'sd-comfort-zen', 'sd-comfort-warmth', 'sd-look', 'library_auto_refresh_enabled',
     'sd-image-sorter-debug-enabled', 'sd-image-sorter-update-autocheck',
     // tabs, panels shown or folded, gallery view
-    'aurora-nav-tabs', 'gallery-view-mode', 'sd-sorter:grid-size', 'desktop-sidebar-collapsed',
+    'aurora-nav-tabs', 'gallery-view-mode', 'gallery-view-mode-picked', 'sd-sorter:grid-size', 'desktop-sidebar-collapsed',
     'sd-sorter:group-runs', 'sd-sorter:collection-folds',
     'sd-image-sorter-scan-advanced-open', 'sd-image-sorter-tag-advanced-open',
     'sd-image-sorter-dataset-tag-legend-open',

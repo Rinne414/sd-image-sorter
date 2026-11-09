@@ -127,6 +127,35 @@ function formatGeneratorLabel(generator, fallbackUnknown = 'Unknown') {
 // bare `RequestManager` references resolve to that global.
 
 const GALLERY_VIEW_MODE_KEY = 'gallery-view-mode';
+
+/** The Professional look (pro + variant b), set by js/look.js before any app script. */
+function isProfessionalLook() {
+    const root = document.documentElement;
+    return root.dataset.look === 'pro' && root.dataset.lookVariant === 'b';
+}
+
+/**
+ * The layout before the user picks one (the key is written only by a pick).
+ * The Professional look shows whole pictures, as Eagle, Billfish and Photos
+ * do: the waterfall, at the grid's density (owner's pick of the samples,
+ * 2026-11-09). Today's look keeps the square grid.
+ */
+function defaultGalleryViewMode() {
+    return isProfessionalLook() ? 'waterfall' : 'grid';
+}
+
+// Set by a user's own pick (view buttons, keys). Older builds saved the layout
+// on every start, so a saved "grid" without this mark was the old default, not
+// a pick; "large" and "waterfall" were always picks.
+const GALLERY_VIEW_MODE_PICKED_KEY = 'gallery-view-mode-picked';
+
+/** The layout the user picked, or null when they never did. */
+function savedGalleryViewMode() {
+    const saved = localStorage.getItem(GALLERY_VIEW_MODE_KEY);
+    if (!['grid', 'large', 'waterfall'].includes(saved)) return null;
+    if (saved === 'grid' && localStorage.getItem(GALLERY_VIEW_MODE_PICKED_KEY) !== '1') return null;
+    return saved;
+}
 const FILTER_STATE_KEY = 'sd-image-sorter-filter-state';
 const LIBRARY_WORKSPACE_STORAGE_KEY = 'sd-library-workspace-v1';
 
@@ -260,7 +289,7 @@ const AppPreferences = {
 };
 
 function getDefaultGalleryPageSize(mode = null) {
-    const resolvedMode = mode || localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid';
+    const resolvedMode = mode || savedGalleryViewMode() || defaultGalleryViewMode();
     const viewportWidth = window.innerWidth || 1600;
 
     if (resolvedMode === 'large') {

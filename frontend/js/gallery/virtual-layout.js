@@ -396,6 +396,9 @@ Object.assign(window.Gallery, {
         const base = this.getThumbnailSizePx();
         const scale = base / GALLERY_VIRTUAL_CONFIG.minColumnWidth.grid;
         if (viewMode === 'waterfall') {
+            // The Professional look's waterfall keeps the grid's density: whole
+            // pictures, as many per row as the grid (constants-prefs.js).
+            if (typeof isProfessionalLook === 'function' && isProfessionalLook()) return base;
             return Math.round(GALLERY_VIRTUAL_CONFIG.waterfall.columnWidth * scale);
         }
         if (viewMode === 'large') {

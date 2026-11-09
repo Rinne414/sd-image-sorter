@@ -14,13 +14,33 @@ function formatSize(bytes) {
 
 // ============== View Navigation ==============
 
-function setGalleryViewMode(mode) {
+/** Follows a look switch for users who never picked a layout. */
+function followLookDefaultViewMode() {
+    if (savedGalleryViewMode()) return;
+    const next = defaultGalleryViewMode();
+    if (AppState.viewMode === next) return;
+    setGalleryViewMode(next, { remember: false });
+}
+
+new MutationObserver(followLookDefaultViewMode).observe(document.documentElement, {
+    attributes: true, attributeFilter: ['data-look', 'data-look-variant'],
+});
+
+/**
+ * @param {string} mode 'grid', 'large' or 'waterfall'
+ * @param {{remember?: boolean}} [options] remember: false applies the layout
+ *   without making it the user's pick (start-up, page switches, a look's default)
+ */
+function setGalleryViewMode(mode, options = {}) {
     const nextMode = ['grid', 'large', 'waterfall'].includes(mode) ? mode : 'grid';
     // Capture the reading position before the mode classes below reflow the cards.
     const anchor = window.Gallery && Gallery.images.length > 0 ? Gallery._captureViewAnchor() : null;
     AppState.viewMode = nextMode;
     AppState.pagination.pageSize = getDefaultGalleryPageSize(nextMode);
-    localStorage.setItem(GALLERY_VIEW_MODE_KEY, nextMode);
+    if (options.remember !== false) {
+        localStorage.setItem(GALLERY_VIEW_MODE_KEY, nextMode);
+        localStorage.setItem(GALLERY_VIEW_MODE_PICKED_KEY, '1');
+    }
 
     // Only the size buttons: "Group runs" shares the row and keeps its own state.
     $$('.view-btn[data-size]').forEach(btn => {

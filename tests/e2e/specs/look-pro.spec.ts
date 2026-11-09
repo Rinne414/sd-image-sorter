@@ -662,3 +662,30 @@ test('Space: a tap opens the quick look until Space or Esc; a hold closes on rel
   await page.keyboard.up('Space')
   await expect(peek).toBeHidden()
 })
+
+test('Professional look: whole pictures by default at the grid density; only a pick is remembered', async ({ page }) => {
+  // Owner's sample pick (2026-11-09): whole pictures, as Eagle and Billfish
+  // show them. Start-up no longer saves the layout as if it were a pick.
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await open(page, 'pro-b')
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+  const state = () => page.evaluate(() => ({
+    mode: (window as any).App.AppState.viewMode,
+    saved: localStorage.getItem('gallery-view-mode'),
+  }))
+  await expect.poll(state).toEqual({ mode: 'waterfall', saved: null })
+  // The same density as the grid: the waterfall's column is the grid's tile.
+  const widths = await page.evaluate(() => {
+    const layout = (window as any).Gallery
+    return { waterfall: layout._effectiveMinColumnWidth('waterfall'), grid: layout._effectiveMinColumnWidth('grid') }
+  })
+  expect(widths.waterfall).toBe(widths.grid)
+
+  // A pick is remembered and survives a reload.
+  await page.locator('#btn-pro-view').click()
+  await page.locator('#pro-view-popover .view-btn[data-size="grid"]').click()
+  await expect.poll(state).toEqual({ mode: 'grid', saved: 'grid' })
+  await page.reload()
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.appReady)).toBe('1')
+  await expect.poll(state).toEqual({ mode: 'grid', saved: 'grid' })
+})

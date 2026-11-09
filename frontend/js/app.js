@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initGalleryDropZone();
     loadTaggerModels();
     setTaggingUiState(false);
-    setGalleryViewMode(AppState.viewMode);
+    setGalleryViewMode(AppState.viewMode, { remember: false });
     updateSortReverseButton();
     syncGallerySortLabels();
     switchView('gallery');

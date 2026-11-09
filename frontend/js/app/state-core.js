@@ -215,7 +215,7 @@ window.AppFilterAccess = {
 // App State
 const AppState = {
     currentView: 'gallery',
-    viewMode: localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid',
+    viewMode: savedGalleryViewMode() || defaultGalleryViewMode(),
     images: [],
     // cloneFilterState normalizes snapshots persisted by OLDER builds: any
     // list/scalar field added since (e.g. colorHues) gets its default instead
