@@ -43,9 +43,14 @@
             || document.getElementById('view-gallery')?.classList.contains('active');
     }
 
+    /** No picture in the library: nothing to point at, so no panel (the empty gallery guides). */
+    function libraryEmpty() {
+        return Number(window.App?.AppState?.analytics?.totalImages ?? -1) === 0;
+    }
+
     function applyOpen(open) {
         const root = document.documentElement;
-        const on = open && root.dataset.look === 'pro' && galleryActive();
+        const on = open && root.dataset.look === 'pro' && galleryActive() && !libraryEmpty();
         root.classList.toggle('pro-inspector-open', on);
         const button = el('btn-pro-inspector');
         if (button) button.setAttribute('aria-pressed', open ? 'true' : 'false');
@@ -60,9 +65,12 @@
         requestAnimationFrame(() => {
             const toolbar = el('gallery-toolbar');
             if (!toolbar) return;
+            // Never above the top bar: a folded toolbar (an empty gallery) has no
+            // height and put the panel's first line under it (2026-11-09).
+            const navBottom = document.querySelector('.nav-bar')?.getBoundingClientRect().bottom || 0;
             // Bounding boxes are in screen pixels; the interface zoom would scale a
             // CSS length again (148 px became 192 at the 1.3 zoom).
-            const screenBottom = Math.max(0, toolbar.getBoundingClientRect().bottom);
+            const screenBottom = Math.max(navBottom, toolbar.getBoundingClientRect().bottom);
             const bottom = window.PopupPosition?.toCssPx ? window.PopupPosition.toCssPx(screenBottom) : screenBottom;
             document.documentElement.style.setProperty('--pro-inspector-top', `${Math.round(bottom)}px`);
         });
@@ -309,6 +317,8 @@
         });
         document.addEventListener('languageChanged', redraw);
         window.addEventListener('library-stats-loaded', async () => {
+            // The library may have become empty or got its first pictures.
+            applyOpen(button.getAttribute('aria-pressed') === 'true');
             await window.ProInspectorOverview?.refreshCounts?.();
             refreshOverview();
         });

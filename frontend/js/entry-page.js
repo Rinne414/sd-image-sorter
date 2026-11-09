@@ -400,16 +400,25 @@
             const unviewed = Number(summary.unviewed || 0);
             const total = Number(summary.library_total || 0);
             if (total === 0) {
-                // Empty library: the Library is the biggest button, so make it
-                // carry the first real step (scan) instead of a browse blurb.
-                gallerySub.textContent = t('entry.tileGalleryScanCta', {}, 'Scan a folder to get started →');
-                gallerySub.classList.add('is-cta');
+                // Empty library: the line says what to do and the main button
+                // does it (walkthrough 2026-11-09: a link-coloured line that did
+                // nothing, and "Enter library" opening an empty gallery).
+                gallerySub.textContent = t('entry.tileGalleryEmpty', {}, 'The library is empty: import a folder of pictures first.');
+                gallerySub.classList.remove('is-cta');
             } else {
                 gallerySub.classList.remove('is-cta');
                 gallerySub.textContent = (added > 0 || unviewed > 0)
                     ? t('entry.tileGallerySub', { added, unviewed }, '{added} new today · {unviewed} not seen yet')
                     : t('entry.tileGallerySubQuiet', {}, 'Browse, filter, and pick images');
             }
+            const enter = el('entry-fn-gallery');
+            if (enter) {
+                enter.removeAttribute('data-i18n');
+                enter.textContent = total === 0
+                    ? t('action.scan', {}, 'Import Images')
+                    : t('entry.enterLibrary', {}, 'Enter library');
+            }
+            applyModelsAttention();
         }
         // Keep the long-lived library name on the entry home card in sync.
         if (window.LibraryWorkspace && typeof window.LibraryWorkspace.refreshEntryHome === 'function') {
@@ -615,18 +624,31 @@
             // "Start here" while the core booru tagger is missing — without
             // WD14 every mission's first step (tagging) is a dead end.
             const wd14 = models.find((model) => model.id === 'wd14');
-            const coreMissing = Boolean(wd14 && wd14.status !== 'ready');
-            tile.classList.toggle('entry-fn-models-attention', coreMissing);
-            const badge = el('entry-models-badge');
-            if (badge) badge.hidden = !coreMissing;
-            const sub = el('entry-sub-models');
-            if (sub) {
-                sub.dataset.i18nLocked = '1';
-                sub.textContent = coreMissing
-                    ? t('entry.tileModelsMissing', {}, 'The core tagger isn\'t installed. Download it here first')
-                    : t('entry.tileModelsSub', {}, 'Download & manage the AI models');
-            }
+            state.coreTaggerMissing = Boolean(wd14 && wd14.status !== 'ready');
+            applyModelsAttention();
         });
+    }
+
+    /**
+     * The Model Center asks for attention only once there are pictures to tag:
+     * on an empty library the first step is importing, which needs no model
+     * (walkthrough 2026-11-09: two "start here" cards on the first run).
+     */
+    function applyModelsAttention() {
+        const tile = el('entry-fn-models');
+        if (!tile || typeof state.coreTaggerMissing !== 'boolean') return;
+        const libraryEmpty = Number(state.summary?.library_total ?? -1) === 0;
+        const attention = state.coreTaggerMissing && !libraryEmpty;
+        tile.classList.toggle('entry-fn-models-attention', attention);
+        const badge = el('entry-models-badge');
+        if (badge) badge.hidden = !attention;
+        const sub = el('entry-sub-models');
+        if (sub) {
+            sub.dataset.i18nLocked = '1';
+            sub.textContent = attention
+                ? t('entry.tileModelsMissing', {}, 'The core tagger isn\'t installed. Download it here first')
+                : t('entry.tileModelsSub', {}, 'Download & manage the AI models');
+        }
     }
 
     async function render() {
@@ -873,7 +895,14 @@
             // comfort.js restores the exact offset once the gallery loads; this
             // just gets the user there without a detour.
             'entry-resume-continue': () => freeNavigate('gallery'),
-            'entry-fn-gallery': () => freeNavigate('gallery'),
+            // On an empty library the button reads "Import Images" and opens the
+            // import dialog in the gallery (the top bar's own Import button).
+            'entry-fn-gallery': () => {
+                freeNavigate('gallery');
+                if (Number(state.summary?.library_total ?? -1) === 0) {
+                    requestAnimationFrame(() => document.getElementById('btn-scan')?.click());
+                }
+            },
             // Tile promises "Manual Sort" — land on that sub-tab, not
             // whichever one (usually Auto-Separate) was last active.
             'entry-fn-sort': () => {

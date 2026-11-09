@@ -5669,7 +5669,7 @@ window.I18nLang_en = {
     'entry.tileGallery': 'Library',
     'entry.tileGallerySub': '{added} new today · {unviewed} not seen yet',
     'entry.tileGallerySubQuiet': 'Browse, filter, and pick images',
-    'entry.tileGalleryScanCta': 'Scan a folder to get started →',
+    'entry.tileGalleryEmpty': 'The library is empty: import a folder of pictures first.',
     'entry.tileSort': 'Manual Sort',
     'entry.tileSortSub': 'Left from last time · pick it back up',
     'entry.tileSortIdle': 'Sort a batch with WASD',

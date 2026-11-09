@@ -465,8 +465,14 @@ test.describe('Entry page (opted in)', () => {
         expect(geometry).toEqual({ horizontalOverflow: 0, insideViewport: true })
       }
 
+      // An empty library's main button says Import Images and opens the import
+      // dialog in the gallery (walkthrough 2026-11-09); close it to read the page.
+      await expect(page.locator('#entry-fn-gallery')).toHaveText('Import Images')
       await page.locator('#entry-fn-gallery').click()
       await expect(page.locator('#entry-page')).toBeHidden()
+      await expect(page.locator('#scan-modal')).toHaveClass(/visible/)
+      await page.keyboard.press('Escape')
+      await expect(page.locator('#scan-modal')).not.toHaveClass(/visible/)
       // The Filters sidebar section starts collapsed (5aa2a55); open it so the
       // summary it holds can be read and measured.
       const filtersToggle = page.locator('.sidebar-section-toggle[aria-controls="sidebar-body-filters"]')

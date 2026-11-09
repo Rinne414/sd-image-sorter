@@ -5666,7 +5666,7 @@ window.I18nLang_zhCN = {
     'entry.tileGallery': '图片库',
     'entry.tileGallerySub': '今天新进 {added} 张 · {unviewed} 张还没看过',
     'entry.tileGallerySubQuiet': '浏览、筛选、挑图都在这',
-    'entry.tileGalleryScanCta': '扫描一个文件夹开始 →',
+    'entry.tileGalleryEmpty': '图库还是空的：先导入一个有图片的文件夹。',
     'entry.tileSort': '手动排序',
     'entry.tileSortSub': '上次剩的 · 接着来',
     'entry.tileSortIdle': '用 WASD 分拣一批',
