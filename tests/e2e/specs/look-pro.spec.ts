@@ -393,10 +393,25 @@ test('proposal B: the View and More menus hold their buttons, which still work; 
   await page.keyboard.press('Escape')
   await expect(page.locator('#pro-more-popover')).toBeHidden()
 
-  // The top bar's tools say what they are; the update button waits for an update.
+  // The owner's top bar (2026-11-09, sample 3): Import is the one filled
+  // button, All features is a find field, the guide and the language share a
+  // Help menu, AI tagging sits among the gallery's tools; the update button
+  // waits for an update.
   await expect(page.locator('#btn-open-model-manager .nav-action-label')).toHaveText('Settings')
-  await expect(page.locator('#btn-all-features .nav-action-label')).toHaveText('All features')
-  await expect(page.locator('#btn-language-toggle .nav-action-label')).toHaveText('中文')
+  await expect(page.locator('#btn-all-features .nav-catalog-find')).toHaveText('Find a feature…')
+  await expect(page.locator('#btn-all-features .nav-catalog-label')).toBeHidden()
+  await expect(page.locator('.nav-actions .btn-primary:visible')).toHaveCount(1)
+  await expect(page.locator('#view-gallery .gallery-header #btn-tag .btn-tag-short')).toHaveText('AI Tag')
+  await expect(page.locator('.nav-actions #btn-tag')).toHaveCount(0)
+  await expect(page.locator('#btn-help')).toBeHidden()
+  await expect(page.locator('#btn-language-toggle')).toBeHidden()
+  await page.locator('#btn-pro-help').click()
+  await expect(page.locator('#pro-help-popover #btn-help')).toHaveText('Guide for this page')
+  // The menu shows its sentence; the bar's short form (中文) stays hidden there.
+  await expect(page.locator('#pro-help-popover #btn-language-toggle .pro-menu-label')).toHaveText('Switch to 中文')
+  await expect(page.locator('#pro-help-popover #btn-language-toggle .nav-action-label')).toBeHidden()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#pro-help-popover')).toBeHidden()
   await expect(page.locator('#btn-app-update')).toBeHidden()
 
   // Proposal A: everything back in the toolbar, no labels in the top bar.
@@ -407,6 +422,11 @@ test('proposal B: the View and More menus hold their buttons, which still work; 
   await expect(page.locator('#btn-random')).toBeVisible()
   await expect(page.locator('#view-gallery .view-btn[data-size="large"]')).toBeVisible()
   await expect(page.locator('#btn-open-model-manager .nav-action-label')).toBeHidden()
+  // ...and its old top bar: AI tagging, Help and the language back in place.
+  await expect(page.locator('.nav-actions #btn-tag')).toBeVisible()
+  await expect(page.locator('.nav-actions #btn-help')).toBeVisible()
+  await expect(page.locator('.nav-actions #btn-language-toggle')).toBeVisible()
+  await expect(page.locator('#btn-pro-help')).toBeHidden()
 })
 
 test('proposal B: Select is a big button at the sidebar foot, filters start open and Clear all waits for a filter', async ({ page }) => {

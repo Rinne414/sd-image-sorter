@@ -256,6 +256,7 @@ window.I18nLang_en = {
     // ========================
     'action.scan': 'Import Images',
     'action.tag': 'AI Tag Images',
+    'action.tagShort': 'AI Tag',
     'action.library': 'Library',
     'nav.tagLibrary': 'Tags and prompts',
     'library.switchTitle': 'Switch or manage libraries',
@@ -2246,6 +2247,7 @@ window.I18nLang_en = {
     'modal.tagsSaveFailed': 'Failed to update tags',
     'catalog.openTooltip': 'All features (Ctrl K)',
     'catalog.openLabel': 'All features',
+    'catalog.findField': 'Find a feature…',
     'server.gone': 'The program stopped, so nothing can be loaded or saved right now. Open the program again; this message goes away when it is back.',
     'server.retry': 'Try again',
     'server.back': 'The program is back.',
@@ -3286,6 +3288,7 @@ window.I18nLang_en = {
     // Language Toggle
     // ========================
     'lang.toggle': '\u4E2D\u6587',
+    'lang.menuSwitch': 'Switch to \u4E2D\u6587',
     'lang.switchTooltip': 'Switch between English and Chinese',
     'a11y.skipToMain': 'Skip to main content',
     'lang.current': 'EN',
@@ -3518,6 +3521,8 @@ window.I18nLang_en = {
     // ========================
     'guide.closeLabel': 'Got it',
     'guide.tooltip': 'Open the guide for the current tab',
+    'guide.menuLabel': 'Guide for this page',
+    'nav.helpMenu': 'Help',
     'guide.openLabel': 'Open Guide',
     'refresh.uiTooltip': 'Hard refresh: clear caches and reload the UI. Gallery / DB / settings are preserved.',
     'guide.artistTitle': 'Artist Identification',

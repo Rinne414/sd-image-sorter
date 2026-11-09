@@ -694,6 +694,7 @@
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg></span>
                     <!-- Names the language a press switches to. -->
                     <span class="nav-action-label" data-i18n="lang.toggle">EN</span>
+                    <span class="pro-menu-label" data-i18n="lang.menuSwitch">Switch to 中文</span>
                 </button>
                 <button id="btn-app-update" class="btn btn-ghost btn-icon-only" type="button" title="Check for application updates" aria-label="Check for application updates" data-i18n-aria="update.checkTitle" data-i18n-title="update.checkTitle">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-arrow-up"/></svg></span>
@@ -703,8 +704,11 @@
                 <span class="nav-actions-divider" aria-hidden="true"></span>
                 <!-- Group 2: Content tools (frequent) -->
                 <button id="btn-all-features" class="btn btn-ghost btn-icon-only nav-catalog-key" type="button" title="All features (Ctrl K)" aria-label="All features" aria-keyshortcuts="Control+K" data-i18n-title="catalog.openTooltip" data-i18n-aria="catalog.openLabel">
-                    <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span>
-                    <span class="nav-action-label" data-i18n="catalog.openLabel">All features</span>
+                    <span class="nav-catalog-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span>
+                    <!-- The Professional look draws this button as a "find a feature" field. -->
+                    <span class="nav-catalog-find-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
+                    <span class="nav-action-label nav-catalog-label" data-i18n="catalog.openLabel">All features</span>
+                    <span class="nav-catalog-find" data-i18n="catalog.findField">Find a feature…</span>
                     <kbd aria-hidden="true">Ctrl K</kbd>
                 </button>
                 <button id="btn-tags-library" class="btn btn-ghost btn-icon-only" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.libraryTooltip" data-i18n-aria="action.library">
@@ -725,7 +729,17 @@
                 </button>
                 <button id="btn-help" class="btn-help btn-icon-only" title="Open guide for current tab" aria-label="Open guide for current tab" data-i18n-aria="a11y.openGuideForCurrentTab" data-i18n-title="guide.tooltip">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></span>
+                    <span class="pro-menu-label" data-i18n="guide.menuLabel">Guide for this page</span>
                 </button>
+                <!-- Professional look: the guide and the language switch in one Help menu (js/modules/pro-fold-menu.js). -->
+                <button type="button" class="pro-help-btn" id="btn-pro-help" aria-haspopup="dialog" aria-expanded="false" aria-controls="pro-help-popover">
+                    <svg class="icon" aria-hidden="true"><use href="#i-help"/></svg>
+                    <span data-i18n="nav.helpMenu">Help</span>
+                    <svg class="icon icon-caret" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+                </button>
+                <div class="pro-filter-popover pro-view-popover pro-help-popover" id="pro-help-popover" role="dialog" aria-label="Help" data-i18n-aria="nav.helpMenu" hidden>
+                    <div class="pro-filter-popover-body pro-view-popover-body" id="pro-help-popover-body"></div>
+                </div>
                 <span class="nav-actions-divider" aria-hidden="true"></span>
                 <!-- Group 4: Primary CTAs (rightmost) -->
                 <button id="btn-scan" class="btn btn-primary" aria-label="Import images from a folder" data-i18n-aria="a11y.importImagesFromAFolder">
@@ -734,7 +748,9 @@
                 </button>
                 <button id="btn-tag" class="btn btn-secondary" aria-label="Tag images with AI" data-i18n-aria="a11y.tagImagesWithAI">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span>
-                    <span data-i18n="action.tag">Tag Images</span>
+                    <span class="btn-tag-label" data-i18n="action.tag">Tag Images</span>
+                    <!-- The Professional look's gallery tools use the short name. -->
+                    <span class="btn-tag-short" data-i18n="action.tagShort">AI Tag</span>
                 </button>
             </div>
         </nav>
@@ -1092,6 +1108,8 @@
                             <div class="pro-filter-popover pro-view-popover pro-more-popover" id="pro-more-popover" role="dialog" aria-label="More actions" data-i18n-aria="gallery.moreMenu" hidden>
                                 <div class="pro-filter-popover-body pro-view-popover-body" id="pro-more-popover-body"></div>
                             </div>
+                            <!-- Professional look: AI tagging joins the gallery's tools, so the top bar keeps one filled button (js/modules/pro-fold-menu.js). -->
+                            <span class="pro-tag-slot" id="pro-tag-slot"></span>
                             <div class="divider-v" aria-hidden="true"></div>
                             <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator" data-i18n-aria="a11y.filterByGenerator">
                                 <div class="generator-tabs-pinned">

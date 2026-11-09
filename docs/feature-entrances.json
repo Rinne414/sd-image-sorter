@@ -610,7 +610,8 @@
       "en": "Guide for the current page",
       "zh": "当前页面的说明",
       "classic": [
-        "#btn-help"
+        "#btn-help",
+        "#btn-pro-help"
       ],
       "vopus": {
         "at": "#/library",

@@ -1,6 +1,8 @@
 /**
  * pro-fold-menu.js - proposal B folds a few gallery buttons into a labelled
- * menu (View, More beside the picture count).
+ * menu (View, More beside the picture count), puts the top bar's guide and
+ * language switch into one Help menu and moves AI tagging into the gallery's
+ * tools.
  *
  * Blind A/B rounds (2026-11-08/09): the gallery toolbar carried about fifteen
  * controls and several bare icons nobody could name. In proposal B (the pro
@@ -145,5 +147,20 @@
         body: 'pro-more-popover-body',
         placement: 'bottom-start',
         nodes: () => [el('btn-random'), el('btn-reconnect-missing')],
+    });
+
+    // The owner's top bar (2026-11-09, sample 3 of three): one filled button.
+    // The guide and the language switch share one Help menu, and AI tagging,
+    // a gallery action shown only on the gallery page, joins the gallery's tools.
+    createMenu({
+        button: 'btn-pro-help',
+        popover: 'pro-help-popover',
+        body: 'pro-help-popover-body',
+        nodes: () => [el('btn-help'), el('btn-language-toggle')],
+    });
+    const tagging = relocate('pro-tag-slot', () => [el('btn-tag')]);
+    whenReady(() => {
+        onLookChange(tagging.sync);
+        tagging.sync();
     });
 })();

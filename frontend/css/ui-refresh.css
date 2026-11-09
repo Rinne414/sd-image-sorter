@@ -13535,11 +13535,25 @@ html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
     display: none;
 }
 
-/* Proposal B's View and More menus (js/modules/pro-fold-menu.js); hidden elsewhere. */
+/* Proposal B's View, More and Help menus (js/modules/pro-fold-menu.js) and
+   its "find a feature" field; hidden elsewhere. */
 .pro-view-btn,
 .pro-more-btn,
+.pro-help-btn,
+.btn-tag-short,
 .pro-menu-label,
+.nav-catalog-find,
+.nav-catalog-find-icon,
 .pro-view-popover[hidden] {
+    display: none;
+}
+
+/* Proposal B's place for AI tagging in the gallery's tools; empty elsewhere. */
+.pro-tag-slot {
+    display: contents;
+}
+
+.pro-tag-slot:empty {
     display: none;
 }
 

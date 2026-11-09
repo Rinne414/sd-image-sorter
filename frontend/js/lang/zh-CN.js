@@ -259,6 +259,7 @@ window.I18nLang_zhCN = {
     // ========================
     'action.scan': '导入图片',
     'action.tag': 'AI 打标',
+    'action.tagShort': 'AI 打标',
     'action.library': '词库',
     'nav.tagLibrary': '标签与提示词',
     'library.switchTitle': '切换或管理图库',
@@ -2430,6 +2431,7 @@ window.I18nLang_zhCN = {
     'modal.tagsSaveFailed': '更新标签失败',
     'catalog.openTooltip': '全部功能（Ctrl K）',
     'catalog.openLabel': '全部功能',
+    'catalog.findField': '查找功能…',
     'server.gone': '程序已经停止，现在读不到也存不了。请重新打开程序；它回来后，这条提示会自己消失。',
     'server.retry': '再试一次',
     'server.back': '程序已恢复。',
@@ -3460,6 +3462,7 @@ window.I18nLang_zhCN = {
     // Language Toggle
     // ========================
     'lang.toggle': 'EN',
+    'lang.menuSwitch': '切换到 English',
     'lang.switchTooltip': '切换中文和英文界面',
     'a11y.skipToMain': '跳到主要内容',
     'lang.current': '中文',
@@ -3692,6 +3695,8 @@ window.I18nLang_zhCN = {
     // ========================
     'guide.closeLabel': '知道了',
     'guide.tooltip': '打开当前页面的使用指南',
+    'guide.menuLabel': '本页使用指南',
+    'nav.helpMenu': '帮助',
     'guide.openLabel': '打开使用指南',
     'refresh.uiTooltip': '强制刷新：清掉浏览器缓存重新载入界面，图库 / 数据库 / 设置都不会丢。',
     'guide.artistTitle': '画师识别',

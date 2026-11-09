@@ -111,7 +111,7 @@ html[data-look-variant="b"] .pro-view-popover-body {
     min-width: 200px;
 }
 
-html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) > button {
+html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body, #pro-help-popover-body) > button {
     justify-content: flex-start;
     width: 100%;
     height: 34px;
@@ -122,7 +122,7 @@ html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) 
     color: var(--text);
 }
 
-html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) > button:hover {
+html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body, #pro-help-popover-body) > button:hover {
     background: var(--surface-3);
 }
 
@@ -272,7 +272,7 @@ html[data-look-variant="b"] #view-gallery .pro-more-btn[aria-expanded="true"] {
     background: var(--surface-3);
 }
 
-html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) > button {
+html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body, #pro-help-popover-body) > button {
     display: inline-flex;
     align-items: center;
     gap: 10px;
@@ -283,7 +283,7 @@ html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) 
 
 /* An id in the selector: ui-refresh.css hides #btn-reconnect-missing's words
    from 1800 px (an id rule) for the toolbar's icon-only form. */
-html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body) .pro-menu-label {
+html[data-look-variant="b"] :is(#pro-view-popover-body, #pro-more-popover-body, #pro-help-popover-body) .pro-menu-label {
     display: inline;
     white-space: nowrap;
 }
@@ -545,4 +545,140 @@ html[data-look-variant="b"] #view-gallery #sort-reverse-btn[aria-pressed="true"]
    search box instead of touching it. */
 html[data-look-variant="b"] #view-gallery .gallery-pro-filters-btn {
     margin-left: 8px;
+}
+
+/* ---- The owner's top bar (2026-11-09, sample 3 of three; rounds 13-19: about
+   sixteen targets of one weight and two buttons that read as the main one).
+   Import is the only filled button. All features is a "find a feature" field
+   with its shortcut inside; the guide and the language switch share one Help
+   menu (the language stays one click away inside it); AI tagging, shown only
+   on the gallery page anyway, sits with the gallery's tools. Proposal A and
+   today's look keep the old top bar. ---- */
+html[data-look-variant="b"] .nav-actions #btn-all-features {
+    min-width: 190px;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    background: var(--control-bg);
+    color: var(--text-2);
+}
+
+html[data-look-variant="b"] .nav-actions #btn-all-features:hover {
+    border-color: var(--text-secondary);
+    background: var(--control-bg);
+}
+
+html[data-look-variant="b"] .nav-actions #btn-all-features :is(.nav-catalog-icon, .nav-catalog-label) {
+    display: none;
+}
+
+html[data-look-variant="b"] .nav-actions #btn-all-features :is(.nav-catalog-find-icon, .nav-catalog-find) {
+    display: inline-flex;
+    white-space: nowrap;
+}
+
+html[data-look-variant="b"] .nav-actions #btn-all-features kbd {
+    margin-left: auto;
+    padding-left: 12px;
+}
+
+/* Laptop widths: the field gives up width before any tab moves into More. */
+html[data-look-variant="b"] .nav-bar.nav-tabs-compact-labels .nav-actions #btn-all-features {
+    min-width: 0;
+}
+
+html[data-look-variant="b"] .nav-bar.nav-tabs-compact-labels .nav-actions #btn-all-features .nav-catalog-find {
+    display: none;
+}
+
+html[data-look-variant="b"] .nav-actions #btn-pro-help {
+    display: inline-flex;
+    align-items: center;
+    order: 4;
+    gap: 6px;
+    height: 34px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+html[data-look-variant="b"] .nav-actions #btn-pro-help:is(:hover, [aria-expanded="true"]) {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+html[data-look-variant="b"] .nav-actions #btn-pro-help .icon-caret {
+    width: 12px;
+    height: 12px;
+    color: var(--text-2);
+}
+
+/* In the Help menu each row shows its icon and its name. */
+html[data-look-variant="b"] #pro-help-popover-body > button > span[aria-hidden="true"] {
+    display: inline-flex;
+}
+
+/* AI tagging among the gallery's tools: the toolbar's control shape. */
+html[data-look-variant="b"] #view-gallery #btn-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: var(--pro-control-h);
+    min-height: var(--pro-control-h);
+    margin: 0;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background: var(--control-bg);
+    box-shadow: none;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+html[data-look-variant="b"] #view-gallery #btn-tag:hover {
+    background: var(--surface-3);
+}
+
+/* The gallery tools use the short name ("AI Tag"; the Chinese one is short
+   already) and the one row makes room for it, so laptops keep one toolbar
+   row (1366: 23 px short in Chinese, about 100 in English). */
+html[data-look-variant="b"] #view-gallery #btn-tag .btn-tag-label {
+    display: none;
+}
+
+html[data-look-variant="b"] #view-gallery #btn-tag .btn-tag-short {
+    display: inline;
+    white-space: nowrap;
+}
+
+/* The slider follows the window (64 px at 1366, as before on wide screens);
+   the search box, which only narrows when room runs out, may go to 110 px. */
+html.pro-toolbar-one-row[data-look-variant="b"] #view-gallery #grid-size-slider {
+    width: clamp(64px, 4.5vw, 104px);
+}
+
+html.pro-toolbar-one-row[data-look-variant="b"] #view-gallery .gallery-header-left > .gallery-search-box {
+    min-width: 110px;
+    margin-left: 10px;
+}
+
+/* The Help menu reads guide first, then the language, at one weight (the
+   top bar's order and the language button's bold would carry over). */
+html[data-look-variant="b"] #pro-help-popover-body > #btn-help {
+    order: 1;
+}
+
+html[data-look-variant="b"] #pro-help-popover-body > #btn-language-toggle {
+    order: 2;
+}
+
+html[data-look-variant="b"] #pro-help-popover-body > button {
+    font-weight: 500;
 }
