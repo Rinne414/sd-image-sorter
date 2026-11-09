@@ -122,13 +122,14 @@ def count_prompt_coverage_in_folder_scope(
     }
 
 
-def get_library_folders() -> List[str]:
-    """Return the distinct directories that contain (readable) indexed images.
+def get_library_folder_counts() -> Dict[str, int]:
+    """Return each directory that holds (readable) indexed images, with how many.
 
     v3.3.2 Library Navigation. Paths are normalized to forward slashes so the
-    frontend can build a folder tree by splitting on "/". Each entry is the
-    immediate parent directory of one or more images; intermediate ancestor
-    folders are synthesized client-side. Recomputed per call (cheap dirname
+    frontend can build a folder tree by splitting on "/". Each key is the
+    immediate parent directory of one or more images and its value counts only
+    the images directly inside it; the frontend adds sub-folders up, the same
+    subtree the recursive folder filter shows. Recomputed per call (cheap dirname
     derivation) so the tree stays fresh right after a scan.
     """
     lib_sql, lib_params = _library_clause()
@@ -139,13 +140,19 @@ def get_library_folders() -> List[str]:
             lib_params,
         ).fetchall()
 
-    folders: set[str] = set()
+    counts: Dict[str, int] = {}
     for row in rows:
         normalized = str(row["path"] or "").replace("\\", "/")
         slash = normalized.rfind("/")
         if slash > 0:
-            folders.add(normalized[:slash])
-    return sorted(folders)
+            folder = normalized[:slash]
+            counts[folder] = counts.get(folder, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def get_library_folders() -> List[str]:
+    """Return the distinct directories that contain (readable) indexed images."""
+    return list(get_library_folder_counts())
 
 
 def get_missing_image_reconnect_candidates(limit: Optional[int] = None) -> List[Dict[str, Any]]:

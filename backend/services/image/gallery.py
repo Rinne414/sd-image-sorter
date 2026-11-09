@@ -692,8 +692,13 @@ class GalleryMixin:
         return {"total": int(total)}
 
     def get_library_folders(self) -> Dict[str, Any]:
-        """List distinct image directories for the gallery folder tree (v3.3.2 Library Navigation)."""
-        return {"folders": db.get_library_folders()}
+        """List distinct image directories for the gallery folder tree (v3.3.2 Library Navigation).
+
+        ``counts`` maps each directory to the images directly inside it, so the
+        tree can show how many pictures a folder (with its sub-folders) holds.
+        """
+        counts = db.get_library_folder_counts()
+        return {"folders": list(counts), "counts": counts}
 
     def get_library_roots(self) -> Dict[str, Any]:
         """List registered library roots, each with a live indexed-image count (v3.3.2).

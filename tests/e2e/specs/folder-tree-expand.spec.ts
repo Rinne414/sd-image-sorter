@@ -43,7 +43,9 @@ test('one scanned folder opens on its first level of sub-folders', async ({ page
   // row; its real folders were one click away. Deeper levels stay folded.
   const ROOT = 'D:/library/pictures'
   const folders = [`${ROOT}/characters/rin`, `${ROOT}/characters/others`, `${ROOT}/commissions`, `${ROOT}/daily`]
-  await page.route('**/api/folders', (route) => route.fulfill({ json: { folders } }))
+  // Direct pictures per folder, as /api/folders sends them; rows add sub-folders up.
+  const counts = { [`${ROOT}/characters/rin`]: 3, [`${ROOT}/characters/others`]: 2, [`${ROOT}/commissions`]: 4, [`${ROOT}/daily`]: 1 }
+  await page.route('**/api/folders', (route) => route.fulfill({ json: { folders, counts } }))
   await page.addInitScript(() => {
     localStorage.setItem('sd-image-sorter-lang', 'en')
     localStorage.setItem('sd-sorter-entry-skip-session', '1')
@@ -58,4 +60,9 @@ test('one scanned folder opens on its first level of sub-folders', async ({ page
   }
   await expect(page.locator(`#folder-tree [data-action="toggle"][data-path="${ROOT}/characters"]`)).toHaveAttribute('aria-expanded', 'false')
   await expect(page.locator(`#folder-tree .folder-row-open[data-path="${ROOT}/characters/rin"]`)).toHaveCount(0)
+
+  // Each row counts its folder with everything below it (the folder filter is recursive).
+  await expect(page.locator(`#folder-tree .folder-row-open[data-path="${ROOT}"] .folder-row-count`)).toHaveText('10')
+  await expect(page.locator(`#folder-tree .folder-row-open[data-path="${ROOT}/characters"] .folder-row-count`)).toHaveText('5')
+  await expect(page.locator(`#folder-tree .folder-row-open[data-path="${ROOT}/daily"] .folder-row-count`)).toHaveText('1')
 })

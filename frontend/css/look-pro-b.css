@@ -37,7 +37,8 @@ html[data-look-variant="b"] .sidebar-section-title {
     color: var(--text-2);
 }
 
-html[data-look-variant="b"] #collections-list .collection-row-count {
+html[data-look-variant="b"] #collections-list .collection-row-count,
+html[data-look-variant="b"] #folder-tree .folder-row-count {
     color: var(--text-2);
 }
 

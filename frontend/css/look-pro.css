@@ -180,7 +180,8 @@ html[data-look="pro"] #collections-list .collection-row-open {
 }
 
 html[data-look="pro"] #collections-list .collection-row-count,
-html[data-look="pro"] #collections-list .collection-row.is-active .collection-row-count {
+html[data-look="pro"] #collections-list .collection-row.is-active .collection-row-count,
+html[data-look="pro"] #folder-tree .folder-row-count {
     min-width: 0;
     padding: 0;
     background: transparent;

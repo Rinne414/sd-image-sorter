@@ -42,6 +42,7 @@ from db_query import _apply_date_filter
 # ``database.X``.
 _REEXPORTED_READ_NAMES = [
     "get_images_in_folder_scope",
+    "get_library_folder_counts",
     "get_library_folders",
     "get_missing_image_reconnect_candidates",
     "get_images",
@@ -609,6 +610,9 @@ class TestLightReaders:
         folders = db.get_library_folders()
 
         assert folders == ["/lib/a", "/lib/b"]
+        # Direct pictures per folder (the tree adds sub-folders up); an
+        # unreadable picture counts nowhere, as it shows nowhere.
+        assert db.get_library_folder_counts() == {"/lib/a": 2, "/lib/b": 1}
 
     def test_missing_reconnect_candidates_flag_unresolvable_paths_and_respect_limit(
         self, test_db

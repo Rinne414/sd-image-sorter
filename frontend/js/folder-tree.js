@@ -91,6 +91,7 @@
                 this._folders = folders;
                 this._libraryDirs = new Set(folders.map((path) => normalizePath(path)));
                 this._tree = this._buildTree(folders);
+                this._addCounts(this._tree, result?.counts);
                 // Sync the highlighted/active folder from the persisted gallery
                 // filter so a reload keeps the tree and the gallery in step.
                 const current = normalizePath(appRef().AppState?.filters?.folder || '');
@@ -129,6 +130,23 @@
                     onAction: () => this.refresh({ manual: true }),
                 },
             );
+        },
+
+        /**
+         * Each node's picture count: its own pictures plus every sub-folder's,
+         * which is what clicking the row shows (the folder filter is
+         * recursive). Without counts from the server no row shows a number.
+         */
+        _addCounts(root, counts) {
+            if (!counts || typeof counts !== 'object') return;
+            const direct = new Map(Object.entries(counts).map(([path, n]) => [normalizePath(path), Number(n) || 0]));
+            const sum = (node) => {
+                let total = direct.get(node.path) || 0;
+                node.children.forEach((kid) => { total += sum(kid); });
+                node.count = total;
+                return total;
+            };
+            root.children.forEach((node) => sum(node));
         },
 
         /** Build a nested tree (Map of children) from a flat list of dir paths. */
@@ -325,6 +343,7 @@
                 + `aria-pressed="${isActive ? 'true' : 'false'}" title="${safePath}">`
                 + '<span class="folder-row-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span>'
                 + `<span class="folder-row-name">${this._chainLabelHtml(chain)}</span>`
+                + (Number.isFinite(node.count) ? `<span class="folder-row-count">${node.count}</span>` : '')
                 + '</button></div>';
 
             if (hasKids && isExpanded) {

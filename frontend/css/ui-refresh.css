@@ -9869,7 +9869,9 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--accent-primary);
     font-weight: 600;
 }
-.collection-row-count {
+/* Folder rows count like collection rows (js/folder-tree.js _addCounts). */
+.collection-row-count,
+.folder-row-count {
     background: rgba(255, 255, 255, 0.08);
     border-radius: 999px;
     color: var(--text-muted);
