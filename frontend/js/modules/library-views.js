@@ -4,9 +4,9 @@
  * count; a click shows that view.
  *
  * Blind judges (2026-11-09, rounds 17-18) asked for Eagle-style default views
- * (All / Untagged / Recent). The filters already exist, so this adds entrances,
- * not new filtering: "Without tags" is the noCaption filter (no AI caption and
- * no natural-language caption yet), "Last 7 days" is dateFrom (file time).
+ * (All / Untagged / Recent). "Not tagged yet" is the untagged filter
+ * (tagged_at is empty: no AI tagging run and no tag edit, the tagger's own
+ * "untagged only" definition); "Last 7 days" is dateFrom (file time).
  * A view starts from the default filters, like loading a saved preset.
  * Counts come from POST /api/images/count (the smart-folder path) and refresh
  * when the gallery reloads.
@@ -29,7 +29,7 @@
 
     const VIEWS = [
         { id: 'all', icon: 'i-images', key: 'libraryViews.all', label: 'All pictures', filters: () => ({}) },
-        { id: 'untagged', icon: 'i-tag', key: 'libraryViews.untagged', label: 'Without tags', filters: () => ({ noCaption: true }) },
+        { id: 'untagged', icon: 'i-tag', key: 'libraryViews.untagged', label: 'Not tagged yet', filters: () => ({ untagged: true }) },
         { id: 'recent', icon: 'i-clock', key: 'libraryViews.recent', label: 'Last 7 days', filters: () => ({ dateFrom: isoDaysAgo(7) }) },
     ];
 

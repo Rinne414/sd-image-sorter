@@ -190,7 +190,7 @@ test('parser maps the full grammar onto FilterStore shapes', async ({ page }) =>
       warnColor: q.parse('color:sparkly').warnings.length,
       warnStars: q.parse('stars<=2').warnings.length,
       starsOk: q.parse('stars>=4').scalars,
-      hasNo: { has: q.parse('has:params').scalars, no: q.parse('no:caption').scalars },
+      hasNo: { has: q.parse('has:params').scalars, no: q.parse('no:caption').scalars, noTags: q.parse('no:tags').scalars },
       unknownKeyFree: q.parse('re:zero').freeText,
       // date: file-time day range (timeline-eval memo §4)
       dateDay: q.parse('date:2026-05-02').scalars,
@@ -226,6 +226,7 @@ test('parser maps the full grammar onto FilterStore shapes', async ({ page }) =>
   expect(parsed.starsOk.minUserRating).toBe(4)
   expect(parsed.hasNo.has.hasMetadata).toBe(true)
   expect(parsed.hasNo.no.noCaption).toBe(true)
+  expect(parsed.hasNo.noTags.untagged).toBe(true)
   expect(parsed.unknownKeyFree).toEqual(['re:zero'])
   expect(parsed.dateDay).toMatchObject({ dateFrom: '2026-05-02', dateTo: '2026-05-02' })
   expect(parsed.dateMonth).toMatchObject({ dateFrom: '2026-05-01', dateTo: '2026-05-31' })

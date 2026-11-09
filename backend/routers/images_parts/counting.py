@@ -83,6 +83,7 @@ def count_images(
     has_metadata: Optional[bool] = Query(default=None),
     # Aurora Phase 3 gallery filters
     no_caption: Optional[bool] = Query(default=None, description="Only images with no AI and no NL caption."),
+    untagged: Optional[bool] = Query(default=None, description="Only images never tagged (tagged_at is empty)."),
     media_type: Optional[str] = Query(default=None, description="image or video. Anything else means no filter."),
     aesthetic_unscored: Optional[bool] = Query(default=None, description="Only images with no aesthetic score. Takes precedence over min/max_aesthetic."),
     min_saturation: Optional[float] = Query(default=None, ge=0, le=255),
@@ -146,6 +147,7 @@ def count_images(
         folder=folder,
         has_metadata=has_metadata,
         no_caption=no_caption,
+        untagged=untagged,
         media_type=media_type,
         aesthetic_unscored=aesthetic_unscored,
         min_saturation=min_saturation,

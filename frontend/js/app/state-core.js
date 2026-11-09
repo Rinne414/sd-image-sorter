@@ -200,6 +200,7 @@ window.AppFilterAccess = {
         if (filters.hasMetadata != null) params.set('has_metadata', String(filters.hasMetadata));
         // Aurora Phase 3 toolbar/24d filters
         if (filters.noCaption === true) params.set('no_caption', 'true');
+        if (filters.untagged === true) params.set('untagged', 'true');
         if (filters.aestheticUnscored === true) params.set('aesthetic_unscored', 'true');
         if (filters.minSaturation != null) params.set('min_saturation', filters.minSaturation);
         if (filters.maxSaturation != null) params.set('max_saturation', filters.maxSaturation);

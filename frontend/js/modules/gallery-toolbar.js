@@ -37,7 +37,7 @@
         brightnessMin: null, brightnessMax: null,
         minSaturation: null, maxSaturation: null,
         colorTemperature: '', brightnessDistribution: '',
-        hasMetadata: null, noCaption: null,
+        hasMetadata: null, noCaption: null, untagged: null,
         folder: null, artist: null,
         dateFrom: null, dateTo: null,
     };
@@ -607,6 +607,11 @@
             id: 'chip-no-caption',
             isActive: (f) => f.noCaption === true,
             toggle: (f, on) => { f.noCaption = on ? true : null; },
+        },
+        {
+            id: 'chip-untagged',
+            isActive: (f) => f.untagged === true,
+            toggle: (f, on) => { f.untagged = on ? true : null; },
         },
     ];
 

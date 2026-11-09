@@ -160,6 +160,7 @@
         { syntax: 'folder:VALUE', example: 'folder:keep', descKey: 'searchHelp.folder' },
         { syntax: 'has:params / no:params', example: 'has:params', descKey: 'searchHelp.hasParams' },
         { syntax: 'no:caption', example: 'no:caption', descKey: 'searchHelp.noCaption' },
+        { syntax: 'no:tags', example: 'no:tags', descKey: 'searchHelp.noTags' },
         { syntax: 'key:a..b', example: 'score:6..8', descKey: 'searchHelp.range' },
         { syntax: 'contains(text)', example: 'contains(red)', descKey: 'searchHelp.contains' },
     ];
@@ -562,7 +563,12 @@
                     pushFilterPart(result, 'no', '', 'caption');
                     return;
                 }
-                pushWarning(result, token, 'searchWarn.no', 'no:params / no:caption');
+                if (what === 'tags' || what === 'tag' || what === '标签') {
+                    result.scalars.untagged = true;
+                    pushFilterPart(result, 'no', '', 'tags');
+                    return;
+                }
+                pushWarning(result, token, 'searchWarn.no', 'no:params / no:caption / no:tags');
                 return;
             }
             default:

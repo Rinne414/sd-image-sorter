@@ -236,6 +236,15 @@ test.describe('Aurora Phase 3 — gallery toolbar', () => {
       return await page.evaluate(() => (window as any).App.AppState.filters.noCaption)
     }).toBe(true)
 
+    // Not tagged yet: the untagged filter, its own field next to the caption one.
+    await page.locator('#chip-untagged').click()
+    await expect(page.locator('#chip-untagged')).toHaveAttribute('aria-pressed', 'true')
+    await expect.poll(async () => {
+      return await page.evaluate(() => (window as any).App.AppState.filters.untagged)
+    }).toBe(true)
+    await page.locator('#chip-untagged').click()
+    await expect(page.locator('#chip-untagged')).toHaveAttribute('aria-pressed', 'false')
+
     await page.locator('#chip-has-metadata').click()
     await page.locator('#chip-no-caption').click()
     await expect(page.locator('#chip-has-metadata')).toHaveAttribute('aria-pressed', 'false')

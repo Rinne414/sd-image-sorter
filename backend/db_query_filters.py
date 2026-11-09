@@ -576,6 +576,22 @@ def _apply_no_caption_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_untagged_filter(conditions: List[str], params: List[Any],
+                           untagged: Optional[bool]) -> tuple:
+    """Restrict to images that were never tagged (the "Not tagged yet" view).
+
+    The same definition as the tagger's "untagged only" run, the library-health
+    count and ``get_untagged_image_ids``: ``tagged_at IS NULL``. Every tag write
+    (an AI tagging run or a tag edit) stamps ``tagged_at``; tags read from a
+    sidecar file do not, so those pictures still count as not tagged. ``None``
+    (or falsy) is a no-op; no parameters are bound.
+    """
+    if not untagged:
+        return conditions, params
+    conditions.append("i.tagged_at IS NULL")
+    return conditions, params
+
+
 def _apply_media_type_filter(conditions: List[str], params: List[Any],
                              media_type: Optional[str]) -> tuple:
     """Restrict to pictures or videos (``images.media_type``, migration 065).

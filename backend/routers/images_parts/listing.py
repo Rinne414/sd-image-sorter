@@ -340,6 +340,10 @@ def get_images(
         default=None,
         description="When true, only images with neither an AI caption nor an NL caption (both empty). Aurora Phase 3.",
     ),
+    untagged: Optional[bool] = Query(
+        default=None,
+        description="When true, only images never tagged: no AI tagging run and no tag edit (tagged_at is empty).",
+    ),
     media_type: Optional[str] = Query(
         default=None,
         description="image or video: show only pictures or only videos. Anything else means no filter.",
@@ -446,6 +450,7 @@ def get_images(
         folder=folder,
         has_metadata=has_metadata,
         no_caption=no_caption,
+        untagged=untagged,
         media_type=media_type,
         aesthetic_unscored=aesthetic_unscored,
         min_saturation=min_saturation,

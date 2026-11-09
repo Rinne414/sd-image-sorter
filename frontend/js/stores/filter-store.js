@@ -91,6 +91,7 @@
             // Aurora Phase 3 toolbar/24d filters:
             // no AI caption at all (ai_caption AND nl_caption both empty).
             noCaption: null,
+            untagged: null,
             // aesthetic_score IS NULL (the "Unscored" quick tier).
             aestheticUnscored: null,
             // color saturation range 0-255 (same column as the saturation sort).
@@ -173,6 +174,7 @@
             hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
             // Aurora Phase 3 toolbar/24d filters
             noCaption: source.noCaption === true ? true : null,
+            untagged: source.untagged === true ? true : null,
             aestheticUnscored: source.aestheticUnscored === true ? true : null,
             minSaturation: source.minSaturation ?? null,
             maxSaturation: source.maxSaturation ?? null,

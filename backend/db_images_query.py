@@ -46,6 +46,7 @@ from db_query import (
     _apply_aesthetic_filter,
     _apply_saturation_filter,
     _apply_no_caption_filter,
+    _apply_untagged_filter,
     _apply_media_type_filter,
     _apply_seed_filter,
     _apply_anime_aesthetic_filter,
@@ -113,6 +114,7 @@ def get_images(
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     # Aurora Phase 3 gallery filters
     no_caption: Optional[bool] = None,
+    untagged: Optional[bool] = None,
     media_type: Optional[str] = None,
     aesthetic_unscored: Optional[bool] = None,
     min_saturation: Optional[float] = None,
@@ -228,6 +230,7 @@ def get_images(
             conditions, params, min_saturation, max_saturation
         )
         conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
+        conditions, params = _apply_untagged_filter(conditions, params, untagged)
         conditions, params = _apply_media_type_filter(conditions, params, media_type)
         conditions, params = _apply_seed_filter(conditions, params, seed)
         conditions, params = _apply_anime_aesthetic_filter(
@@ -337,6 +340,7 @@ def get_filtered_image_count(
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     # Aurora Phase 3 gallery filters
     no_caption: Optional[bool] = None,
+    untagged: Optional[bool] = None,
     media_type: Optional[str] = None,
     aesthetic_unscored: Optional[bool] = None,
     min_saturation: Optional[float] = None,
@@ -440,6 +444,7 @@ def get_filtered_image_count(
             conditions, params, min_saturation, max_saturation
         )
         conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
+        conditions, params = _apply_untagged_filter(conditions, params, untagged)
         conditions, params = _apply_media_type_filter(conditions, params, media_type)
         conditions, params = _apply_seed_filter(conditions, params, seed)
         conditions, params = _apply_anime_aesthetic_filter(
@@ -552,6 +557,7 @@ def get_filtered_image_ids(
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     # Aurora Phase 3 gallery filters
     no_caption: Optional[bool] = None,
+    untagged: Optional[bool] = None,
     media_type: Optional[str] = None,
     aesthetic_unscored: Optional[bool] = None,
     min_saturation: Optional[float] = None,
@@ -658,6 +664,7 @@ def get_filtered_image_ids(
             conditions, params, min_saturation, max_saturation
         )
         conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
+        conditions, params = _apply_untagged_filter(conditions, params, untagged)
         conditions, params = _apply_media_type_filter(conditions, params, media_type)
         conditions, params = _apply_seed_filter(conditions, params, seed)
         conditions, params = _apply_anime_aesthetic_filter(

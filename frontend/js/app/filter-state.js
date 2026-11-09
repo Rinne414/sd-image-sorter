@@ -107,6 +107,7 @@ function cloneFilterState(filters) {
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
         // Aurora Phase 3 toolbar/24d filters
         noCaption: source.noCaption === true ? true : null,
+        untagged: source.untagged === true ? true : null,
         aestheticUnscored: source.aestheticUnscored === true ? true : null,
         minSaturation: source.minSaturation ?? null,
         maxSaturation: source.maxSaturation ?? null,
@@ -203,6 +204,7 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
         // Aurora Phase 3 toolbar/24d filters
         noCaption: source.noCaption === true ? true : null,
+        untagged: source.untagged === true ? true : null,
         aestheticUnscored: source.aestheticUnscored === true ? true : null,
         minSaturation: source.minSaturation ?? null,
         maxSaturation: source.maxSaturation ?? null,
@@ -268,6 +270,7 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
 function buildNewerFilterSignatureKeys(request) {
     const keys = {};
     if (request.noCaption === true) keys.noCaption = true;
+    if (request.untagged === true) keys.untagged = true;
     if (normalizeMediaTypeFilter(request.mediaType)) keys.mediaType = request.mediaType;
     if (request.aestheticUnscored === true) keys.aestheticUnscored = true;
     if (request.minSaturation != null) keys.minSaturation = request.minSaturation;

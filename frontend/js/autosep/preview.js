@@ -55,6 +55,7 @@ function getAutoSepFilterSignature(filters) {
         colorHues: contract.colorHues || [],
         excludeColorHues: contract.excludeColorHues || [],
         noCaption: contract.noCaption ?? null,
+        untagged: contract.untagged ?? null,
         aestheticUnscored: contract.aestheticUnscored ?? null,
         minSaturation: contract.minSaturation ?? null,
         maxSaturation: contract.maxSaturation ?? null,
@@ -216,6 +217,7 @@ function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
         colorHues: contract.colorHues?.length > 0 ? contract.colorHues : null,
         excludeColorHues: contract.excludeColorHues?.length > 0 ? contract.excludeColorHues : null,
         noCaption: contract.noCaption === true ? true : null,
+        untagged: contract.untagged === true ? true : null,
         mediaType: contract.mediaType || null,
         aestheticUnscored: contract.aestheticUnscored === true ? true : null,
         minSaturation: contract.minSaturation ?? null,
@@ -387,7 +389,7 @@ async function updateAutoSepPreview() {
         Boolean(filters.collectionId) || Boolean(filters.folder) ||
         typeof filters.hasMetadata === 'boolean' ||
         (filters.colorHues?.length > 0) || (filters.excludeColorHues?.length > 0) ||
-        filters.noCaption === true || filters.aestheticUnscored === true ||
+        filters.noCaption === true || filters.untagged === true || filters.aestheticUnscored === true ||
         Boolean(filters.mediaType) ||
         filters.minSaturation != null || filters.maxSaturation != null ||
         filters.seed != null || Boolean(filters.dateFrom) || Boolean(filters.dateTo) ||

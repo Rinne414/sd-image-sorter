@@ -480,8 +480,9 @@ test('pro look: Duplicate Cleanup and the Tags library are sized to their conten
   await expect(page.locator('#btn-close-tags-library-2')).toBeHidden()
 })
 
-test('Professional look: Quick views count and show All, Without tags and Last 7 days', async ({ page }) => {
-  // Rounds 17-18: Eagle-style default views; they reuse the noCaption and dateFrom filters.
+test('Professional look: Quick views count and show All, Not tagged yet and Last 7 days', async ({ page }) => {
+  // Rounds 17-18: Eagle-style default views. "Not tagged yet" is the untagged
+  // filter (tagged_at empty), not the caption filter a tagging run never changes.
   await page.setViewportSize({ width: 1920, height: 1080 })
   await open(page, 'pro-b')
   await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
@@ -490,11 +491,16 @@ test('Professional look: Quick views count and show All, Without tags and Last 7
   await expect(page.locator('#pro-library-views .pro-library-view[data-view="all"]')).toHaveClass(/is-active/)
   await expect(page.locator('#pro-library-views [data-view="all"] .pro-library-view-count')).toHaveText(/^\d+$/)
 
+  // The row's count is what the server counts for the same filter.
+  const expected = await page.evaluate(async () => (await (await fetch('/api/images/count?untagged=true')).json()).total)
+  await expect(page.locator('#pro-library-views [data-view="untagged"] .pro-library-view-count')).toHaveText(String(expected))
+
   await page.locator('#pro-library-views [data-view="untagged"]').click()
-  await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.noCaption)).toBe(true)
+  await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.untagged)).toBe(true)
+  await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.noCaption)).toBeFalsy()
   await expect(page.locator('#pro-library-views [data-view="untagged"]')).toHaveClass(/is-active/)
   await page.locator('#pro-library-views [data-view="all"]').click()
-  await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.noCaption)).toBeFalsy()
+  await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.untagged)).toBeFalsy()
 
   // Proposal A and today's look do not show the list.
   await page.evaluate(() => (window as any).SdLook.set('pro'))

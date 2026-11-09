@@ -717,12 +717,13 @@
     {
       "id": "gallery.quick-chips",
       "area": "gallery",
-      "en": "Quick filter chips (has params, aesthetic 7+, no caption)",
-      "zh": "快捷筛选（有参数、美学 7+、无描述）",
+      "en": "Quick filter chips (has params, aesthetic 7+, no caption, not tagged yet)",
+      "zh": "快捷筛选（有参数、美学 7+、无描述、未打标签）",
       "classic": [
         "#chip-has-metadata",
         "#chip-aesthetic-7",
-        "#chip-no-caption"
+        "#chip-no-caption",
+        "#chip-untagged"
       ],
       "vopus": {
         "at": "#/library",

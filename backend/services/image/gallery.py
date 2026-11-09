@@ -239,6 +239,7 @@ class GalleryMixin:
         has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
         # Aurora Phase 3 gallery filters
         no_caption: Optional[bool] = None,  # both ai_caption and nl_caption empty
+        untagged: Optional[bool] = None,  # never tagged (tagged_at IS NULL)
         media_type: Optional[str] = None,
         aesthetic_unscored: Optional[bool] = None,  # aesthetic_score IS NULL; takes precedence over min/max_aesthetic
         min_saturation: Optional[float] = None,
@@ -271,6 +272,8 @@ class GalleryMixin:
             aspect_ratio: 'square', 'landscape', or 'portrait'
             media_type: 'image' or 'video' to show only pictures or only videos
             no_caption: When true, only images with neither an ai_caption nor an nl_caption
+            untagged: When true, only images never tagged (tagged_at IS NULL), the
+                definition the tagger's "untagged only" run uses
             aesthetic_unscored: When true, only images with no aesthetic score. Takes
                 precedence over min_aesthetic/max_aesthetic when both are supplied
                 (the range is ignored so "unscored" cannot contradict a numeric bound).
@@ -343,6 +346,7 @@ class GalleryMixin:
                     folder=folder,
                     has_metadata=has_metadata,
                     no_caption=no_caption,
+                    untagged=untagged,
                     media_type=media_type,
                     aesthetic_unscored=aesthetic_unscored,
                     min_saturation=min_saturation,
@@ -436,6 +440,7 @@ class GalleryMixin:
                 folder=folder,
                 has_metadata=has_metadata,
                 no_caption=no_caption,
+                untagged=untagged,
                 media_type=media_type,
                 aesthetic_unscored=aesthetic_unscored,
                 min_saturation=min_saturation,
@@ -502,6 +507,7 @@ class GalleryMixin:
             folder=folder,
             has_metadata=has_metadata,
             no_caption=no_caption,
+            untagged=untagged,
             media_type=media_type,
             aesthetic_unscored=aesthetic_unscored,
             min_saturation=min_saturation,
@@ -598,6 +604,7 @@ class GalleryMixin:
         has_metadata: Optional[bool] = None,
         # Aurora Phase 3 gallery filters
         no_caption: Optional[bool] = None,
+        untagged: Optional[bool] = None,
         media_type: Optional[str] = None,
         aesthetic_unscored: Optional[bool] = None,
         min_saturation: Optional[float] = None,
@@ -672,6 +679,7 @@ class GalleryMixin:
             folder=folder,
             has_metadata=has_metadata,
             no_caption=no_caption,
+            untagged=untagged,
             media_type=media_type,
             aesthetic_unscored=aesthetic_unscored,
             min_saturation=min_saturation,

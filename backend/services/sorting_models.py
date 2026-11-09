@@ -394,6 +394,7 @@ class SortFilterRequest(BaseModel):
     # contract (SelectionIdsRequest) carries them. Without them a move or a
     # sort session touched more pictures than the Gallery showed.
     no_caption: Optional[bool] = None
+    untagged: Optional[bool] = None
     # 'image' or 'video' (library media type); anything else means no filter.
     media_type: Optional[str] = None
     aesthetic_unscored: Optional[bool] = None
@@ -586,6 +587,7 @@ class BatchMoveRequest(SortFilterRequest):
             self.max_waifu,
             # Only True narrows the set; False is "no restriction" in the DB layer.
             self.no_caption or None,
+            self.untagged or None,
             self.media_type,
             self.aesthetic_unscored or None,
         )

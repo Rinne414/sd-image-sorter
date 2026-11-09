@@ -74,6 +74,7 @@ SAMPLE_VALUES = {
     "collectionId": 7,
     "scope": "current_session",
     "noCaption": True,
+    "untagged": True,
     "mediaType": "video",
     "aestheticUnscored": True,
     "minSaturation": 20.0,

@@ -78,6 +78,7 @@ def create_selection_token(
         folder=request.folder,
         has_metadata=request.hasMetadata,
         no_caption=request.noCaption,
+        untagged=request.untagged,
         media_type=request.mediaType,
         aesthetic_unscored=request.aestheticUnscored,
         min_saturation=request.minSaturation,
