@@ -2020,3 +2020,90 @@ html[data-look="pro"] #tags-library-modal .modal-content {
 html[data-look="pro"] #btn-close-tags-library-2 {
     display: none;
 }
+
+/* ---- The comfort ribbon in the pro looks (walkthrough 2026-11-09) ----
+   "今日 · 收藏 N 张" stayed all day as a full-width blue bar that ran under the
+   details panel; the sidebar's Favourites row already counts them, so the pro
+   looks leave the daily line out (today's look keeps it). The one-off
+   "restored your place" note stays, neutral and clear of the panel. */
+html[data-look="pro"] #gallery-comfort-ribbon[data-mode="today"] {
+    display: none !important;
+}
+
+html[data-look="pro"] #gallery-comfort-ribbon {
+    border-color: var(--hairline-2);
+    border-radius: var(--pro-r-control);
+    background: var(--surface-2);
+    color: var(--text-2);
+}
+
+html[data-look="pro"].pro-inspector-open #gallery-comfort-ribbon {
+    margin-right: var(--pro-inspector-w);
+}
+
+/* ---- Selection mode shows one kind of number (walkthrough 2026-11-09) ----
+   Every tile carried its place in the sort (1, 2, 3...) beside the checkbox
+   while picked tiles showed their pick order (check 1, 2, 3) in the same
+   corner, so tile #3 could read "1". The pro looks keep the pick order on
+   picked tiles and show the place in the sort on hover, as outside selection
+   mode. */
+html[data-look="pro"] .gallery-grid.selection-mode .gallery-item:not(:hover):not(:focus-within) .gallery-item-order {
+    opacity: 0;
+}
+
+/* ---- The picture viewer in the pro looks (walkthrough 2026-11-09) ----
+   Opening a picture is the gallery's most common step, and the viewer kept
+   the old look: magenta parameter labels, LoRA and tag chips (the accent is
+   for the main action), the negative prompt in error red, the path in a
+   typewriter face, and a two-column parameter grid that left "Height" alone
+   on its own row. The rating chip keeps its own colour (set inline). */
+html[data-look="pro"] #image-modal .key-param strong {
+    color: var(--text-2);
+    font-weight: 500;
+}
+
+html[data-look="pro"] #image-modal :is(.lora-pill, .tags-list .tag) {
+    border: 0;
+    border-radius: 6px;
+    /* A step above the panel, which is itself surface-3. */
+    background: color-mix(in srgb, var(--surface-3), var(--text) 8%);
+    color: var(--text);
+    font-size: 12px;
+}
+
+html[data-look="pro"] #image-modal .lora-pill:hover {
+    background: color-mix(in srgb, var(--surface-3), var(--text) 16%);
+}
+
+html[data-look="pro"] #image-modal .modal-negative-text {
+    color: var(--text-2);
+}
+
+/* tokens.css sets the typewriter face on every class containing "-path",
+   the block around the path included, so inherit would keep it. */
+html[data-look="pro"] #image-modal .modal-file-path {
+    font-family: var(--font-body);
+    font-size: 12px;
+}
+
+html[data-look="pro"] #image-modal .params-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+}
+
+html[data-look="pro"] #image-modal .param-item {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 8px;
+    font-size: 13px;
+}
+
+html[data-look="pro"] #image-modal .param-item .param-label {
+    color: var(--text-2);
+    font-weight: 400;
+}
+
+html[data-look="pro"] #image-modal .param-item .param-value {
+    color: var(--text);
+    text-align: left;
+}

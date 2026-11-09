@@ -594,3 +594,42 @@ test('pro look: with no picture shown the details panel shows the library at a g
   await panel.locator('.pro-inspector-todo-start').click()
   await expect(page.locator('#tag-modal')).toHaveClass(/visible/)
 })
+
+test('pro look: the viewer keeps the accent for its main action; selection shows one kind of number', async ({ page }) => {
+  // Walkthrough 2026-11-09: magenta labels and chips in the viewer, the
+  // negative prompt in error red, and sort numbers beside pick numbers.
+  const ACCENT = 'rgb(213, 35, 122)'
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await open(page, 'pro-b')
+  const tiles = page.locator('#gallery-grid .gallery-item')
+  await expect(tiles.first()).toBeVisible()
+
+  // The daily "today: favourited N" ribbon is not drawn in the pro looks.
+  await page.evaluate(() => {
+    const ribbon = document.getElementById('gallery-comfort-ribbon')!
+    ribbon.dataset.mode = 'today'
+    ribbon.hidden = false
+    ribbon.textContent = 'Today'
+  })
+  await expect(page.locator('#gallery-comfort-ribbon')).toBeHidden()
+
+  // Selection mode: the place in the sort shows only on hover.
+  await page.locator('#btn-toggle-select').click()
+  await tiles.nth(1).click()
+  await page.mouse.move(2, 1070)
+  const order = tiles.nth(3).locator('.gallery-item-order')
+  await expect.poll(() => order.evaluate((node) => getComputedStyle(node).opacity)).toBe('0')
+  await tiles.nth(3).hover()
+  await expect.poll(() => order.evaluate((node) => getComputedStyle(node).opacity)).toBe('1')
+  await page.locator('#btn-toggle-select').click()
+
+  // The viewer: neutral labels, no error red on the negative prompt.
+  await tiles.first().dblclick()
+  await expect(page.locator('#image-modal')).toHaveClass(/visible/)
+  const colors = await page.evaluate(() => {
+    const color = (sel: string) => { const node = document.querySelector(sel); return node ? getComputedStyle(node).color : null }
+    return { label: color('#image-modal .key-param strong'), negative: color('#image-modal .modal-negative-text') }
+  })
+  if (colors.label) expect(colors.label).not.toBe(ACCENT)
+  if (colors.negative) expect(colors.negative).not.toBe('rgb(222, 107, 102)')
+})
