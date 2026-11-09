@@ -247,18 +247,22 @@ html[data-look-variant="b"] #collections-list .collection-row-count.is-zero {
 
 /* ---- One More menu beside the count (round 13: "two unlabelled icons right
    of the count"): random picture and find moved images, each with its name. */
+/* A labelled menu like View ("Tools ▾"): a bare "…" read as a mystery
+   control in rounds 16-18. */
 html[data-look-variant="b"] #view-gallery .pro-more-btn {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    gap: 6px;
     box-sizing: border-box;
-    width: var(--pro-control-h);
     height: var(--pro-control-h);
-    padding: 0;
-    border: 0;
+    padding: 0 10px;
+    border: 1px solid var(--hairline-2);
     border-radius: var(--pro-r-control);
     background: transparent;
     color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
 }
 

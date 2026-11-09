@@ -397,6 +397,7 @@ window.I18nLang_en = {
     'look.proB': 'Professional',
     'gallery.viewMenu': 'View',
     'gallery.moreMenu': 'More actions',
+    'gallery.toolsMenu': 'Tools',
     'gallery.randomMenu': 'Random picture',
     'comfort.warmthTitle': 'Room warmth',
     'comfort.warmthBody': 'Cool studio, neutral, or slightly warm dark',

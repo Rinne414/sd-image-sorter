@@ -399,6 +399,7 @@ window.I18nLang_zhCN = {
     'look.proB': '专业',
     'gallery.viewMenu': '视图',
     'gallery.moreMenu': '更多操作',
+    'gallery.toolsMenu': '工具',
     'gallery.randomMenu': '随机看一张',
     'comfort.warmthTitle': '房间色温',
     'comfort.warmthBody': '冷工作室、中性、或略暖的深色',
