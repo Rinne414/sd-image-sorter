@@ -98,9 +98,15 @@
         return row;
     }
 
+    /** No picture shown: the library at a glance (modules/pro-inspector-overview.js). */
     function renderEmpty() {
         const body = el('pro-inspector-body');
         if (!body) return;
+        const overview = window.ProInspectorOverview?.build(t);
+        if (overview) {
+            body.replaceChildren(overview);
+            return;
+        }
         const note = document.createElement('p');
         note.className = 'pro-inspector-empty';
         // Drawn before I18n.init on the first load: data-i18n lets the first
@@ -108,6 +114,17 @@
         note.setAttribute('data-i18n', 'inspector.empty');
         note.textContent = t('inspector.empty', 'Point at a picture to see its details here.');
         body.replaceChildren(note);
+    }
+
+    /**
+     * New numbers or a new page of pictures: the overview redraws, and a shown
+     * picture the gallery no longer lists (another filter, another library)
+     * gives way to it.
+     */
+    function refreshOverview() {
+        if (shownId !== null && imageById(shownId)) return;
+        shownId = null;
+        renderEmpty();
     }
 
     /** A language switch redraws the panel in the new language. */
@@ -291,6 +308,8 @@
             applyOpen(next);
         });
         document.addEventListener('languageChanged', redraw);
+        window.addEventListener('library-stats-loaded', refreshOverview);
+        window.addEventListener('gallery-images-loaded', refreshOverview);
         el('gallery-grid')?.addEventListener('mouseover', onPointer);
         el('gallery-grid')?.addEventListener('focusin', onPointer);
         const toolbar = el('gallery-toolbar');

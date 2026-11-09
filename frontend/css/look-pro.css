@@ -1810,6 +1810,175 @@ html[data-look="pro"] .pro-inspector-actions {
     margin-top: 4px;
 }
 
+/* ---- The details panel with no picture shown: the library at a glance ----
+   (js/modules/pro-inspector-overview.js; Eagle and Billfish show the folder's
+   facts there instead of an empty column). */
+html[data-look="pro"] .pro-inspector-overview {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+html[data-look="pro"] .pro-inspector-overview-total {
+    margin: -8px 0 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] .pro-inspector-ranks {
+    display: grid;
+    gap: 2px;
+    margin: -4px -8px 0;
+}
+
+html[data-look="pro"] .pro-inspector-rank {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    height: 30px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+html[data-look="pro"] .pro-inspector-rank:hover {
+    background: var(--surface-3);
+}
+
+html[data-look="pro"] .pro-inspector-rank-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+html[data-look="pro"] .pro-inspector-rank-count {
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] .pro-inspector-tag-button {
+    border: 0;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+html[data-look="pro"] .pro-inspector-tag-button:hover {
+    background: color-mix(in srgb, var(--surface-3), var(--text) 10%);
+    color: var(--text);
+}
+
+/* A way on to the full lists, quieter than the picture actions (id: the
+   tokens' .btn:not(...) rule outranks a class). */
+html[data-look="pro"] #pro-inspector .pro-inspector-stats.btn {
+    align-self: flex-start;
+    height: 30px;
+    min-height: 30px;
+    margin: 0 0 0 -8px;
+    gap: 6px;
+    padding: 0 8px;
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] .pro-inspector-stats-icon {
+    display: inline-flex;
+}
+
+html[data-look="pro"] #pro-inspector .pro-inspector-stats.btn:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+html[data-look="pro"] .pro-inspector-overview .pro-inspector-empty {
+    margin: 4px 0 0;
+}
+
+/* ---- The statistics dialog (All statistics in the details panel) ----
+   It had no entrance until 2026-11-09 and kept the old look: as wide as the
+   window, accent-coloured headings and numbers, every card stretched to the
+   longest list. Three even columns, each list scrolls on its own. */
+html[data-look="pro"] #analytics-modal .modal-content {
+    width: min(1080px, calc(100vw - 64px));
+    max-width: min(1080px, calc(100vw - 64px));
+    overflow: hidden;
+}
+
+html[data-look="pro"] #analytics-modal .analytics-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+html[data-look="pro"] #analytics-modal .analytics-card {
+    min-width: 0;
+    gap: 8px;
+    padding: 14px 12px;
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--pro-r-panel);
+    background: var(--surface-1);
+}
+
+html[data-look="pro"] #analytics-modal .analytics-card h4 {
+    margin: 0 0 0 8px;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+html[data-look="pro"] #analytics-modal .analytics-list {
+    gap: 2px;
+    max-height: min(560px, calc(100vh - 280px));
+    overflow-y: auto;
+}
+
+html[data-look="pro"] #analytics-modal .analytics-item {
+    gap: 8px;
+    min-width: 0;
+    padding: 6px 8px;
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    color: var(--text);
+}
+
+html[data-look="pro"] #analytics-modal .analytics-item .item-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+html[data-look="pro"] #analytics-modal .analytics-item .item-count {
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] #analytics-modal .analytics-item.clickable:hover {
+    background: var(--surface-3);
+    transform: none;
+}
+
 /* ---- Dialogs sized to their content (UI audit #10) ----
    Duplicate Cleanup and the Tags & Prompts Library filled 90% of the window
    (1728 px at 1920) with their content in the left third. Duplicate Cleanup

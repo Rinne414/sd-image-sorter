@@ -506,3 +506,38 @@ test('Professional look: Quick views count and show All, Not tagged yet and Last
   await page.evaluate(() => (window as any).SdLook.set('pro'))
   await expect(page.locator('#pro-library-views')).toBeHidden()
 })
+
+test('pro look: with no picture shown the details panel shows the library at a glance', async ({ page }) => {
+  // Eagle and Billfish show the folder's facts when nothing is selected; ours
+  // was one line of text in an empty column (2026-11-09).
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await open(page, 'pro-b')
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+  const panel = page.locator('#pro-inspector')
+  await expect(panel.locator('.pro-inspector-overview .pro-inspector-name')).toBeVisible()
+
+  // Known numbers, so the rows are pinned whatever the test library holds.
+  await page.evaluate(() => {
+    const w = window as any
+    w.App.AppState.analytics = {
+      ...w.App.AppState.analytics,
+      totalImages: 12,
+      checkpoints: [{ checkpoint: 'model_a.safetensors', checkpoint_normalized: 'model_a', count: 9 }],
+      loras: [{ lora: 'lora_a', count: 4 }],
+      top_tags: [{ tag: 'silver_hair', count: 7 }],
+    }
+    window.dispatchEvent(new CustomEvent('library-stats-loaded'))
+  })
+  await expect(panel.locator('.pro-inspector-overview-total')).toHaveText('12 pictures')
+  await expect(panel.locator('.pro-inspector-rank')).toHaveCount(2)
+  await expect(panel.locator('.pro-inspector-tag-button')).toHaveText(['silver hair'])
+
+  // A model row shows only that model's pictures.
+  await panel.locator('.pro-inspector-rank', { hasText: 'model_a.safetensors' }).click()
+  await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.checkpoints)).toEqual(['model_a'])
+
+  // All statistics opens the statistics dialog.
+  await page.evaluate(() => (window as any).setAppFilters((window as any).createDefaultFilterState()))
+  await panel.locator('.pro-inspector-stats').click()
+  await expect(page.locator('#analytics-modal .analytics-grid')).toBeVisible()
+})

@@ -266,6 +266,12 @@ window.I18nLang_zhCN = {
     'inspector.title': '图片详情',
     'inspector.toggle': '显示或隐藏详情面板',
     'inspector.empty': '把鼠标移到一张图片上，这里会显示它的详情。',
+    'inspector.overviewCount': '{count} 张图片',
+    'inspector.topModels': '常用模型',
+    'inspector.topLoras': '常用 LoRA',
+    'inspector.topTags': '常见标签',
+    'inspector.allStats': '全部统计',
+    'inspector.filterBy': '只看含 {value} 的图',
     'inspector.size': '尺寸',
     'inspector.generator': '生成器',
     'inspector.model': '模型',
@@ -2540,7 +2546,7 @@ window.I18nLang_zhCN = {
     // ========================
     'modal.analytics': '图片分析',
     'modal.topCheckpoints': '热门模型',
-    'modal.topLoras': '热门 LoRAs',
+    'modal.topLoras': '热门 LoRA',
     'modal.topTags': '热门标签',
 
     // ========================

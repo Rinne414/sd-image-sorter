@@ -50,6 +50,8 @@ async function loadStats() {
             scanStatus,
             scanLibraryReady
         };
+        // The pro look's details panel shows these numbers while no picture is shown.
+        window.dispatchEvent(new CustomEvent('library-stats-loaded'));
 
         // The image-count label renders "shown / library total" off this very
         // number, and stats can land after the gallery load — re-render it so

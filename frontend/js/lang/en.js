@@ -263,6 +263,12 @@ window.I18nLang_en = {
     'inspector.title': 'Picture details',
     'inspector.toggle': 'Show or hide the details panel',
     'inspector.empty': 'Point at a picture to see its details here.',
+    'inspector.overviewCount': '{count} pictures',
+    'inspector.topModels': 'Models used most',
+    'inspector.topLoras': 'LoRAs used most',
+    'inspector.topTags': 'Common tags',
+    'inspector.allStats': 'All statistics',
+    'inspector.filterBy': 'Show only pictures with {value}',
     'inspector.size': 'Size',
     'inspector.generator': 'Generator',
     'inspector.model': 'Model',
@@ -2356,7 +2362,7 @@ window.I18nLang_en = {
     // ========================
     'modal.analytics': 'Image Analytics',
     'modal.topCheckpoints': 'Top Checkpoints',
-    'modal.topLoras': 'Top Loras',
+    'modal.topLoras': 'Top LoRAs',
     'modal.topTags': 'Top Tags',
 
     // ========================
