@@ -11,9 +11,10 @@
    - the top bar's tools with words (All features, Settings, the language),
      icons at a 1.75 stroke, the main actions set apart;
    - a tighter, more photographic grid (8 px gaps, 6 px corners).
-   Every rule is scoped to html[data-look-variant="b"]; proposal A (the pro
-   look) and today's look are untouched. Picks are unconfirmed: the owner
-   chooses between A and B.
+   Every rule is scoped to html[data-look-variant="b"]; the earlier pro
+   layout (proposal A) and today's look are untouched. The owner chose B on
+   2026-11-09: it is "Professional" in Settings > Appearance, and proposal A
+   stays selectable as "Professional, earlier layout".
    ========================================================================== */
 
 /* ---- Type scale with real steps ---- */

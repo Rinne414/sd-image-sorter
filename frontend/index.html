@@ -5930,14 +5930,15 @@
                     <div class="settings-row">
                         <div class="settings-row-copy">
                             <strong data-i18n="look.title">Interface look</strong>
-                            <span data-i18n="look.body">Classic, or the new professional look being designed (magenta accent, flatter lists)</span>
+                            <span data-i18n="look.body">Classic, or the professional look: one magenta action, tools with their names, a details panel beside the grid</span>
                         </div>
                         <label class="settings-inline-control">
                             <span data-i18n="look.label">Look</span>
                             <select id="settings-look" class="input-field">
                                 <option value="" data-i18n="look.classic" selected>Classic</option>
-                                <option value="pro" data-i18n="look.pro">Professional (preview)</option>
-                                <option value="pro-b" data-i18n="look.proB">Professional, proposal B (trial)</option>
+                                <!-- The owner chose proposal B on 2026-11-09; the earlier pro layout stays selectable. -->
+                                <option value="pro-b" data-i18n="look.proB">Professional</option>
+                                <option value="pro" data-i18n="look.pro">Professional, earlier layout</option>
                             </select>
                         </label>
                     </div>
