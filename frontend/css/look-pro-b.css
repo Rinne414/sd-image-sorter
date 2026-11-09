@@ -33,7 +33,12 @@ html[data-look-variant="b"] #sidebar-library-name {
 html[data-look-variant="b"] .sidebar-section-title {
     font-size: 12px;
     font-weight: 700;
-    color: var(--muted);
+    /* Round 18: section titles and counts read as "tiny and low-contrast". */
+    color: var(--text-2);
+}
+
+html[data-look-variant="b"] #collections-list .collection-row-count {
+    color: var(--text-2);
 }
 
 html[data-look-variant="b"] .nav-bar .nav-tab.active {
