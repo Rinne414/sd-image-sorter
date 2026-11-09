@@ -518,3 +518,31 @@ html[data-look-variant="b"] .pro-library-view-count {
 html[data-look-variant="b"] .pro-library-view.is-active {
     background: var(--pro-chosen-bg);
 }
+
+/* ---- One shape for the toolbar's controls (round 19, Sonnet: bare text,
+   pills and boxes side by side). Tools, Quick filters, View, the sort
+   direction and the source tabs' frame take the fill and border the sort
+   menu and the search box already have; their hover, open, on and chosen
+   states follow with the same reach (an id inside :is). ---- */
+html[data-look-variant="b"] #view-gallery :is(.pro-more-btn, .gallery-pro-filters-btn, .pro-view-btn, #sort-reverse-btn, #generator-tabs) {
+    border-color: var(--border);
+    background-color: var(--control-bg);
+}
+
+html[data-look-variant="b"] #view-gallery :is(.pro-more-btn, .gallery-pro-filters-btn, .pro-view-btn, #sort-reverse-btn):is(:hover, [aria-expanded="true"]) {
+    background-color: var(--surface-3);
+}
+
+html[data-look-variant="b"] #view-gallery :is(#sort-reverse-btn[aria-pressed="true"], .gallery-pro-filters-btn.has-active) {
+    border-color: var(--text-secondary);
+}
+
+html[data-look-variant="b"] #view-gallery #sort-reverse-btn[aria-pressed="true"] {
+    background-color: var(--pro-chosen-bg);
+}
+
+/* Quick filters is its own framed control now: it keeps a gap from the
+   search box instead of touching it. */
+html[data-look-variant="b"] #view-gallery .gallery-pro-filters-btn {
+    margin-left: 8px;
+}
