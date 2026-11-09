@@ -640,7 +640,7 @@ test('Gallery folder relocalization preserves the active tree state', async ({ p
   await expect(page.locator('#view-gallery')).toBeVisible()
   const branchToggle = page.locator('#folder-tree [data-action="toggle"][data-path="C:/library"]')
   await expect(branchToggle).toHaveCount(1)
-  await branchToggle.click()
+  // One scanned folder opens on its first level (folder-tree-expand.spec.ts).
   await expect(branchToggle).toHaveAttribute('aria-expanded', 'true')
   const targetPath = folders[folders.length - 1]
   const target = page.locator(`#folder-tree [data-action="browse"][data-path="${targetPath}"]`)

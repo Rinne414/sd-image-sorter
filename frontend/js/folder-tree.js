@@ -98,7 +98,8 @@
                 // Unfold once the tree first has folders (a fresh library starts
                 // empty), then keep each newly imported folder in view.
                 if (!this._seeded && this._tree.children.size > 0) {
-                    [...this._tree.children.values()].forEach((node) => this._seedDefaults(node, 0));
+                    const tops = [...this._tree.children.values()];
+                    tops.forEach((node) => this._seedDefaults(node, 0, tops.length === 1));
                     this._seeded = true;
                 } else if (this._seeded) {
                     folders.map((path) => normalizePath(path))
@@ -156,14 +157,19 @@
          * Seed the default expanded set ONCE: reveal the first level and keep
          * unfolding through single-child chains so a long common prefix
          * (L:/ › Pictures › Library) doesn't force the user to click through
-         * empty levels. Branch points start collapsed.
+         * empty levels. Branch points start collapsed, except the first one
+         * when every folder sits under it: that is the folder the user scanned,
+         * and its sub-folders are the library's real first level (2026-11-09:
+         * one collapsed "pictures" row hid all eight folders).
          */
-        _seedDefaults(node, depth) {
+        _seedDefaults(node, depth, onlyChain = true) {
             const kids = [...node.children.values()];
             if (kids.length === 0) return;
             if (depth === 0 || kids.length === 1) {
                 this._expanded.add(node.path);
-                kids.forEach((kid) => this._seedDefaults(kid, depth + 1));
+                kids.forEach((kid) => this._seedDefaults(kid, depth + 1, onlyChain && kids.length === 1));
+            } else if (onlyChain) {
+                this._expanded.add(node.path);
             }
         },
 

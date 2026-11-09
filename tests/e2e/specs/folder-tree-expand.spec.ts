@@ -37,3 +37,25 @@ test('folders imported after an empty start are unfolded down to the folder', as
   await expect(page.locator(`#folder-tree .folder-row-open[data-path="${SECOND}"]`)).toBeVisible()
   await expect(page.locator(`#folder-tree .folder-row-open[data-path="${DEEP}"]`)).toBeVisible()
 })
+
+test('one scanned folder opens on its first level of sub-folders', async ({ page }) => {
+  // 2026-11-09: a library scanned from one folder showed a single collapsed
+  // row; its real folders were one click away. Deeper levels stay folded.
+  const ROOT = 'D:/library/pictures'
+  const folders = [`${ROOT}/characters/rin`, `${ROOT}/characters/others`, `${ROOT}/commissions`, `${ROOT}/daily`]
+  await page.route('**/api/folders', (route) => route.fulfill({ json: { folders } }))
+  await page.addInitScript(() => {
+    localStorage.setItem('sd-image-sorter-lang', 'en')
+    localStorage.setItem('sd-sorter-entry-skip-session', '1')
+    localStorage.setItem('aurora-entry-skip', '1')
+  })
+  await page.goto('/')
+  await page.waitForFunction(() => document.documentElement.dataset.appReady === '1')
+
+  await expect(page.locator(`#folder-tree [data-action="toggle"][data-path="${ROOT}"]`)).toHaveAttribute('aria-expanded', 'true')
+  for (const name of ['characters', 'commissions', 'daily']) {
+    await expect(page.locator(`#folder-tree .folder-row-open[data-path="${ROOT}/${name}"]`)).toBeVisible()
+  }
+  await expect(page.locator(`#folder-tree [data-action="toggle"][data-path="${ROOT}/characters"]`)).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator(`#folder-tree .folder-row-open[data-path="${ROOT}/characters/rin"]`)).toHaveCount(0)
+})
