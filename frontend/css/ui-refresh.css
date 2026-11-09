@@ -13555,3 +13555,9 @@ html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
 .pro-add-filter {
     display: none;
 }
+
+/* Proposal B's Quick views list (js/modules/library-views.js); hidden elsewhere
+   (an id rule: the pro look's section rules would otherwise show it in A). */
+html:not([data-look-variant="b"]) #pro-library-views {
+    display: none;
+}

@@ -468,3 +468,58 @@ html[data-look-variant="b"] #view-gallery #sort-reverse-btn {
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
 }
+
+/* ---- Quick views at the top of the sidebar (rounds 17-18: Eagle-style
+   All / Untagged / Recent entries with counts) ---- */
+html[data-look-variant="b"] #view-gallery .pro-library-views {
+    display: block;
+    order: -1;
+}
+
+/* The title lines up with the other section titles (they follow a caret);
+   the rows' icons line up with the collection icons. */
+html[data-look-variant="b"] .pro-library-views .sidebar-section-title {
+    padding-left: 18px;
+}
+
+html[data-look-variant="b"] .pro-library-views-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+html[data-look-variant="b"] .pro-library-view {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    height: 32px;
+    padding: 0 6px 0 8px;
+    border: 0;
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+}
+
+html[data-look-variant="b"] .pro-library-view:hover {
+    background: var(--surface-3);
+}
+
+html[data-look-variant="b"] .pro-library-view-label {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+html[data-look-variant="b"] .pro-library-view-count {
+    color: var(--text-2);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look-variant="b"] .pro-library-view.is-active {
+    background: var(--pro-chosen-bg);
+}

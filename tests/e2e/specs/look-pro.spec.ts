@@ -479,3 +479,24 @@ test('pro look: Duplicate Cleanup and the Tags library are sized to their conten
   await expect(page.locator('#btn-close-tags-library')).toBeVisible()
   await expect(page.locator('#btn-close-tags-library-2')).toBeHidden()
 })
+
+test('Professional look: Quick views count and show All, Without tags and Last 7 days', async ({ page }) => {
+  // Rounds 17-18: Eagle-style default views; they reuse the noCaption and dateFrom filters.
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await open(page, 'pro-b')
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+  const views = page.locator('#pro-library-views .pro-library-view')
+  await expect(views).toHaveCount(3)
+  await expect(page.locator('#pro-library-views .pro-library-view[data-view="all"]')).toHaveClass(/is-active/)
+  await expect(page.locator('#pro-library-views [data-view="all"] .pro-library-view-count')).toHaveText(/^\d+$/)
+
+  await page.locator('#pro-library-views [data-view="untagged"]').click()
+  await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.noCaption)).toBe(true)
+  await expect(page.locator('#pro-library-views [data-view="untagged"]')).toHaveClass(/is-active/)
+  await page.locator('#pro-library-views [data-view="all"]').click()
+  await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.noCaption)).toBeFalsy()
+
+  // Proposal A and today's look do not show the list.
+  await page.evaluate(() => (window as any).SdLook.set('pro'))
+  await expect(page.locator('#pro-library-views')).toBeHidden()
+})
