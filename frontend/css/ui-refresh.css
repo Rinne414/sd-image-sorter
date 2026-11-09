@@ -13551,15 +13551,6 @@ html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
     display: none;
 }
 
-/* Proposal B's place for Select pictures beside the count; empty elsewhere. */
-.pro-select-slot {
-    display: contents;
-}
-
-.pro-select-slot:empty {
-    display: none;
-}
-
 /* Proposal B's "Add a filter" row under its filter list; hidden elsewhere. */
 .pro-add-filter {
     display: none;

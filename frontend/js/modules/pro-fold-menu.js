@@ -1,15 +1,13 @@
 /**
- * pro-fold-menu.js - proposal B moves a few gallery buttons: some fold into a
- * labelled menu (View, More beside the picture count), Select pictures moves
- * next to the count.
+ * pro-fold-menu.js - proposal B folds a few gallery buttons into a labelled
+ * menu (View, More beside the picture count).
  *
  * Blind A/B rounds (2026-11-08/09): the gallery toolbar carried about fifteen
- * controls and several bare icons nobody could name, and Select pictures sat
- * at the foot of the sidebar, far from the grid. In proposal B (the pro look
- * with data-look-variant="b") the folded buttons move into their menu, where
- * each shows its own name, and Select moves beside the count; each keeps its
- * handler and pressed state. Nothing is removed: proposal A and today's look
- * keep every button where it was.
+ * controls and several bare icons nobody could name. In proposal B (the pro
+ * look with data-look-variant="b") the folded buttons move into their menu,
+ * where each shows its own name; each keeps its handler and pressed state.
+ * Nothing is removed: proposal A and today's look keep every button where it
+ * was. (Select pictures stays at the sidebar's foot: the owner, 2026-11-09.)
  *
  * The menus are created from <head>, so each menu's Esc listener comes before
  * the body scripts' own Esc handlers.
@@ -147,12 +145,5 @@
         body: 'pro-more-popover-body',
         placement: 'bottom-start',
         nodes: () => [el('btn-random'), el('btn-reconnect-missing')],
-    });
-
-    // Select pictures beside the count (round 14, both judges: "too far from the grid").
-    const select = relocate('pro-select-slot', () => [el('btn-toggle-select')]);
-    whenReady(() => {
-        onLookChange(select.sync);
-        select.sync();
     });
 })();

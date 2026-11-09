@@ -409,15 +409,17 @@ test('proposal B: the View and More menus hold their buttons, which still work; 
   await expect(page.locator('#btn-open-model-manager .nav-action-label')).toBeHidden()
 })
 
-test('proposal B: Select sits beside the count, filters start open and Clear all waits for a filter', async ({ page }) => {
+test('proposal B: Select is a big button at the sidebar foot, filters start open and Clear all waits for a filter', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await open(page, 'pro-b')
   await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
 
-  const select = page.locator('#btn-toggle-select')
-  await expect(page.locator('#pro-select-slot #btn-toggle-select')).toBeVisible()
-  const [count, button] = await Promise.all([page.locator('#image-count').boundingBox(), select.boundingBox()])
-  expect(Math.abs(count!.y + count!.height / 2 - (button!.y + button!.height / 2))).toBeLessThan(4)
+  // The owner (2026-11-09): easy to see and click, where the batch panel opens.
+  const select = page.locator('.filter-sidebar-footer #btn-toggle-select')
+  await expect(select).toBeVisible()
+  const [button, sidebar] = await Promise.all([select.boundingBox(), page.locator('.filter-sidebar').boundingBox()])
+  expect(button!.height).toBeGreaterThanOrEqual(42)
+  expect(button!.width).toBeGreaterThan(sidebar!.width * 0.8)
   await select.click()
   await expect(select).toHaveAttribute('aria-pressed', 'true')
   await select.click()
@@ -435,7 +437,7 @@ test('proposal B: Select sits beside the count, filters start open and Clear all
   await page.keyboard.press('Escape')
   await expect(page.locator('#filter-modal')).toBeHidden()
 
-  // Proposal A: Select goes back to the sidebar's foot.
+  // Proposal A keeps it at the sidebar's foot too.
   await page.evaluate(() => (window as any).SdLook.set('pro'))
   await expect(page.locator('.filter-sidebar-footer #btn-toggle-select')).toBeVisible()
 })
