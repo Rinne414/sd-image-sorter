@@ -82,3 +82,26 @@ test('the dialog starts from the last move destination and offers the recent one
   await expect(page.locator('#input-modal-suggestions option')).toHaveCount(2)
   await expect(page.locator('#input-modal-suggestions option').nth(1)).toHaveAttribute('value', 'D:/sorted/keep')
 })
+
+test('the dialog lists the library folders by short name; a click fills the path', async ({ page }) => {
+  // Walkthrough 2026-11-09: a beginner had to copy a full path from a folder
+  // row's tooltip; the recent destinations sat in a list that only shows after typing.
+  const ROOT = 'D:/library/pictures'
+  await page.route('**/api/folders', (route) => route.fulfill({
+    json: { folders: [`${ROOT}/daily`, `${ROOT}/scenery`, `${ROOT}/works/2026-05`], counts: { [`${ROOT}/daily`]: 18, [`${ROOT}/scenery`]: 11, [`${ROOT}/works/2026-05`]: 22 } },
+  }))
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openMoveDialog(page, { [MOVES_KEY]: JSON.stringify(['E:/picked']) })
+
+  const list = page.locator('#input-modal-folder-choices')
+  await expect(list.locator('.folder-choices-head')).toHaveText(['最近用过', '图库里的文件夹'])
+  await expect(list.locator('.folder-choice')).toHaveText(['E:/picked', 'daily18', 'scenery11', 'works/2026-05' + '22'])
+  await expect(page.locator('#btn-input-ok')).toBeInViewport()
+
+  // Typing narrows the list; a click fills the field with the full path.
+  await page.locator('#input-modal-field').fill('scen')
+  await expect(list.locator('.folder-choice:visible')).toHaveText(['scenery11'])
+  await list.locator('.folder-choice', { hasText: 'scenery' }).click()
+  await expect(page.locator('#input-modal-field')).toHaveValue(`${ROOT}/scenery`)
+  await expect(list.locator('.folder-choice.is-chosen')).toHaveCount(1)
+})

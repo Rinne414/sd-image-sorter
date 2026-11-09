@@ -91,6 +91,7 @@
                 this._folders = folders;
                 this._libraryDirs = new Set(folders.map((path) => normalizePath(path)));
                 this._tree = this._buildTree(folders);
+                this._counts = result?.counts && typeof result.counts === 'object' ? result.counts : null;
                 this._addCounts(this._tree, result?.counts);
                 // Sync the highlighted/active folder from the persisted gallery
                 // filter so a reload keeps the tree and the gallery in step.
@@ -114,6 +115,14 @@
                 log('warn', 'Failed to load library folders', error);
                 if (options.manual) this._explainRefreshFailure(error);
             }
+        },
+
+        /** The library's folders that hold pictures, with how many (Move / Copy dialog). */
+        libraryFolders() {
+            return this._folders.map((path) => {
+                const count = Number(this._counts?.[path]);
+                return Number.isFinite(count) ? { path, count } : { path };
+            });
         },
 
         /** A refresh the user asked for failed: say why, and offer another try. */

@@ -360,7 +360,14 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
             count: totalCount,
         }),
         getRecentMoveDestinations()[0] || '',
-        { browseFolder: true, suggestions: getRecentMoveDestinations() }
+        {
+            browseFolder: true,
+            suggestions: getRecentMoveDestinations(),
+            folderChoices: [
+                ...getRecentMoveDestinations().map((path) => ({ path, recent: true })),
+                ...(window.FolderTreeUI?.libraryFolders?.() || []),
+            ],
+        }
     );
     if (!destination || !destination.trim()) return;
 

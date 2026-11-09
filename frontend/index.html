@@ -57,6 +57,7 @@
     <script src="/static/js/modules/pro-inspector.js"></script>
     <script src="/static/js/modules/pro-fold-menu.js"></script>
     <script src="/static/js/modules/library-views.js"></script>
+    <script src="/static/js/modules/folder-choices.js"></script>
     <!-- First: an error nothing else caught is said on screen, never silent (error-fallback.js). -->
     <script src="/static/js/error-fallback.js"></script>
 </head>
@@ -7547,6 +7548,8 @@
                     <button type="button" class="btn btn-secondary" id="btn-input-browse" data-i18n="common.browse" hidden>Browse</button>
                 </div>
                 <datalist id="input-modal-suggestions"></datalist>
+                <!-- Places to pick from, for Move / Copy (js/modules/folder-choices.js). -->
+                <div class="folder-choices" id="input-modal-folder-choices" hidden></div>
                 <div id="input-modal-folder-browser"></div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-input-cancel" data-i18n="modal.cancel">Cancel</button>

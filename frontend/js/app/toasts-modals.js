@@ -619,7 +619,8 @@ function confirmAsync({ title = '', message = '', danger = true } = {}) {
 let inputModalResolve = null;
 
 // options.browseFolder: show a Browse button that fills the field from the
-// folder browser; options.suggestions: values offered as the user types.
+// folder browser; options.suggestions: values offered as the user types;
+// options.folderChoices: [{path, count?, recent?}] listed under the field.
 function showInputModal(title, message, defaultValue = '', options = {}) {
     return new Promise((resolve) => {
         // Resolve previous if still pending
@@ -652,6 +653,13 @@ function showInputModal(title, message, defaultValue = '', options = {}) {
             }));
         }
         if (typeof window.hideFolderBrowser === 'function') window.hideFolderBrowser();
+        // options.folderChoices: places shown as a list to click (Move / Copy).
+        const choicesEl = $('#input-modal-folder-choices');
+        if (options.folderChoices?.length && inputEl) {
+            window.FolderChoices?.render(choicesEl, inputEl, options.folderChoices);
+        } else {
+            window.FolderChoices?.clear(choicesEl);
+        }
 
         // Show modal
         showModal('input-modal');
