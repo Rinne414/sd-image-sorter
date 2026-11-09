@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Interface look: Professional (preview)** (classic, Settings › Appearance, off by default): the start of the new look. The owner's brand magenta as the one accent, flat sidebar rows of one height with quiet counts, one corner shape, the picture count as a title (kept on laptop widths), no box around the toolbar or the grid, and only the source tabs the library has pictures from. Settings › Reset also clears it, the Group runs switch and folded collections.
   - **界面外观：专业（预览）**（经典界面，“设置 › 外观”，默认关闭）：新外观的开始。用作者品牌的洋红作为唯一强调色，侧栏每行一样高、数量安静靠右，统一圆角，图片数量作为标题（笔记本宽度也显示），工具栏和图片区不再有外框，只显示图库里真的有图片的来源。“设置 › 重置”也会清除它、“同批合并”开关和收起的合集。
+- **Professional look: the library at a glance**: the sidebar opens with Quick views (All pictures, Not tagged yet, Last 7 days) with live counts. With no picture under the pointer, the details panel shows how many pictures wait for tagging with a button to start, the models, LoRAs and tags used most (a click shows only those pictures) and All statistics, which opens the statistics dialog in the same look. The toolbar's controls share one shape.
+  - **专业外观：一眼看懂图库**：侧栏最上面是“快速查看”（全部图片、未打标签、最近 7 天），带实时数量。鼠标没有指着图片时，右边的详情栏会显示还有多少张图没打标签和“开始打标签”按钮、最常用的模型、LoRA 和标签（点一下只看这些图），以及“全部统计”，打开同一外观的统计窗口。工具栏的按钮统一成一种样式。
+- **Not tagged yet filter** (every look): a quick filter chip and the search word `no:tags` show the pictures no AI tagging run or tag edit has touched, the same pictures AI tagging works on by default.
+  - **“未打标签”筛选**（所有外观）：快捷筛选和搜索词 `no:tags` 会只显示还没跑过 AI 打标、也没改过标签的图，也就是 AI 打标默认会处理的那些图。
+- **Folder counts** (every look): each folder row shows how many pictures it holds with its sub-folders, like collections, and a library scanned from one folder opens on its sub-folders instead of one folded row.
+  - **文件夹数量**（所有外观）：每个文件夹会像合集一样显示它和子文件夹里共有几张图；从一个文件夹扫描进来的图库，会直接展开它的子文件夹，不再只显示一行收起的文件夹。
 - **Network proxy** (Model Center): enter the port of Clash, v2rayN or a similar tool once, and model downloads, package installs and update checks all use it, so TUN mode is not needed. Includes a connection test and one click for the system proxy; local addresses never use it.
   - **网络代理**（模型中心）：填一次 Clash、v2rayN 等工具的端口，模型下载、装包和检查更新都会走它，不用开 TUN 模式。可以测试连接，也可以一键用系统代理；本机地址不走代理。
 - **One banner when the program's server stops**: instead of failing requests one by one, the page says the server stopped; refreshing a folder and the preview give a reason and a Retry.
