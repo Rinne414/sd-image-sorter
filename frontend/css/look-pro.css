@@ -1688,12 +1688,15 @@ html[data-look="pro"] .pro-inspector-empty {
     text-align: center;
 }
 
+/* The preview takes the picture's own shape (round 17: a portrait sat between
+   dark bars in a full-width box). */
 html[data-look="pro"] .pro-inspector-thumb {
-    width: 100%;
+    align-self: center;
+    width: auto;
+    max-width: 100%;
+    height: auto;
     max-height: 300px;
-    object-fit: contain;
     border-radius: var(--pro-r-control);
-    background: var(--pro-stage);
 }
 
 html[data-look="pro"] .pro-inspector-name {
