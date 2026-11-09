@@ -631,8 +631,36 @@
         });
     }
 
+    /**
+     * The box's text stops describing the gallery when everything it put into
+     * the filters is gone (a Quick view, Clear all, a saved preset): the text
+     * and its "parsed as" line are cleared, so the box never shows a search
+     * that is not applied (walkthrough 2026-11-09: "rain" stayed after 全部图片
+     * and after Clear all). Never while the user is typing in it.
+     */
+    function dropStaleSearchText(filters) {
+        const input = document.getElementById('gallery-search-input');
+        if (!input || !input.value.trim() || document.activeElement === input) return;
+        const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+        const defaults = typeof app()?.createDefaultFilterState === 'function' ? app().createDefaultFilterState() : {};
+        const stillOn = Boolean(String(filters.search || '').trim())
+            || Object.keys(boxOwnedListValues).some((field) => [...boxOwnedListValues[field]]
+                .some((value) => (filters[field] || []).includes(value)))
+            || [...boxOwnedScalars].some((field) => !same(filters[field], SCALAR_DEFAULTS[field]))
+            || [...boxOwnedNarrows].some((field) => !same(filters[field], defaults[field]));
+        if (stillOn) return;
+        input.value = '';
+        boxOwnedScalars = new Set();
+        boxOwnedNarrows = new Set();
+        boxOwnedListValues = Object.create(null);
+        syncClearButton(input, document.getElementById('gallery-search-clear'));
+        renderSearchPreview('', parseQuery(''));
+        hideSuggest();
+    }
+
     function syncFromFilters(filters) {
         if (!filters) return;
+        dropStaleSearchText(filters);
         CHIPS.forEach((chip) => {
             const btn = document.getElementById(chip.id);
             if (!btn) return;

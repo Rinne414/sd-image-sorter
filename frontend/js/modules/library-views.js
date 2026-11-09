@@ -141,6 +141,9 @@
     function apply(view) {
         if (typeof window.setAppFilters !== 'function') return;
         window.setAppFilters(fullFilters(view));
+        // A view leaves any folder scope, as Clear all does: the tree's
+        // highlight and its "文件夹：…" line follow (walkthrough 2026-11-09).
+        if (window.FolderTreeUI?.isScoped?.()) window.FolderTreeUI.refresh();
         window.updateFilterSummary?.();
         window.syncGenTabsWithFilters?.();
         window.loadImages?.();

@@ -395,3 +395,24 @@ test('help button opens the syntax doc; filter button opens the filter modal', a
   await page.locator('#btn-close-filter-modal').click()
   await expect(page.locator('#filter-modal')).toBeHidden()
 })
+
+test('the box empties when its search is cleared from elsewhere, and keeps text while typing', async ({ page }) => {
+  // Walkthrough 2026-11-09: "rain" stayed in the box after Clear all and after
+  // a Quick view, while the gallery no longer searched for it.
+  await openGallery(page)
+  const input = page.locator('#gallery-search-input')
+  await input.fill('rain tag:1girl')
+  await input.press('Enter')
+  await expect.poll(async () => (await filterState(page)).search).toBe('rain')
+
+  await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); (window as any).resetAllFilters() })
+  await expect(input).toHaveValue('')
+  await expect.poll(async () => (await filterState(page)).tags).toEqual([])
+
+  // A filter change from elsewhere while the box still applies leaves the text.
+  await input.fill('rain')
+  await input.press('Enter')
+  await expect.poll(async () => (await filterState(page)).search).toBe('rain')
+  await page.locator('#chip-has-metadata').click()
+  await expect(input).toHaveValue('rain')
+})

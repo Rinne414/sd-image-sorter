@@ -522,6 +522,22 @@ test('Professional look: Quick views count and show All, Not tagged yet and Last
   await page.locator('#pro-library-views [data-view="all"]').click()
   await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.untagged)).toBeFalsy()
 
+  // A view replaces the search: the box empties instead of showing a search
+  // that no longer applies (walkthrough 2026-11-09).
+  const box = page.locator('#gallery-search-input')
+  await box.fill('rain')
+  await box.press('Enter')
+  await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.search)).toBe('rain')
+  await page.locator('#pro-library-views [data-view="untagged"]').click()
+  await expect(box).toHaveValue('')
+  await page.locator('#pro-library-views [data-view="all"]').click()
+
+  // ...and leaves a folder scope, as Clear all does: no "Folder: ..." line stays.
+  await page.locator('#folder-tree .folder-row-open').first().click()
+  await expect(page.locator('#folder-tree-browsing')).toBeVisible()
+  await page.locator('#pro-library-views [data-view="all"]').click()
+  await expect(page.locator('#folder-tree-browsing')).toBeHidden()
+
   // It folds like the other sidebar sections (round 19: the one without an arrow).
   const toggle = page.locator('#pro-library-views .sidebar-section-toggle')
   await toggle.click()

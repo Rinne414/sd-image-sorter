@@ -401,6 +401,7 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                 resetSelectionDataCache();
                 await loadImages(false, { keepPosition: true });
                 await loadStats();
+                window.FolderTreeUI?.refresh?.(); // folders gained, lost or changed counts
                 return;
             }
             if (finalProgress?.status === 'error') {
@@ -415,6 +416,7 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                 resetSelectionDataCache();
                 await loadImages(false, { keepPosition: true });
                 await loadStats();
+                window.FolderTreeUI?.refresh?.(); // folders gained, lost or changed counts
                 return;
             }
             const results = Array.isArray(finalProgress?.results) ? finalProgress.results : [];
@@ -447,6 +449,7 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
 
             await loadImages(false, { keepPosition: true });
             await loadStats();
+            window.FolderTreeUI?.refresh?.(); // folders gained, lost or changed counts
 
             // The job is gone without a report (the program restarted mid-move):
             // not known what moved, so not "completed" and not "failed".
