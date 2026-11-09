@@ -1734,13 +1734,17 @@ html[data-look="pro"] .pro-inspector-fact-value {
     font-variant-numeric: tabular-nums;
 }
 
+/* Round 19 (both judges): the heads were smaller and greyer than the data
+   under them. Body size, semibold, lighter, with a hairline above. */
 html[data-look="pro"] .pro-inspector-section-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-top: 4px;
-    color: var(--muted);
-    font-size: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--hairline-2);
+    color: var(--text-2);
+    font-size: 13px;
     font-weight: 600;
 }
 
@@ -1820,11 +1824,33 @@ html[data-look="pro"] .pro-inspector-overview {
     gap: 12px;
 }
 
-html[data-look="pro"] .pro-inspector-overview-total {
-    margin: -8px 0 0;
-    color: var(--text-secondary);
+/* The hint sits under the name (round 19: it came last, where nobody read it). */
+html[data-look="pro"] .pro-inspector-overview .pro-inspector-empty {
+    margin: -6px 0 0;
+    font-size: 12px;
+    text-align: left;
+}
+
+/* What to do next: pictures waiting for tagging, and the way to start. */
+html[data-look="pro"] .pro-inspector-todo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 10px 10px 12px;
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--pro-r-panel);
+    background: var(--surface-2);
+    color: var(--text);
     font-size: 13px;
-    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] #pro-inspector .pro-inspector-todo-start.btn {
+    flex: 0 0 auto;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 12px;
+    font-size: 13px;
 }
 
 html[data-look="pro"] .pro-inspector-ranks {
@@ -1881,18 +1907,18 @@ html[data-look="pro"] .pro-inspector-tag-button:hover {
     color: var(--text);
 }
 
-/* A way on to the full lists, quieter than the picture actions (id: the
-   tokens' .btn:not(...) rule outranks a class). */
+/* The way on to the full lists: a small framed button (round 19: as plain
+   text it read as a heading). Id: the tokens' .btn:not(...) rule outranks a class. */
 html[data-look="pro"] #pro-inspector .pro-inspector-stats.btn {
     align-self: flex-start;
     height: 30px;
     min-height: 30px;
-    margin: 0 0 0 -8px;
+    margin: 4px 0 0;
     gap: 6px;
-    padding: 0 8px;
-    border-color: transparent;
+    padding: 0 12px;
+    border: 1px solid var(--hairline-2);
     background: transparent;
-    color: var(--text-secondary);
+    color: var(--text);
     font-size: 13px;
     font-weight: 500;
 }
@@ -1904,10 +1930,6 @@ html[data-look="pro"] .pro-inspector-stats-icon {
 html[data-look="pro"] #pro-inspector .pro-inspector-stats.btn:hover {
     background: var(--surface-3);
     color: var(--text);
-}
-
-html[data-look="pro"] .pro-inspector-overview .pro-inspector-empty {
-    margin: 4px 0 0;
 }
 
 /* ---- The statistics dialog (All statistics in the details panel) ----

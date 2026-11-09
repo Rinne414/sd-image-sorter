@@ -477,12 +477,6 @@ html[data-look-variant="b"] #view-gallery .pro-library-views {
     order: -1;
 }
 
-/* The title lines up with the other section titles (they follow a caret);
-   the rows' icons line up with the collection icons. */
-html[data-look-variant="b"] .pro-library-views .sidebar-section-title {
-    padding-left: 18px;
-}
-
 html[data-look-variant="b"] .pro-library-views-list {
     display: flex;
     flex-direction: column;

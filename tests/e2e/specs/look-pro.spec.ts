@@ -502,6 +502,14 @@ test('Professional look: Quick views count and show All, Not tagged yet and Last
   await page.locator('#pro-library-views [data-view="all"]').click()
   await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.untagged)).toBeFalsy()
 
+  // It folds like the other sidebar sections (round 19: the one without an arrow).
+  const toggle = page.locator('#pro-library-views .sidebar-section-toggle')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator('#pro-library-views [data-view="all"]')).toBeHidden()
+  await toggle.click()
+  await expect(page.locator('#pro-library-views [data-view="all"]')).toBeVisible()
+
   // Proposal A and today's look do not show the list.
   await page.evaluate(() => (window as any).SdLook.set('pro'))
   await expect(page.locator('#pro-library-views')).toBeHidden()
@@ -516,7 +524,9 @@ test('pro look: with no picture shown the details panel shows the library at a g
   const panel = page.locator('#pro-inspector')
   await expect(panel.locator('.pro-inspector-overview .pro-inspector-name')).toBeVisible()
 
-  // Known numbers, so the rows are pinned whatever the test library holds.
+  // Known numbers, so the rows are pinned whatever the test library holds:
+  // the stats below, and 5 pictures not tagged yet from the count endpoint.
+  await page.route('**/api/images/count', (route) => route.fulfill({ json: { count: 5, exact: true } }))
   await page.evaluate(() => {
     const w = window as any
     w.App.AppState.analytics = {
@@ -528,7 +538,8 @@ test('pro look: with no picture shown the details panel shows the library at a g
     }
     window.dispatchEvent(new CustomEvent('library-stats-loaded'))
   })
-  await expect(panel.locator('.pro-inspector-overview-total')).toHaveText('12 pictures')
+  // Round 19: no repeated picture count; what to do next comes first.
+  await expect(panel.locator('.pro-inspector-todo-text')).toHaveText('5 pictures are not tagged yet')
   await expect(panel.locator('.pro-inspector-rank')).toHaveCount(2)
   await expect(panel.locator('.pro-inspector-tag-button')).toHaveText(['silver hair'])
 
@@ -540,4 +551,10 @@ test('pro look: with no picture shown the details panel shows the library at a g
   await page.evaluate(() => (window as any).setAppFilters((window as any).createDefaultFilterState()))
   await panel.locator('.pro-inspector-stats').click()
   await expect(page.locator('#analytics-modal .analytics-grid')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#analytics-modal .analytics-grid')).toBeHidden()
+
+  // "Tag them" opens the AI tagging dialog, the top bar's own door.
+  await panel.locator('.pro-inspector-todo-start').click()
+  await expect(page.locator('#tag-modal')).toHaveClass(/visible/)
 })

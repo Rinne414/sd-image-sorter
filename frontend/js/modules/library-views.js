@@ -73,21 +73,41 @@
         return button;
     }
 
+    /**
+     * The same markup as the sidebar's other sections, so sidebar-sections.js
+     * (a body script, so it runs after this) gives it the fold arrow and
+     * remembers the choice (round 19: the one section without an arrow).
+     */
     function build() {
         const section = document.createElement('div');
         section.className = 'sidebar-section pro-library-views';
         section.id = 'pro-library-views';
+        section.dataset.sidebarSection = 'views';
         const head = document.createElement('div');
         head.className = 'sidebar-section-head';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'sidebar-section-toggle';
+        toggle.setAttribute('aria-expanded', 'true');
+        toggle.setAttribute('aria-controls', 'sidebar-body-views');
+        const caret = document.createElement('span');
+        caret.className = 'sidebar-section-caret';
+        caret.setAttribute('aria-hidden', 'true');
+        window.UiIcon?.fill(caret, 'i-chevron-down');
         const title = document.createElement('span');
         title.className = 'sidebar-section-title';
         title.dataset.i18n = 'libraryViews.title';
         title.textContent = window.I18n?.t?.('libraryViews.title') || 'Quick views';
-        head.appendChild(title);
+        toggle.append(caret, title);
+        head.appendChild(toggle);
+        const body = document.createElement('div');
+        body.className = 'sidebar-section-body';
+        body.id = 'sidebar-body-views';
         const list = document.createElement('div');
         list.className = 'pro-library-views-list';
         VIEWS.forEach((view) => list.appendChild(row(view)));
-        section.append(head, list);
+        body.appendChild(list);
+        section.append(head, body);
         return section;
     }
 

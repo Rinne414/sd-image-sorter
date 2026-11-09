@@ -308,7 +308,10 @@
             applyOpen(next);
         });
         document.addEventListener('languageChanged', redraw);
-        window.addEventListener('library-stats-loaded', refreshOverview);
+        window.addEventListener('library-stats-loaded', async () => {
+            await window.ProInspectorOverview?.refreshCounts?.();
+            refreshOverview();
+        });
         window.addEventListener('gallery-images-loaded', refreshOverview);
         el('gallery-grid')?.addEventListener('mouseover', onPointer);
         el('gallery-grid')?.addEventListener('focusin', onPointer);

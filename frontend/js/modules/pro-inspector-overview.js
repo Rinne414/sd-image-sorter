@@ -5,12 +5,13 @@
  * Eagle and Billfish show the folder's facts when nothing is selected; ours
  * showed one line of text in an empty 300 px column, the first thing seen on
  * every start at the owner's 2560 screen (2026-11-09). Now it shows the
- * library's name and picture count, the models, LoRAs and tags used most (a
- * click shows only those pictures, the same filter the statistics dialog
- * applies), and a button to that dialog, which had no entrance left.
+ * library's name, how many pictures wait for tagging (with a way to start),
+ * the models, LoRAs and tags used most (a click shows only those pictures,
+ * the same filter the statistics dialog applies), and a button to that
+ * dialog, which had no entrance left.
  *
- * Numbers come from AppState.analytics, filled by loadStats; no request of its
- * own. Classic script: window.ProInspectorOverview.build(t) returns the nodes
+ * Numbers come from AppState.analytics, filled by loadStats, plus one count
+ * of pictures not tagged yet each time those stats load. Classic script: window.ProInspectorOverview.build(t) returns the nodes
  * and pro-inspector.js places them.
  */
 (function () {
@@ -18,6 +19,7 @@
 
     const TOP_ROWS = 3;
     const TOP_TAGS = 8;
+    let untaggedCount = null;
 
     /** A text node the first translation pass can rewrite (drawn before I18n.init). */
     function translated(tagName, className, key, fallback, t) {
@@ -88,7 +90,7 @@
             chip.addEventListener('click', () => applyFilter('tag', item.tag));
             list.appendChild(chip);
         });
-        return [translated('div', 'pro-inspector-section-head', 'inspector.topTags', 'Common tags', t), list];
+        return [translated('div', 'pro-inspector-section-head', 'inspector.topTags', 'Tags used most', t), list];
     }
 
     function statsButton(t) {
@@ -107,39 +109,65 @@
     }
 
     /**
+     * The next step for most libraries (round 19: "the beginner's next action"):
+     * how many pictures wait for tagging, and the same door as the top bar's
+     * AI tagging button, whose dialog tags only pictures without tags.
+     */
+    function taggingTodo(t) {
+        if (!(untaggedCount > 0)) return [];
+        const row = document.createElement('div');
+        row.className = 'pro-inspector-todo';
+        const text = document.createElement('span');
+        text.className = 'pro-inspector-todo-text';
+        text.textContent = t('inspector.untaggedCount', '{count} pictures are not tagged yet', { count: untaggedCount });
+        const start = translated('button', 'btn btn-secondary pro-inspector-todo-start', 'inspector.startTagging', 'Tag them', t);
+        start.type = 'button';
+        start.addEventListener('click', () => document.getElementById('btn-tag')?.click());
+        row.append(text, start);
+        return [row];
+    }
+
+    /** Asks the server how many pictures are not tagged yet; build() shows it. */
+    async function refreshCounts() {
+        const api = window.App?.API;
+        if (!api?.countImages || typeof window.createDefaultFilterState !== 'function') return;
+        try {
+            const result = await api.countImages({ ...window.createDefaultFilterState(), untagged: true });
+            const value = Number(result?.count);
+            untaggedCount = Number.isFinite(value) ? value : null;
+        } catch (_error) {
+            untaggedCount = null; // no reminder rather than a wrong one
+        }
+    }
+
+    /**
      * @param {(key: string, fallback: string, params?: object) => string} t
-     * @returns {HTMLElement} the overview, newest numbers first
+     * @returns {HTMLElement} the overview: what to do, then what the library holds
      */
     function build(t) {
         const stats = window.App?.AppState?.analytics || {};
         const section = document.createElement('div');
         section.className = 'pro-inspector-overview';
 
+        // The name only: the picture count is already beside the toolbar and in
+        // the sidebar (round 19: shown three times).
         const name = document.createElement('h3');
         name.className = 'pro-inspector-name';
         name.textContent = window.LibraryWorkspace?.getCurrentLibrary?.()?.name
             || t('library.defaultName', 'Main library');
-        section.appendChild(name);
-
-        const total = Number(stats.totalImages);
-        if (Number.isFinite(total)) {
-            const count = document.createElement('p');
-            count.className = 'pro-inspector-overview-total';
-            count.textContent = t('inspector.overviewCount', '{count} pictures', { count: total });
-            section.appendChild(count);
-        }
+        section.append(name, translated('p', 'pro-inspector-empty', 'inspector.empty',
+            'Point at a picture to see its details here.', t));
 
         const groups = [
+            ...taggingTodo(t),
             ...rankGroup('inspector.topModels', 'Models used most', modelRows(stats, t), t),
             ...rankGroup('inspector.topLoras', 'LoRAs used most', loraRows(stats, t), t),
             ...tagChips(stats, t),
         ];
         section.append(...groups);
-        if (total > 0) section.appendChild(statsButton(t));
-        section.appendChild(translated('p', 'pro-inspector-empty', 'inspector.empty',
-            'Point at a picture to see its details here.', t));
+        if (Number(stats.totalImages) > 0) section.appendChild(statsButton(t));
         return section;
     }
 
-    window.ProInspectorOverview = Object.freeze({ build });
+    window.ProInspectorOverview = Object.freeze({ build, refreshCounts });
 })();
