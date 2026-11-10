@@ -2508,7 +2508,7 @@ window.I18nLang_zhCN = {
     // Tag Modal
     // ========================
     'modal.tagTitle': 'AI 自动打标',
-    'modal.tagDescription': '选择支持的 tagger 模型，给图片生成 Tags。',
+    'modal.tagDescription': '选一个打标模型，为图片生成标签。',
     'modal.tagModel': '模型',
     'modal.tagModelSnapshot': '当前方案',
     'modal.tagRuntimePlan': '本次运行方式',
@@ -2628,7 +2628,7 @@ window.I18nLang_zhCN = {
     'tagModal.smartTagHintGo': '去数据集',
     'tagModal.smartTagTitle': '智能打标：WD14 + VLM 一次跑完',
     'tagModal.smartTagBody': '使用当前图库选择或筛选范围。智能打标可一次生成 Danbooru 标签、自然语言描述、触发词与清理后的训练 caption。',
-    'tagModal.noSidecarNote': '没有同名 .txt 的图也照样处理：AI 标签存在应用的数据库里，只有导出时才会写 .txt。',
+    'tagModal.noSidecarNote': '没有同名 .txt 的图也照样处理：AI 标签存在程序的数据库里，只有导出时才会写 .txt。',
     'tagModal.smartTagGo': '打开智能打标',
     'tagModal.smartTagHintDismiss': '不再提示',
     // v3.2.2 任务 #4: 新增「送至 Dataset Maker」常用动作。
@@ -4024,7 +4024,7 @@ window.I18nLang_zhCN = {
     'vlm.debugChatEmpty': '还没有 VLM API 消息。',
     'vlm.retryFailed': '重试失败项',
     'tagger.descDefault': '均衡默认项，速度和稳定性都不错。',
-    'tagger.descSummaryFormat': '{summary} 质量{quality}/5 \u2022 速度{speed}/5 \u2022 稳定{stability}/5。',
+    'tagger.descSummaryFormat': '{summary} 质量 {quality}/5 \u2022 速度 {speed}/5 \u2022 稳定性 {stability}/5（5 分最好）。',
     'tagger.bestForPrefix': ' 最适合：{bestFor}。',
     'tagger.badgeRecommended': '推荐',
     'tagger.badgeSpeed': '速度 {value}',
@@ -4066,7 +4066,7 @@ window.I18nLang_zhCN = {
     'tagger.model.pixaiV10.summary': 'PixAI v1.0：30,877 个标签，含角色、作品和画师画风，按 1008 px 读图。有 12 GB 以上 NVIDIA 显卡时的默认项。',
     'tagger.model.pixaiV10.bestFor': '角色、作品和画师画风，标签空间更新',
     'tagger.model.pixaiV10.runtimeNote': '重型模型：下载约 2 GB，需要约 8.3 GB 空闲显存，RTX 3090 上每张约 0.5 秒（SwinV2 约 0.05 秒）；用 CPU 会慢很多，还需要约 6 GB 空闲内存。',
-    'tagger.model.pixaiV10.safeModeNote': '输入图更大，应用会自动调小 GPU 批量，并在每张图之间让 GPU 稍作休息。',
+    'tagger.model.pixaiV10.safeModeNote': '输入图更大，程序会自动调小 GPU 批量，并在每张图之间让 GPU 稍作休息。',
     'tagger.model.dtqB16.summary': 'DanbooruTagQuery B/16（基于 DINOv3）：11,424 个 danbooru 标签，训练数据到 2025 年。常见标签打得和 SwinV2 差不多，还会标出作品名和更新的角色。分级由它打出的标签推算。',
     'tagger.model.dtqB16.bestFor': '和 SwinV2 一样大，多了作品名和更新的角色',
     'tagger.model.dtqB16.runtimeNote': '下载约 370 MB。每张图约需 1 GB 工作内存，程序会自动用较小的批量。6 个 CPU 线程每张约 1.1 秒。',

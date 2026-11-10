@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **AI tagging dialog: the model scores say what they are**: the line under the model read "Q4/5 • S1/5 • Stable 3/5"; it now reads "Quality 4/5 • Speed 1/5 • Stability 3/5 (5 is best)". The Chinese subtitle no longer mixes in "tagger" and "Tags".
+  - **AI 打标对话框：模型评分写明了含义**：模型下方原本是“质量4/5 • 速度1/5 • 稳定3/5”，现在是“质量 4/5 • 速度 1/5 • 稳定性 3/5（5 分最好）”。中文副标题不再夹着“tagger”“Tags”。
 - **Dialogs no longer draw a frame around the whole window**: every open dialog put a 2 px coloured line around the program window (the focus mark was on the full-screen layer behind the dialog).
   - **对话框不再给整个窗口画一圈框**：以前只要打开对话框，程序窗口四周就会多一圈 2 px 的彩色线（焦点标记画在了对话框背后的全屏层上）。
 - **Import: Enter in the folder box starts the import**, like the button; it used to only check the path. In the Professional look the AI tagging dialog keeps the accent for Start alone.

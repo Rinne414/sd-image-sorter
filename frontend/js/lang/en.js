@@ -3848,7 +3848,7 @@ window.I18nLang_en = {
     'vlm.debugChatEmpty': 'No VLM API messages yet.',
     'vlm.retryFailed': 'Retry failed',
     'tagger.descDefault': 'Balanced default. Good speed and solid stability.',
-    'tagger.descSummaryFormat': '{summary} Q{quality}/5 \u2022 S{speed}/5 \u2022 Stable {stability}/5.',
+    'tagger.descSummaryFormat': '{summary} Quality {quality}/5 \u2022 Speed {speed}/5 \u2022 Stability {stability}/5 (5 is best).',
     'tagger.bestForPrefix': ' Best for: {bestFor}.',
     'tagger.badgeRecommended': 'Recommended',
     'tagger.badgeSpeed': 'Speed {value}',
