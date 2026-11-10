@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Dialogs no longer draw a frame around the whole window**: every open dialog put a 2 px coloured line around the program window (the focus mark was on the full-screen layer behind the dialog).
+  - **对话框不再给整个窗口画一圈框**：以前只要打开对话框，程序窗口四周就会多一圈 2 px 的彩色线（焦点标记画在了对话框背后的全屏层上）。
+- **Import: Enter in the folder box starts the import**, like the button; it used to only check the path. In the Professional look the AI tagging dialog keeps the accent for Start alone.
+  - **导入：在文件夹输入框里按 Enter 就会开始导入**，和点按钮一样；以前只会检查路径。专业外观下，AI 打标对话框只有“开始打标”使用强调色。
 - **Read Image: an edited copy of a dropped picture no longer goes to a temporary folder**: the save path was pre-filled with the program's upload folder (which is emptied later) and a random file name. It now defaults to the save folder's `reader` folder with the picture's own name, and that folder is created by the save. A new "Edit and save a copy" button at the top opens the editor, which sits at the end of the panel.
   - **读图：拖进来的图片另存时不再默认存到临时文件夹**：保存路径原本预填的是程序的上传临时文件夹（之后会被清空）和一串随机文件名。现在默认是保存文件夹下的 `reader` 文件夹加图片原名，保存时会自动创建。顶部新增“编辑并另存”按钮，直接打开位于面板最下方的编辑区。
 - **Example text reads as an example**: Manual Sort's folder boxes and the Prompt Helper's fixed start/end boxes showed examples that looked like filled-in values; they now begin with "e.g.". The Censor colour box is labelled "Pen color" (it only applies to the pen).

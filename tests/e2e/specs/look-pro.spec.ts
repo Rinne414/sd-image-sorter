@@ -881,3 +881,20 @@ test('Reverse Prompt says why its button is off; in the pro look a main button t
   })
   expect(colours.off).not.toBe(colours.accentRgb)
 })
+
+test('an open dialog does not frame the whole window; Enter in the import path starts the import', async ({ page }) => {
+  await open(page, null)
+  await page.click('#btn-scan')
+  await expect(page.locator('#scan-modal')).toHaveClass(/visible/)
+  // The .modal element is the full-screen layer: an outline on it framed the window.
+  expect(await page.evaluate(() => getComputedStyle(document.getElementById('scan-modal')!).outlineStyle)).toBe('none')
+
+  let scanStarted = false
+  await page.route('**/api/scan', async (route) => {
+    scanStarted = true
+    await route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ detail: 'stopped by the test' }) })
+  })
+  await page.fill('#scan-folder-path', 'C:/somewhere/pictures')
+  await page.locator('#scan-folder-path').press('Enter')
+  await expect.poll(() => scanStarted).toBe(true)
+})

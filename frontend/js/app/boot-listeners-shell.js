@@ -306,6 +306,15 @@ function initBootListenersShell() {
         const debouncedValidation = debounce(validateScanFolderPath, 300);
         scanFolderPathInput.addEventListener('input', debouncedValidation);
         scanFolderPathInput.addEventListener('blur', validateScanFolderPath);
+        // Enter in the path field starts the import, like the button (it only
+        // checked the path, so a typed path and Enter did nothing visible).
+        scanFolderPathInput.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' || event.isComposing) return;
+            const start = $('#btn-start-scan');
+            if (!start || start.disabled) return;
+            event.preventDefault();
+            start.click();
+        });
     }
     const reconnectFolderPathInput = $('#reconnect-folder-path');
     if (reconnectFolderPathInput) {

@@ -13727,3 +13727,13 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .reverse-results-empty {
     display: none;
 }
+
+/* styles.css outlines ".modal[aria-modal=true]:focus-within". The .modal
+   element is the full-screen layer, so every open dialog drew a 2 px coloured
+   frame around the whole window. The dialog box and the control in focus
+   already show where focus is. */
+.modal[aria-modal="true"]:focus-within,
+.modal:focus,
+.modal:focus-visible {
+    outline: none !important;
+}

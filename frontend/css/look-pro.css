@@ -2107,3 +2107,8 @@ html[data-look="pro"] #image-modal .param-item .param-value {
     color: var(--text);
     text-align: left;
 }
+
+/* The dialog layer itself never shows the focus ring (see ui-refresh.css). */
+html[data-look="pro"] .modal:focus-visible {
+    outline: none !important;
+}

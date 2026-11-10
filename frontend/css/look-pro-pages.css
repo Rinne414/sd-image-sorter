@@ -2057,3 +2057,34 @@ html[data-look="pro"] #view-reader .reader-section-header .btn {
 html[data-look="pro"] .autosep-pane-preview:has(.autosep-preview-start) #btn-preview-autosep {
     display: none;
 }
+
+/* ---- AI tagging dialog: one accent (Start), the rest neutral ---- */
+
+html[data-look="pro"] #tag-modal #btn-tag-modal-smart-tag-go.btn {
+    border-color: var(--border-strong);
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+html[data-look="pro"] #tag-modal .tagger-scope-note {
+    border-color: var(--pro-panel-line);
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] #tag-modal :is(.tagger-model-current-kicker, .tagger-model-panel-title) {
+    color: var(--text-2);
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+html[data-look="pro"] #tag-modal .tagger-model-current-action {
+    color: var(--text);
+}
+
+html[data-look="pro"] #tag-modal .tagger-model-badge,
+html[data-look="pro"] #tag-modal .tagger-model-badge.is-warning {
+    border-color: var(--border);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-2);
+}
