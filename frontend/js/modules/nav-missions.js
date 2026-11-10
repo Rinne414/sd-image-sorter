@@ -545,6 +545,21 @@
             }
         });
 
+        // A page reached without a tab click (Send to Dataset Maker, a feature
+        // found with Ctrl K, a hand-off between pages) shows its tab too. The
+        // active tab is watched itself: not every way of switching pages
+        // announces it (App.switchView is the unwrapped function).
+        const tabRow = document.querySelector('.nav-tabs');
+        if (tabRow && typeof MutationObserver === 'function') {
+            let seenActive = currentView();
+            new MutationObserver(() => {
+                const active = currentView();
+                if (active === seenActive) return;
+                seenActive = active;
+                window.requestAnimationFrame(apply);
+            }).observe(tabRow, { subtree: true, attributes: true, attributeFilter: ['class'] });
+        }
+
         // The event is dispatched on document and does not bubble to window.
         document.addEventListener('languageChanged', () => {
             renderChip(activeMission());
