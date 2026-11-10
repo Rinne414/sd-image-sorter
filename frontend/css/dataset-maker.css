@@ -1280,14 +1280,21 @@
 }
 #view-dataset .dataset-card-details > summary::-webkit-details-marker { display: none; }
 #view-dataset .dataset-card-details > summary::before {
-    content: '▸';
+    content: '';
     display: inline-block;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
     margin-right: 6px;
-    color: var(--text-secondary, #A6A6A6);
+    vertical-align: -1px;
+    background: var(--text-secondary, #A6A6A6);
+    -webkit-mask: var(--fold-chevron) center / contain no-repeat;
+    mask: var(--fold-chevron) center / contain no-repeat;
+    transform: rotate(-90deg);
     transition: transform 0.15s ease;
 }
 #view-dataset .dataset-card-details[open] > summary::before {
-    transform: rotate(90deg);
+    transform: none;
 }
 #view-dataset .dataset-card-details[open] > summary {
     margin-bottom: 8px;
@@ -1471,8 +1478,21 @@
 }
 #view-dataset .dataset-advanced > summary::-webkit-details-marker { display: none; }
 #view-dataset .dataset-advanced > summary::before {
-    content: '⚙ ';
-    margin-right: 4px;
+    content: '';
+    display: inline-block;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    margin-right: 6px;
+    vertical-align: -1px;
+    background: currentColor;
+    -webkit-mask: var(--fold-chevron) center / contain no-repeat;
+    mask: var(--fold-chevron) center / contain no-repeat;
+    transform: rotate(-90deg);
+    transition: transform 0.15s ease;
+}
+#view-dataset .dataset-advanced[open] > summary::before {
+    transform: none;
 }
 
 #view-dataset .dataset-subject-crop-panel,
@@ -1669,14 +1689,21 @@
     display: none;
 }
 #view-dataset .dataset-secondary-actions > summary::before {
-    content: '+';
-    display: inline-flex;
-    width: 14px;
-    margin-right: 4px;
-    color: var(--accent-primary);
+    content: '';
+    display: inline-block;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    margin-right: 6px;
+    vertical-align: -1px;
+    background: var(--text-secondary, #A6A6A6);
+    -webkit-mask: var(--fold-chevron) center / contain no-repeat;
+    mask: var(--fold-chevron) center / contain no-repeat;
+    transform: rotate(-90deg);
+    transition: transform 0.15s ease;
 }
 #view-dataset .dataset-secondary-actions[open] > summary::before {
-    content: '-';
+    transform: none;
 }
 #view-dataset .dataset-secondary-actions > .btn {
     margin-top: 6px;

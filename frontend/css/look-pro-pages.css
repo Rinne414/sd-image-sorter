@@ -1401,6 +1401,10 @@ html[data-look="pro"] #view-dataset :is(.dataset-card-details, .dataset-secondar
     margin: 0 10px 2px 2px;
     border-right: 1.5px solid var(--text-2);
     border-bottom: 1.5px solid var(--text-2);
+    /* This look draws the arrow with two borders, not the shared mask. */
+    background: none;
+    -webkit-mask: none;
+    mask: none;
     transform: rotate(-45deg);
     transition: transform 0.15s ease;
 }
@@ -2371,4 +2375,31 @@ html[data-look="pro"] #selection-actions .selection-panel-pick-actions #btn-sele
     border-color: var(--border-strong);
     background: var(--surface-3);
     color: var(--text);
+}
+
+/* Censor > Adjust: the eight sliders are plain rows like the Brush tab's, not
+   eight framed boxes with a track as thick as the box allowed (the range input
+   grew to fill its column). */
+html[data-look="pro"] #view-censor .sidebar-filter-2col {
+    gap: 18px 16px;
+    margin-bottom: 8px;
+}
+
+html[data-look="pro"] #view-censor .sidebar-filter-item {
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+html[data-look="pro"] #view-censor .sidebar-filter-item label {
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] #view-censor .sidebar-filter-item input[type="range"] {
+    flex: none;
+    height: 4px;
 }

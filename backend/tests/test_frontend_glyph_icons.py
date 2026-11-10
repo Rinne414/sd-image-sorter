@@ -101,3 +101,23 @@ def test_language_packs_carry_no_glyph_icons():
         "Translations are words; the icon belongs in the markup:\n"
         + "\n".join(offenders)
     )
+
+
+# A fold arrow, a gear or a plus sign typed into a stylesheet (content: '+'),
+# which the markup check above never saw (nine folds, 2026-11-10).
+CSS_TYPED_ICON = re.compile(
+    "content:\\s*['\"]\\s*[▲▴▶▸▼▾◀◂⚙+\\-−＋]\\s*['\"]"
+)
+
+
+def test_stylesheets_draw_fold_arrows_instead_of_typing_them():
+    offenders = []
+    for path in sorted((FRONTEND / "css").glob("*.css")):
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for number, line in enumerate(lines, 1):
+            if CSS_TYPED_ICON.search(line):
+                offenders.append(f"{path.name}:{number}: {line.strip()}")
+    assert offenders == [], (
+        "Draw the arrow (mask: var(--fold-chevron), see ui-refresh.css) "
+        "instead of typing a glyph: " + "; ".join(offenders)
+    )

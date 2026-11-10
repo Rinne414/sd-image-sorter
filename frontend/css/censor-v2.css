@@ -839,14 +839,20 @@ button.censor-batch-outcome-badge:focus-visible {
     display: none;
 }
 .censor-side-card-collapsible > .censor-side-card-summary::after {
-    content: '▸';
+    content: '';
+    display: inline-block;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
     margin-left: auto;
-    font-size: 12px;
-    color: var(--text-secondary, #A6A6A6);
+    background: var(--text-secondary, #A6A6A6);
+    -webkit-mask: var(--fold-chevron) center / contain no-repeat;
+    mask: var(--fold-chevron) center / contain no-repeat;
+    transform: rotate(-90deg);
     transition: transform 150ms ease;
 }
 .censor-side-card-collapsible[open] > .censor-side-card-summary::after {
-    transform: rotate(90deg);
+    transform: none;
 }
 .censor-side-card-collapsible > *:not(.censor-side-card-summary) {
     margin-top: 10px;
@@ -1213,6 +1219,13 @@ button.censor-batch-outcome-badge:focus-visible {
     width: 100%;
     min-width: 0;
     flex: 1;
+}
+
+/* The range input grew to fill its column, which drew a track as thick as the
+   box instead of the 4 px set above. */
+.sidebar-filter-item input[type="range"] {
+    flex: none;
+    margin: 8px 0 6px;
 }
 
 /* Sticky bottom actions */

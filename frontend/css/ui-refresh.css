@@ -1242,9 +1242,14 @@ textarea:focus,
 
 .tag-runtime-advanced-summary::after,
 .guided-advanced-summary::after {
-    content: '▾';
-    flex: 0 0 auto;
-    color: var(--accent-primary);
+    content: '';
+    display: inline-block;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    background: var(--accent-primary);
+    -webkit-mask: var(--fold-chevron) center / contain no-repeat;
+    mask: var(--fold-chevron) center / contain no-repeat;
     transition: transform 160ms ease;
 }
 
@@ -2418,13 +2423,20 @@ html:has(#view-gallery.active) {
     display: none;
 }
 .model-network-summary::after {
-    content: "▸";
-    flex: 0 0 auto;
+    content: '';
+    display: inline-block;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
     margin-left: auto;
-    color: var(--text-muted);
+    background: var(--text-muted);
+    -webkit-mask: var(--fold-chevron) center / contain no-repeat;
+    mask: var(--fold-chevron) center / contain no-repeat;
+    transform: rotate(-90deg);
+    transition: transform 160ms ease;
 }
 .model-network-settings[open] > .model-network-summary::after {
-    content: "▾";
+    transform: none;
 }
 .model-network-summary:focus-visible {
     border-radius: 12px;
@@ -7728,9 +7740,14 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 .selection-panel-disclosure-summary::after {
-    content: '▾';
-    color: rgba(255, 255, 255, 0.46);
-    font-size: var(--fs-footnote);
+    content: '';
+    display: inline-block;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.46);
+    -webkit-mask: var(--fold-chevron) center / contain no-repeat;
+    mask: var(--fold-chevron) center / contain no-repeat;
     transition: transform 0.16s ease;
 }
 
@@ -9639,14 +9656,19 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: none;
 }
 .audit-summary::before {
-    content: '▸';
+    content: '';
     display: inline-block;
-    color: var(--text-muted, #ACACAC);
-    transform-origin: 50% 50%;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    background: var(--text-muted, #ACACAC);
+    -webkit-mask: var(--fold-chevron) center / contain no-repeat;
+    mask: var(--fold-chevron) center / contain no-repeat;
+    transform: rotate(-90deg);
     transition: transform 0.18s ease;
 }
 .audit-section[open] > .audit-summary::before {
-    transform: rotate(90deg);
+    transform: none;
 }
 .audit-summary:hover {
     background: rgba(var(--accent-primary-rgb), 0.04);
@@ -13420,6 +13442,10 @@ html .nav-bar.nav-measuring * {
     color: var(--text-muted);
     font-size: 12.5px;
     line-height: 1.5;
+}
+
+:root {
+    --fold-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 /* Fold arrows are line chevrons (2026-11-08): the text glyphs (down and right
