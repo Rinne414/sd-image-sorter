@@ -263,6 +263,16 @@ def embed_text(query: str) -> Optional[np.ndarray]:
     value = str(query or "").strip()
     if not value:
         return None
+    # CLIP's own text model reads English only. A query in another script is
+    # read by the multilingual model when the user has it (same picture vectors).
+    import clip_multilingual
+
+    if clip_multilingual.needs_multilingual(value) and clip_multilingual.is_installed():
+        try:
+            with exclusive_ai_runtime("clip-text-inference", priority=PRIORITY_INTERACTIVE):
+                return clip_multilingual.encode(value)
+        except Exception as exc:  # noqa: BLE001 - fall back to the English model
+            logger.warning("[Similarity] Multilingual text model failed: %s", exc)
     model = _get_text_embed_model()
     try:
         # Only reached by SimilarityIndex.search_by_text, i.e. a user waiting on

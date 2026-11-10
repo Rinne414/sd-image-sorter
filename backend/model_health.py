@@ -58,6 +58,7 @@ from lucida_matting import LUCIDA_REQUIRED_FILES
 import rembg_model
 import anime_censor_models
 import aesthetic
+import clip_multilingual
 import csd_weights
 import anime_aesthetic
 from cl_tagger_v2 import CL_TAGGER_V2_REQUIRED_MODULES
@@ -727,6 +728,7 @@ def get_model_health() -> Dict[str, Any]:
         "censor_anime": anime_censor_models.health(),
         "aesthetic_waifu": aesthetic.waifu_health(),
         "csd": csd_weights.health(),
+        "clip_multilingual": clip_multilingual.health(),
         "aesthetic_anime": anime_aesthetic.health(),
         "video_ffmpeg": _video_ffmpeg_health(),
         "umap": _umap_health(),

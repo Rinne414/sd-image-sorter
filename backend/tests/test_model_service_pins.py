@@ -820,6 +820,7 @@ def test_get_status_wraps_inventory_and_health(monkeypatch):
         "cl-tagger-v2",
         "tipo",
         "clip",
+        "clip-multilingual",
         "aesthetic",
         "aesthetic-waifu",
         "aesthetic-anime",

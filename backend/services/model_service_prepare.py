@@ -376,6 +376,19 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
             "paths": {**(base.get("paths") or {}), **paths},
         }
 
+    if normalized_model_id == "clip-multilingual":
+        # onnxruntime, tokenizers and numpy come with the similarity search;
+        # three pinned files, checked by SHA-256.
+        import clip_multilingual
+
+        paths = clip_multilingual.prepare(_svc()._direct_download_file)
+        return {
+            "status": "ok",
+            "model_id": normalized_model_id,
+            "message": "Multilingual text search is ready. Describe pictures in your own language in Find Similar. / 多语言文字搜索已就绪，可以在“相似”里用中文描述图片了。",
+            "paths": paths,
+        }
+
     if normalized_model_id == "csd":
         # CSD runs on torch + open_clip (the Aesthetic runtime group); the
         # 2.44 GB pinned file is fetched once the runtime is in place.

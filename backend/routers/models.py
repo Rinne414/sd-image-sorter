@@ -311,6 +311,15 @@ BULK_MODEL_BUNDLE: list[dict[str, object]] = [
         "restart_after_install": True,
     },
     {
+        "id": "clip-multilingual",
+        "size_bytes": 138_912_610,
+        "label": "Multilingual text search (describe pictures in Chinese and 50+ languages, ~132 MB)",
+        "feature_key": "similarity",
+        "recommended": False,
+        "default_selected": False,
+        "restart_after_install": False,
+    },
+    {
         "id": "aesthetic",
         "size_bytes": int(1.7 * 1024 * 1024 * 1024),
         "label": "Aesthetic predictor (CLIP ViT-L/14 + LAION head)",

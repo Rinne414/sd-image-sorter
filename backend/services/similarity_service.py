@@ -337,6 +337,10 @@ class SimilarityService:
             )
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+        import clip_multilingual
+
+        other_script = clip_multilingual.needs_multilingual(query)
+        multilingual_ready = clip_multilingual.is_installed()
         return {
             "query": query,
             "results": result["results"],
@@ -345,6 +349,11 @@ class SimilarityService:
             "has_more": result["has_more"],
             "offset": result["offset"],
             "limit": result["limit"],
+            # A query the English text model cannot read, answered without the
+            # multilingual one: the results are not about the query.
+            "text_model": "multilingual" if other_script and multilingual_ready else "english",
+            "needs_multilingual": other_script and not multilingual_ready,
+            "multilingual_download_mb": round(clip_multilingual.download_bytes() / (1024 * 1024)),
         }
 
     def find_duplicates(

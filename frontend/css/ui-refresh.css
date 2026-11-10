@@ -13963,3 +13963,24 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .artist-card .artist-avatar {
     color: #141517;
 }
+
+/* Find Similar: the note above results a description in another language gets
+   while only the English text model is installed. */
+.similar-language-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.24));
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text, #F2F2F4);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.similar-language-note > span {
+    flex: 1 1 320px;
+}

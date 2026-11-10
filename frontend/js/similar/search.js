@@ -41,6 +41,7 @@ Object.assign(window.SimilarImages, {
         }
 
         const requestToken = this.beginSearchRequest();
+        document.getElementById('similar-language-note')?.remove();
         this.searchEmptyMessage = this._t(
             'similar.searchEmptyById',
             'No similar images found for this image at the current threshold.'
@@ -84,6 +85,46 @@ Object.assign(window.SimilarImages, {
             resultsContainer.innerHTML = `<div class="empty-state">${escapeHtml(this._t('similar.searchFailedMessage', 'Search failed: {message}', { message }))}</div>`;
             showToast(this._t('similar.searchFailed', 'Similarity search failed'), 'error');
         }
+    },
+
+    // A description in Chinese (or another non-Latin script) read by the
+    // English text model gives results that are not about it. Say so above
+    // the results and offer the multilingual model, then search again.
+    _renderLanguageNote(result, query) {
+        const results = document.getElementById('similar-results');
+        if (!results) return;
+        let note = document.getElementById('similar-language-note');
+        if (!result?.needs_multilingual) {
+            note?.remove();
+            return;
+        }
+        if (!note) {
+            note = document.createElement('div');
+            note.id = 'similar-language-note';
+            note.className = 'similar-language-note';
+            note.setAttribute('role', 'status');
+            results.before(note);
+        }
+        const megabytes = Number(result.multilingual_download_mb || 0);
+        const text = document.createElement('span');
+        text.textContent = this._t(
+            'similar.languageNote',
+            'The installed text model reads English only, so these results are not about your description. The multilingual model reads Chinese and 50+ other languages against the same index.'
+        );
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-secondary btn-small';
+        button.textContent = this._t('similar.languageNoteDownload', 'Download it (about {size} MB)', { size: megabytes });
+        button.addEventListener('click', async () => {
+            button.disabled = true;
+            const outcome = await window.ensureFeatureModel?.('clip-multilingual', {
+                label: this._t('similar.languageModelName', 'Multilingual text search'),
+                sizeHint: `${megabytes} MB`,
+            });
+            button.disabled = false;
+            if (outcome?.ok) this.searchByText(query);
+        });
+        note.replaceChildren(text, button);
     },
 
     _renderSearchStateNode(className, text) {
@@ -153,6 +194,7 @@ Object.assign(window.SimilarImages, {
             this.searchHasMore = Boolean(result.has_more);
             this.totalSearchCount = Number(result.total || this.searchResults.length);
             this.renderSearchResults();
+            this._renderLanguageNote(result, value);
         } catch (e) {
             if (requestToken !== this.activeSearchToken) return;
             const message = String(e?.message || this._t('similar.textSearchFailed', 'Semantic search failed'));

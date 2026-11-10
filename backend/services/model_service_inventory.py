@@ -18,6 +18,7 @@ from typing import Any, Dict, List
 
 from text_counts import count_text
 
+from services.model_service_clip_multilingual import clip_multilingual_card
 from services.model_service_csd import csd_card
 
 
@@ -576,6 +577,7 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "Text queries require model.onnx + config.json + tokenizer.json + tokenizer_config.json + special_tokens_map.json in " + clip_health.get("expected_text_path", "data/models/clip/Qdrant-clip-ViT-B-32-text"),
             ],
         },
+        clip_multilingual_card(health.get("clip_multilingual", {})),
         {
             "id": "aesthetic",
             "name": "Aesthetic Predictor",
