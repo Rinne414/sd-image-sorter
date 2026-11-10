@@ -2732,3 +2732,54 @@ html[data-look="pro"] #promptlab-mode-stats .btn.btn-secondary.btn-small[data-ac
     background: var(--surface-3);
     color: var(--text);
 }
+
+/* Reverse Prompt (blind round 22): the page ended two thirds down and its one
+   main button was a small grey block. The two panels fill the window height
+   and are equally tall; the result area and the draft take the spare room;
+   the run button spans its panel. */
+html[data-look="pro"] #view-reverse .reverse-columns {
+    align-items: stretch;
+    min-height: calc(100vh - 236px);
+}
+
+html[data-look="pro"] #view-reverse .reverse-results-pane {
+    display: flex;
+    flex-direction: column;
+}
+
+html[data-look="pro"] #view-reverse .reverse-results-pane > :is(.reverse-results-empty, .reverse-results:not([hidden])) {
+    flex: 1 1 200px;
+}
+
+html[data-look="pro"] #view-reverse .reverse-results-empty {
+    display: grid;
+    place-items: center;
+}
+
+html[data-look="pro"] #view-reverse .reverse-draft-card {
+    display: flex;
+    flex: 1 1 200px;
+    flex-direction: column;
+}
+
+html[data-look="pro"] #view-reverse .reverse-draft-card > textarea {
+    flex: 1 1 120px;
+    min-height: 120px;
+}
+
+html[data-look="pro"] #view-reverse .reverse-intake-pane {
+    display: flex;
+    flex-direction: column;
+}
+
+html[data-look="pro"] #view-reverse .reverse-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+
+html[data-look="pro"] #view-reverse #btn-reverse-run {
+    width: 100%;
+    min-height: 36px;
+}
