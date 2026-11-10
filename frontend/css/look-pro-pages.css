@@ -2088,3 +2088,168 @@ html[data-look="pro"] #tag-modal .tagger-model-badge.is-warning {
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-2);
 }
+
+/* ---- The filter dialog in the pro look ----
+   It still wore today's parts: accent kickers, 20 px headings, nine boxed
+   counts, 56 px tiles and 48 px fields. Same frame as the pages. */
+
+html[data-look="pro"] #filter-modal .filter-modal-shell {
+    border-radius: var(--pro-r-panel);
+}
+
+html[data-look="pro"] #filter-modal .filter-panel-kicker {
+    display: none;
+}
+
+html[data-look="pro"] #filter-modal .filter-panel-header :is(h4, h3) {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #filter-modal .filter-panel-help {
+    font-size: 12.5px;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #filter-modal .filter-section :is(h5, .filter-section-header h5) {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #filter-modal .anime-aesthetic-heading {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-2);
+}
+
+/* The counts: a line of facts, not nine boxes. */
+html[data-look="pro"] #filter-modal .filter-modal-stat-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+}
+
+html[data-look="pro"] #filter-modal .filter-stat-card {
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: 0 20px;
+    border: 0;
+    border-left: 1px solid var(--pro-panel-line);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+html[data-look="pro"] #filter-modal .filter-stat-card:first-child {
+    padding-left: 0;
+    border-left: 0;
+}
+
+html[data-look="pro"] #filter-modal .filter-stat-label {
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #filter-modal .filter-stat-value {
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] #filter-modal .filter-presets-bar {
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+html[data-look="pro"] #filter-modal .filter-presets-title {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #filter-modal .filter-panel {
+    padding: 16px;
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-panel-bg);
+    box-shadow: none;
+}
+
+html[data-look="pro"] #filter-modal .filter-toggle-grid .checkbox-label {
+    min-height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background: transparent;
+}
+
+html[data-look="pro"] #filter-modal .filter-toggle-grid .checkbox-label:has(input:checked) {
+    border-color: var(--border-strong);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+html[data-look="pro"] #filter-modal .filter-toggle-grid .checkbox-text {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] #filter-modal :is(input.input-field, input[type="text"], input[type="number"], input[type="search"], select.input-field) {
+    height: 36px;
+    min-height: 36px;
+    padding-block: 0;
+    border-radius: var(--pro-r-control);
+    box-shadow: none;
+    font-size: 13px;
+}
+
+html[data-look="pro"] #filter-modal .btn:not(.btn-icon-only) {
+    font-weight: 500;
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #filter-modal .filter-modal-footer .btn,
+html[data-look="pro"] #filter-modal #btn-apply-filters-modal,
+html[data-look="pro"] #filter-modal #btn-reset-filters-modal {
+    min-height: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    min-width: 132px;
+}
+
+html[data-look="pro"] #filter-modal #btn-apply-filters-modal {
+    font-weight: 600;
+}
+
+html[data-look="pro"] #filter-modal :is(.filter-stat-label, .filter-presets-title, .dimension-field span, label) {
+    letter-spacing: 0;
+}
+
+html[data-look="pro"] #filter-modal .filter-modal-actions .btn {
+    flex: 0 0 auto;
+    min-width: 132px;
+    min-height: 36px;
+    height: 36px;
+}
+
+html[data-look="pro"] #filter-modal .filter-modal-actions .btn.btn-primary {
+    font-weight: 600;
+}
+
+html[data-look="pro"] #filter-modal :is(h5, h6, .filter-subheading, .dimension-field > span, .filter-group-title) {
+    font-size: 12px;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+html[data-look="pro"] #filter-modal .filter-section > h5,
+html[data-look="pro"] #filter-modal .filter-section-header h5 {
+    font-size: 13px;
+}
