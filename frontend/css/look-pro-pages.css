@@ -1473,11 +1473,39 @@ html[data-look="pro"] #view-censor .tool-btn-v2 .tool-label span {
     font-weight: inherit;
 }
 
+/* !important: ui-refresh.css sets the accent on this number with !important. */
 html[data-look="pro"] #view-censor .zoom-level-v2 {
     font-family: var(--font-body);
     font-variant-numeric: tabular-nums;
     font-weight: 500;
-    color: var(--text);
+    color: var(--text) !important;
+}
+
+html[data-look="pro"] #view-censor .censor-status-bar .status-filename {
+    font-family: var(--font-body);
+    font-weight: 500;
+}
+
+/* Review: a section of the sidebar like the others, not a card in it. */
+html[data-look="pro"] #view-censor .censor-review {
+    padding: 6px 0 14px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+}
+
+html[data-look="pro"] #view-censor .censor-review-hint {
+    color: var(--text-2);
+}
+
+/* The two secondary save actions share a row, so the pinned section covers
+   less of the tools above it on a short screen. */
+html[data-look="pro"] #view-censor .censor-save-actions {
+    grid-template-columns: 1fr 1fr;
+}
+
+html[data-look="pro"] #view-censor .censor-save-actions > :first-child {
+    grid-column: 1 / -1;
 }
 
 html[data-look="pro"] #view-censor .zoom-controls-v2 {
@@ -1699,4 +1727,38 @@ html[data-look="pro"] .page-lead {
 
 html[data-look="pro"] #view-stylemap .page-lead {
     margin: 0 0 8px;
+}
+
+/* Read Image: the editor's fields and the header's buttons use the page's sizes. */
+html[data-look="pro"] #view-reader .reader-editor-body :is(input.input-field, select.input-field) {
+    height: 36px;
+    min-height: 36px;
+    padding-block: 0;
+    border-radius: var(--pro-r-control);
+    box-shadow: none;
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-reader .reader-editor-body textarea.input-field {
+    border-radius: var(--pro-r-control);
+    box-shadow: none;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+html[data-look="pro"] #view-reader .reader-editor-field > span {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-reader .reader-header-actions .btn {
+    min-height: 28px;
+    height: 28px;
+    padding: 0 10px;
+    font-size: 12.5px;
+}
+
+html[data-look="pro"] #view-reader .reader-header-actions .reader-copy-menu-trigger {
+    min-height: 28px;
 }

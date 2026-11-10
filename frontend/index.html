@@ -1539,6 +1539,8 @@
                                             <button id="reader-copy-all" class="reader-copy-menu-item" type="button" data-i18n="reader.copyAll">Copy All</button>
                                         </div>
                                     </details>
+                                    <!-- The edit-and-save section sits under everything else; this takes the user to it. -->
+                                    <button id="reader-edit-jump" class="btn btn-ghost btn-sm" type="button" data-i18n="reader.editAndSave">Edit and save a copy</button>
                                     <button id="reader-clear" class="btn btn-ghost btn-sm" data-i18n="reader.clear">Clear</button>
                                 </div>
                             </div>
@@ -2205,7 +2207,7 @@
                                         <label><input type="radio" name="slot-type-w" value="collection" data-key="w"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
                                     </div>
                                     <div class="slot-folder-target">
-                                        <input type="text" class="folder-path-input" placeholder="D:\sorted\top" data-key="w">
+                                        <input type="text" class="folder-path-input" placeholder="e.g. D:\sorted\top" data-i18n-placeholder="manual.folderExampleW" data-key="w">
                                         <button class="btn btn-small btn-secondary browse-folder" aria-label="Browse for the W slot folder" data-i18n-aria="a11y.browseSlotW"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></button>
                                     </div>
                                     <select class="slot-collection-select" data-key="w" hidden></select>
@@ -2222,7 +2224,7 @@
                                             <label><input type="radio" name="slot-type-a" value="collection" data-key="a"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
                                         </div>
                                         <div class="slot-folder-target">
-                                            <input type="text" class="folder-path-input" placeholder="D:\sorted\keep" data-key="a">
+                                            <input type="text" class="folder-path-input" placeholder="e.g. D:\sorted\keep" data-i18n-placeholder="manual.folderExampleA" data-key="a">
                                             <button class="btn btn-small btn-secondary browse-folder" aria-label="Browse for the A slot folder" data-i18n-aria="a11y.browseSlotA"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></button>
                                         </div>
                                         <select class="slot-collection-select" data-key="a" hidden></select>
@@ -2243,7 +2245,7 @@
                                             <label><input type="radio" name="slot-type-d" value="collection" data-key="d"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
                                         </div>
                                         <div class="slot-folder-target">
-                                            <input type="text" class="folder-path-input" placeholder="D:\sorted\best" data-key="d">
+                                            <input type="text" class="folder-path-input" placeholder="e.g. D:\sorted\best" data-i18n-placeholder="manual.folderExampleD" data-key="d">
                                             <button class="btn btn-small btn-secondary browse-folder" aria-label="Browse for the D slot folder" data-i18n-aria="a11y.browseSlotD"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></button>
                                         </div>
                                         <select class="slot-collection-select" data-key="d" hidden></select>
@@ -2260,7 +2262,7 @@
                                         <label><input type="radio" name="slot-type-s" value="collection" data-key="s"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
                                     </div>
                                     <div class="slot-folder-target">
-                                        <input type="text" class="folder-path-input" placeholder="D:\sorted\delete" data-key="s">
+                                        <input type="text" class="folder-path-input" placeholder="e.g. D:\sorted\delete" data-i18n-placeholder="manual.folderExampleS" data-key="s">
                                         <button class="btn btn-small btn-secondary browse-folder" aria-label="Browse for the S slot folder" data-i18n-aria="a11y.browseSlotS"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></button>
                                     </div>
                                     <select class="slot-collection-select" data-key="s" hidden></select>

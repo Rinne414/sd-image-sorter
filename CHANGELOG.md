@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Read Image: an edited copy of a dropped picture no longer goes to a temporary folder**: the save path was pre-filled with the program's upload folder (which is emptied later) and a random file name. It now defaults to the save folder's `reader` folder with the picture's own name, and that folder is created by the save. A new "Edit and save a copy" button at the top opens the editor, which sits at the end of the panel.
+  - **读图：拖进来的图片另存时不再默认存到临时文件夹**：保存路径原本预填的是程序的上传临时文件夹（之后会被清空）和一串随机文件名。现在默认是保存文件夹下的 `reader` 文件夹加图片原名，保存时会自动创建。顶部新增“编辑并另存”按钮，直接打开位于面板最下方的编辑区。
+- **Example text reads as an example**: Manual Sort's folder boxes and the Prompt Helper's fixed start/end boxes showed examples that looked like filled-in values; they now begin with "e.g.". The Censor colour box is labelled "Pen color" (it only applies to the pen).
+  - **示例文字看起来就是示例**：手动排序的文件夹输入框和提示词助手的固定开头/结尾输入框里，示例看起来像已经填好的值；现在以“例如”开头。打码页的颜色框标为“钢笔颜色”（它只对钢笔有效）。
 - **No more "Something went wrong" for a browser note**: the Style Map could show the error strip ("reloading usually fixes it") while everything worked, because the browser's size-observer note was treated as an error. Real errors are still shown.
   - **不再把浏览器的一条提示报成“出了点问题”**：画风地图一切正常时也可能弹出错误条（“重新载入通常就好了”），原因是把浏览器关于尺寸监听的提示当成了错误。真正的错误照常显示。
 - **Dataset check speaks plainly, in your language**: problems read "This picture has no caption to write" or "This picture cannot be opened" with what to do next, instead of English sentences with the path quoted inside; the path keeps its own line.

@@ -837,3 +837,21 @@ test('pro look: Similar, Style Finder and Style Map say in one sentence what the
   await page.evaluate(() => (window as any).SdLook.set(null))
   await expect(page.locator('#view-stylemap .page-lead')).toBeHidden()
 })
+
+test('Read Image: a dropped picture’s copy is not saved into the upload temp folder, and the editor is one click away', async ({ page }) => {
+  await open(page, null)
+  await page.evaluate(() => (document.querySelector('.nav-tab[data-view="reader"]') as HTMLElement).click())
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+  await page.setInputFiles('#reader-file-input', { name: 'dropped-picture.png', mimeType: 'image/png', buffer: png })
+  await expect(page.locator('.reader-container')).toHaveClass(/reader-has-image/)
+  const output = page.locator('#reader-edit-output-path')
+  // The default arrives from the server a moment later: "<save folder>/reader/<name>.edited.png".
+  await expect.poll(() => output.inputValue()).toMatch(/[\\/]reader[\\/]dropped-picture\.edited\.png$/)
+  expect(await output.inputValue()).not.toMatch(/reader_uploads/)
+  await expect(page.locator('#reader-edit-output-hint')).not.toHaveAttribute('data-i18n', /.+/)
+
+  await expect(page.locator('#reader-editor-body')).toBeHidden()
+  await page.click('#reader-edit-jump')
+  await expect(page.locator('#reader-editor-body')).toBeVisible()
+  await expect(page.locator('#reader-edit-prompt')).toBeFocused()
+})

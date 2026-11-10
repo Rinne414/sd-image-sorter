@@ -67,6 +67,29 @@ from utils.path_validation import (
 )
 from utils.reported_cause import describe_readability_failure
 
+# The Reader's default place for an edited copy of a picture that has no folder
+# of its own (dropped or pasted): ``<save folder>/reader``. The frontend fills
+# the path field with it (image-reader/metadata-editor.js).
+READER_OUTPUT_SUBFOLDER = "reader"
+
+
+def ensure_reader_output_folder(output_path: str) -> None:
+    """Create the program's own Reader save folder when a save targets it.
+
+    Output validation refuses a path whose folder does not exist. That is right
+    for a folder the user typed, but the default one is the program's to make:
+    saving needs no setup. Any other folder is left to the validation.
+    """
+    import config
+
+    try:
+        requested_parent = Path(str(output_path)).expanduser().parent.resolve()
+        default_folder = (config.output_root() / READER_OUTPUT_SUBFOLDER).resolve()
+    except (OSError, ValueError):
+        return
+    if requested_parent == default_folder:
+        default_folder.mkdir(parents=True, exist_ok=True)
+
 # NOTE(decomposition): keep the historical logger channel so log routing and
 # output stay byte-identical after the package split.
 logger = logging.getLogger("services.image_service")
@@ -220,6 +243,7 @@ class ServingMixin:
             raise PathValidationError(error or "Invalid source image path")
 
         source = Path(source_path).resolve()
+        ensure_reader_output_folder(output_path)
         output = validate_image_output_path(output_path, allow_overwrite=allow_overwrite)
 
         normalized_output_format = output.extension.lstrip(".").lower()

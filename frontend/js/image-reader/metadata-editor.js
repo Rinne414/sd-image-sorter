@@ -29,10 +29,23 @@ Object.assign(window.ImageReader, {
             document.getElementById('reader-save-metadata-as')?.addEventListener('click', () => {
                 this._saveEditedMetadata(false);
             });
+
+            // The editor is the last section of a long panel: open it and bring it into view.
+            document.getElementById('reader-edit-jump')?.addEventListener('click', () => {
+                const section = document.getElementById('reader-metadata-editor');
+                if (!section || section.hidden) return;
+                const toggle = section.querySelector('.reader-section-toggle');
+                if (toggle?.classList.contains('is-collapsed')) toggle.click();
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                document.getElementById('reader-edit-prompt')?.focus({ preventScroll: true });
+            });
         },
 
         _isReaderTempSourcePath(path) {
-            return /sd_image_sorter_reader_uploads/i.test(String(path || '').replace(/\\/g, '/'));
+            // The upload folder is "<temp>/reader_uploads" (backend/routers/images.py).
+            // The old name alone never matched, so a dropped picture's save path was
+            // pre-filled with that temp folder, which is emptied later.
+            return /(?:^|\/)(?:sd_image_sorter_)?reader_uploads\//i.test(String(path || '').replace(/\\/g, '/'));
         },
 
         _getBaseSourcePathForSuggestions() {
@@ -78,10 +91,31 @@ Object.assign(window.ImageReader, {
                 }
             }
 
+            let remembered = '';
             try {
-                return localStorage.getItem(this._metadataEditorStorageKey) || '';
+                remembered = localStorage.getItem(this._metadataEditorStorageKey) || '';
             } catch (_) {
-                return '';
+                remembered = '';
+            }
+            // Nothing known and nothing remembered: the program's own save
+            // folder, like the other save dialogs (see _loadDefaultReaderFolder).
+            return remembered || this._defaultReaderFolder || '';
+        },
+
+        // A dropped or pasted picture has no folder of its own. Saving needs no
+        // setup: the copy goes to "<save folder>/reader" unless the user types
+        // another place (Settings > save folder moves it with the others).
+        async _loadDefaultReaderFolder() {
+            if (this._defaultReaderFolder !== undefined) return;
+            this._defaultReaderFolder = '';
+            try {
+                const data = await window.App.API.get('/api/output-folders');
+                if (data?.root) {
+                    this._defaultReaderFolder = this._joinPath(data.root, 'reader');
+                    this._updateMetadataEditorOutputPath();
+                }
+            } catch (error) {
+                window.Logger?.warn?.('Could not read the default save folder', error);
             }
         },
 
@@ -178,6 +212,10 @@ Object.assign(window.ImageReader, {
             if (!hintEl) return;
 
             const directory = this._getPreferredOutputDirectory();
+            // The element carries the "type a full path" key; with a folder known
+            // the language refresh would write that sentence back over this one.
+            if (directory) hintEl.removeAttribute('data-i18n');
+            else hintEl.dataset.i18n = 'reader.editOutputHint';
             hintEl.textContent = directory
                 ? this._t(
                     'reader.editOutputHintUsingFolder',
@@ -214,6 +252,7 @@ Object.assign(window.ImageReader, {
         },
 
         _populateMetadataEditor(result) {
+            this._loadDefaultReaderFolder();
             const editor = document.getElementById('reader-metadata-editor');
             const promptInput = document.getElementById('reader-edit-prompt');
             const negativeInput = document.getElementById('reader-edit-negative');
