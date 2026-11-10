@@ -4914,7 +4914,7 @@ window.I18nLang_en = {
     'dataset.exportDone': 'Exported {count} image+caption pairs to {folder}',
     'dataset.exportError': 'Export failed: {message}',
     'dataset.confirmClearTitle': 'Clear Dataset Maker',
-    'dataset.gallerySelectionEmpty': 'Open the Gallery tab and select images first, then come back here and click this button again.',
+    'dataset.gallerySelectionEmpty': 'Pick the pictures in the Gallery, then press "Send to Dataset Maker" at the bottom.',
     'dataset.gallerySelectionAdded': 'Added {count} images from Gallery selection',
     'dataset.gallerySelectionAlreadyAdded': 'Those images are already in the Dataset Maker queue.',
     // v3.2.2 task #8: 5-step pipeline header.

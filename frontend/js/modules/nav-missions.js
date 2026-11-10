@@ -292,6 +292,15 @@
     const ACTION_BAR_PRIMARY = { lora: 'btn-send-selection-to-dataset-maker', pixiv: 'btn-send-to-censor' };
     const ACTION_BAR_LEADERS = ['btn-move-selected', 'btn-send-to-censor', 'btn-send-selection-to-dataset-maker'];
 
+    // An errand from another page (Dataset Maker asking for pictures) puts
+    // its button first in the selection bar until the user leaves the Gallery.
+    let errandPrimaryId = null;
+
+    function leadActionBarWith(buttonId) {
+        errandPrimaryId = ACTION_BAR_LEADERS.includes(buttonId) ? buttonId : null;
+        syncActionBar(activeMission());
+    }
+
     function syncActionBar(missionKey) {
         const buttons = document.querySelector('#gallery-action-bar .gallery-action-bar-buttons');
         const menu = document.getElementById('gallery-action-more-menu');
@@ -299,7 +308,7 @@
         const move = document.getElementById('btn-move-selected');
         if (!buttons || !menu || !dataset || !move) return;
 
-        const primaryId = ACTION_BAR_PRIMARY[missionKey] || 'btn-move-selected';
+        const primaryId = errandPrimaryId || ACTION_BAR_PRIMARY[missionKey] || 'btn-move-selected';
         if (primaryId === dataset.id) {
             if (dataset.parentElement !== buttons) buttons.insertBefore(dataset, buttons.firstElementChild);
         } else if (dataset.parentElement !== menu) {
@@ -321,6 +330,7 @@
 
     function apply() {
         const missionKey = activeMission();
+        if (errandPrimaryId && currentView() !== 'gallery') errandPrimaryId = null;
         syncActionBar(missionKey);
         orderTabs(baseTabs());
         const visible = missionKey ? MISSIONS[missionKey].tabs.slice() : baseTabs();
@@ -579,5 +589,5 @@
         wire();
     }
 
-    window.NavMissions = { enter, exit, activeMission, apply, baseTabs, setBaseTabs, MISSIONS };
+    window.NavMissions = { enter, exit, activeMission, apply, baseTabs, setBaseTabs, leadActionBarWith, MISSIONS };
 })();

@@ -1648,12 +1648,12 @@ test.describe('Smoke Tests', () => {
     await expect(toriiGateOption).toBeEnabled()
 
     await page.locator('#tag-model-select').selectOption('camie-tagger-v2')
-    await expect(page.locator('#tag-model-help')).toContainText(/newer danbooru-era tag space|modern tag coverage|tagger\.desc|Q\d\/5/i)
+    await expect(page.locator('#tag-model-help')).toContainText(/newer danbooru-era tag space|modern tag coverage|tagger\.desc|Quality \d\/5/i)
     await expect(page.locator('#tag-threshold')).toHaveValue('0.62')
     await expect(page.locator('#tag-character-threshold')).toHaveValue('0.78')
 
     await page.locator('#tag-model-select').selectOption('pixai-tagger-v0.9')
-    await expect(page.locator('#tag-model-help')).toContainText(/pixai v0.9 onnx export|newer tag space|rating fallback|tagger\.desc|Q\d\/5/i)
+    await expect(page.locator('#tag-model-help')).toContainText(/pixai v0.9 onnx export|newer tag space|rating fallback|tagger\.desc|Quality \d\/5/i)
     await expect(page.locator('#tag-threshold')).toHaveValue('0.3')
     await expect(page.locator('#tag-character-threshold')).toHaveValue('0.85')
 
@@ -1747,7 +1747,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-provider-chip')).toContainText(/CUDA|Provider unknown|providerUnknown/i)
     await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/CUDA|TensorRT|Provider unknown|providerUnknown/i)
     await expect(page.locator('#tag-runtime-summary')).toContainText(/Adaptive GPU mode|recommended fast path|Recommended chunk|tagger\.runtime|tagger\.chunkHelp/i)
-    await expect(page.locator('#tag-model-help')).toContainText(/adaptive runtime limits|tagger\.|Q\d\/5/i)
+    await expect(page.locator('#tag-model-help')).toContainText(/adaptive runtime limits|tagger\.|Quality \d\/5/i)
     await expect(page.locator('#tag-runtime-mode-chip')).toContainText(/GPU Target/i)
 
     await page.locator('#tag-model-select').selectOption('custom')

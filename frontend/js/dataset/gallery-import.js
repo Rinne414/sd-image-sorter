@@ -21,13 +21,20 @@
                 // here is the #1 confusion point. Take the user there
                 // explicitly + show a sticky toast that survives the nav.
                 this._toast(this._t('dataset.gallerySelectionEmpty',
-                    'Open the Gallery tab and select images first, then come back here and click this button again.'),
-                    'warning', 8000);
-                // Switch to the Gallery tab so the user sees the next step
-                // without having to figure out where to click.
+                    'Pick the pictures in the Gallery, then press "Send to Dataset Maker" at the bottom.'),
+                    'info', 10000);
+                // Take the user there ready to pick: select mode on, and the
+                // button that brings the pictures back first in the bar (it
+                // sat in the bar's More menu: four steps to guess).
                 const galleryTab = document.getElementById('nav-tab-gallery');
                 if (galleryTab) {
-                    setTimeout(() => galleryTab.click(), 600);
+                    setTimeout(() => {
+                        galleryTab.click();
+                        window.App?.setSelectionMode?.(true);
+                        window.requestAnimationFrame(() => {
+                            window.NavMissions?.leadActionBarWith?.('btn-send-selection-to-dataset-maker');
+                        });
+                    }, 600);
                 }
                 return;
             }

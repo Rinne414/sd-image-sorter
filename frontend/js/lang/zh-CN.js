@@ -4914,7 +4914,7 @@ window.I18nLang_zhCN = {
     'dataset.exportDone': '已导出 {count} 组图 + caption 配对到 {folder}',
     'dataset.exportError': '导出失败：{message}',
     'dataset.confirmClearTitle': '清空数据集',
-    'dataset.gallerySelectionEmpty': '先打开图库分页选好图，再回到这里点这个按钮。',
+    'dataset.gallerySelectionEmpty': '在图库里勾选要用的图片，然后点底部的「送到数据集」。',
     'dataset.gallerySelectionAdded': '已从图库选择中加入 {count} 张图',
     'dataset.gallerySelectionAlreadyAdded': '这些图已经在数据集队列里了。',
     // v3.2.2 任务 #8: 5 步骤管线表头。
@@ -4935,7 +4935,7 @@ window.I18nLang_zhCN = {
     'dataset.sidecarNoticeGalleryFolder': '从图库或上方文件夹路径导入的图，.txt 写在原图旁。',
     'dataset.sidecarNoticeCacheOnly': '拖放、ZIP、RAR 导入的图，.txt 写在应用数据目录里的副本旁。',
     'dataset.sidecarNoticeRar': "RAR 需要可选的 'rarfile' Python 包和系统 'unrar' 程序；如果没装，请先解压成文件夹或转成 ZIP。",
-    'dataset.sidecarSourceStatusEmpty': '写同名 .txt 到来源图旁：拖放、ZIP、RAR、Gallery 和文件夹路径扫描都支持。',
+    'dataset.sidecarSourceStatusEmpty': '写同名 .txt 到来源图旁：拖放、ZIP、RAR、图库和文件夹路径扫描都支持。',
     'dataset.sidecarSourceStatus': '{ready} 张可写原图旁；{cache} 张缓存来源；{unknown} 张未知来源。',
     'dataset.rarUnsupported': "RAR 需要 'rarfile' 包和系统 'unrar' 程序。如果没装请先解压成文件夹或转成 ZIP。",
     'dataset.dropFolderHint': '检测到文件夹。请确认或编辑完整路径，然后点击扫描。',

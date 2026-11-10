@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Dataset Maker: "Import from the gallery" takes you there ready to pick**: with nothing selected it only said to go and select first, and the button that brings pictures back sat in the selection bar's More menu. It now opens the Gallery in select mode with "Send to Dataset Maker" first in the bar.
+  - **数据集：“从图库选择导入”会直接带你去选图**：以前没有选图时只提示“先去图库选”，而把图片带回来的按钮藏在选择栏的“更多”里。现在会打开图库并进入选择模式，“送到数据集”排在底部栏第一个。
 - **Style Finder: "Is my artist in the vocabulary?" answers without the model in memory**: after a restart, or once the program had let the model go, it said to run an identification first. It now reads the model's name list from disk (39,261 names) and answers at once.
   - **画风识别：“我的画师在词表里吗？”不需要模型在内存里也能回答**：以前重启之后或程序释放模型之后，它会让你先跑一次识别。现在直接读磁盘上的名单（39,261 个名字），马上回答。
 - **Style Map says why there are fewer dots than pictures**: "147 pictures … shown as 47 dots: near-identical pictures share one".
