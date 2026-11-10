@@ -416,3 +416,39 @@ test('the box empties when its search is cleared from elsewhere, and keeps text 
   await page.locator('#chip-has-metadata').click()
   await expect(input).toHaveValue('rain')
 })
+
+test('a typed part of a LoRA or checkpoint name stands for every name containing it', async ({ page }) => {
+  // Power-user walkthrough 2026-11-09: lora:detail found nothing beside detail_tweaker.
+  const LORAS = ['detail_tweaker', 'add_detail', 'flat_color']
+  const CHECKPOINTS = ['animagine-xl-4.0', 'anima_baseV10', 'ponyXL']
+  const answer = (names: string[], key: string) => async (route: any) => {
+    const q = (new URL(route.request().url()).searchParams.get('q') || '').toLowerCase()
+    const rows = names.filter((name) => name.toLowerCase().includes(q)).map((name) => ({ [key]: name, count: 1 }))
+    await route.fulfill({ json: { [`${key}s`]: rows, total: rows.length } })
+  }
+  await page.route('**/api/loras/library**', answer(LORAS, 'lora'))
+  await page.route('**/api/checkpoints/library**', answer(CHECKPOINTS, 'checkpoint'))
+  await openGallery(page)
+  const input = page.locator('#gallery-search-input')
+
+  await input.fill('lora:detail model:anima')
+  await input.press('Enter')
+  await expect.poll(async () => (await filterState(page)).loras).toEqual(['detail_tweaker', 'add_detail'])
+  expect((await filterState(page)).checkpoints).toEqual(['animagine-xl-4.0', 'anima_baseV10'])
+  // The line under the box still says what was typed.
+  await expect(page.locator('#gallery-search-preview')).toContainText('detail')
+
+  // A whole name means that one only; a name nothing contains stays as typed (no match).
+  await input.fill('lora:flat_color -lora:nothing-like-this')
+  await input.press('Enter')
+  await expect.poll(async () => (await filterState(page)).loras).toEqual(['flat_color'])
+  expect((await filterState(page)).excludeLoras).toEqual(['nothing-like-this'])
+
+  // Emptying the box takes back everything it added.
+  await input.fill('')
+  await input.press('Enter')
+  await expect.poll(async () => {
+    const state = await filterState(page)
+    return [state.loras, state.excludeLoras, state.checkpoints]
+  }).toEqual([[], [], []])
+})

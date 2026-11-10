@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Undo after a move or copy from the gallery**: the message that reports a finished move or copy has an Undo button for 12 seconds. It puts every moved picture back in the exact place it came from, or removes the copies it just made. A picture that was moved again or changed since is left alone and counted in the report. The buttons on messages (Undo, Open folder, View) are now a readable framed button; in today's look they were white text on a pale fill.
   - **图库里移动或复制之后可以撤销**：移动或复制完成的提示上有“撤销”按钮，保留 12 秒。它会把每张移动过的图片放回原来的位置，或删除刚复制出的副本。之后又被移动或改动过的图片会保持现状，并在结果里写明数量。提示上的按钮（撤销、打开文件夹、查看）改成了看得清的描边按钮；以前在今天的外观里是浅色底配白字。
+- **Search: part of a LoRA or model name is enough**: `lora:detail` now finds `detail_tweaker`, `add_detail` and every other LoRA whose name contains it, and `model:anima` works the same way (also with a minus in front). A whole name still means only that one. The filter list on the left shows the names that were matched.
+  - **搜索：LoRA 或模型名只写一部分也能找到**：`lora:detail` 现在会找出 `detail_tweaker`、`add_detail` 等所有名字里带这段字的 LoRA，`model:anima` 同理（前面加减号排除也一样）。写完整名字时仍然只匹配那一个。左侧的筛选器会列出实际匹配到的名字。
 
 ### Fixed / 修复
 

@@ -69,6 +69,7 @@
     let boxOwnedListValues = Object.create(null);
     let suggestTimer = null;
     let suggestAbort = null;
+    let applyTurn = 0;
     let suggestState = { items: [], active: -1, ctx: null };
 
     function t(key, fallback) {
@@ -121,6 +122,16 @@
         const a = app();
         if (!a || typeof a.updateFilters !== 'function') return;
         const parsed = parseQuery(raw);
+        // A typed part of a LoRA or checkpoint name is looked up first, then
+        // the same text is applied once with the names it stands for.
+        const turn = ++applyTurn;
+        if (window.GallerySearchPartial?.needsLookup(parsed)) {
+            // A newer search (or an emptied box) while the library answers wins.
+            window.GallerySearchPartial.resolve(parsed).then(() => {
+                if (turn === applyTurn) applySearch(raw);
+            });
+            return;
+        }
         const added = [];
         const narrowsTouched = [];
 
@@ -151,10 +162,12 @@
             };
             syncList(parsed.tags, 'tags', 'tag');
             syncList(parsed.excludeTags, 'excludeTags', '-tag');
-            syncList(parsed.checkpoints, 'checkpoints', 'checkpoint');
-            syncList(parsed.excludeCheckpoints, 'excludeCheckpoints', '-checkpoint');
-            syncList(parsed.loras, 'loras', 'lora');
-            syncList(parsed.excludeLoras, 'excludeLoras', '-lora');
+            // A typed part of a name stands for every library name containing it
+            // (modules/gallery-search-partial.js).
+            syncList(partialNames('checkpoints', parsed.checkpoints), 'checkpoints', 'checkpoint');
+            syncList(partialNames('excludeCheckpoints', parsed.excludeCheckpoints), 'excludeCheckpoints', '-checkpoint');
+            syncList(partialNames('loras', parsed.loras), 'loras', 'lora');
+            syncList(partialNames('excludeLoras', parsed.excludeLoras), 'excludeLoras', '-lora');
             syncList(parsed.prompts, 'prompts', 'prompt');
             syncList(parsed.excludePrompts, 'excludePrompts', '-prompt');
             syncList(parsed.excludeGenerators, 'excludeGenerators', '-generator');
@@ -213,6 +226,10 @@
         if (typeof a.updateFilterSummary === 'function') a.updateFilterSummary();
         if (typeof a.loadImages === 'function') a.loadImages();
         syncFromFilters(a.AppState ? a.AppState.filters : null);
+    }
+
+    function partialNames(field, values) {
+        return window.GallerySearchPartial ? window.GallerySearchPartial.expand(field, values) : values;
     }
 
     // ------------------------------------------------------------------
