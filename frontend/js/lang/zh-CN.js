@@ -1505,6 +1505,9 @@ window.I18nLang_zhCN = {
 
     // Auto-Detect Modal
     'censor.autoDetectSettings': '自动检测设置',
+    'censor.detectSettingsLabel': '设置',
+    'censor.detectAllLabel': '检测全部',
+    'censor.detectThisLabel': '检测这张',
     'censor.autoDetectDesc': '配置 AI 检测并自动应用遮挡。',
     'censor.yoloModelPath': 'YOLO 模型路径',
     'censor.confidenceThreshold': '置信度阈值',
@@ -6533,6 +6536,7 @@ window.I18nLang_zhCN = {
     'reverse.cancelled': '已取消。',
     'reverse.inferFailed': '无法推测提示词',
     'reverse.storedNote': '这个页面不会往图库里写任何东西。',
+    'reverse.resultsEmpty': '图片里存的提示词，或 AI 推测的结果，会显示在这里。',
     'reverse.runNeedsImage': '先在上面放进一张图。',
     'reverse.noRecordedPrompt': '这个文件没存提示词，只能靠推测。',
     'reverse.recordedBadge': '文件内的记录',

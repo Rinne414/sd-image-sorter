@@ -2968,9 +2968,9 @@
                                 <small class="helper-text" id="censor-model-type-help" hidden data-i18n="censor.modelTypeHelp">Both (recommended) runs privacy YOLO and NudeNet together for the widest coverage. YOLO alone uses the local file below; NudeNet and SAM3 need their own models. The app picks the best detector you have installed.</small>
                                 <small class="helper-text" id="censor-model-type-status" aria-live="polite"></small>
                                 <div class="censor-detect-actions-inline">
-                                    <button class="btn btn-primary btn-small censor-detect-action" id="btn-auto-detect-current" title="Detect Current (D)" data-i18n-title="censor.detectCurrent"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg> <kbd>D</kbd></button>
-                                    <button class="btn btn-secondary btn-small censor-detect-action" id="btn-auto-detect-all-sidebar" title="Detect All" data-i18n-title="censor.detectAll"><svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg></button>
-                                    <button class="btn btn-ghost btn-small censor-detect-action" id="btn-open-detect-modal" title="Settings" data-i18n-title="censor.autoDetectSettings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></button>
+                                    <button class="btn btn-primary btn-small censor-detect-action" id="btn-auto-detect-current" title="Detect Current (D)" data-i18n-title="censor.detectCurrent"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg> <span class="censor-detect-label" data-i18n="censor.detectThisLabel">This picture</span> <kbd>D</kbd></button>
+                                    <button class="btn btn-secondary btn-small censor-detect-action" id="btn-auto-detect-all-sidebar" title="Detect All" data-i18n-title="censor.detectAll"><svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg> <span class="censor-detect-label" data-i18n="censor.detectAllLabel">All</span></button>
+                                    <button class="btn btn-ghost btn-small censor-detect-action" id="btn-open-detect-modal" title="Settings" data-i18n-title="censor.autoDetectSettings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> <span class="censor-detect-label" data-i18n="censor.detectSettingsLabel">Settings</span></button>
                                 </div>
                             </div>
                             <div class="censor-side-row" id="censor-quick-auto-censor-row">
@@ -3497,6 +3497,8 @@
                         <div class="reverse-pane reverse-results-pane">
                             <div class="reverse-results" id="reverse-recorded" hidden></div>
                             <div class="reverse-results" id="reverse-inferred" hidden></div>
+                            <!-- Where the answer will be, before there is one (shown by the pro look). -->
+                            <div class="reverse-results-empty" data-i18n="reverse.resultsEmpty">The prompt stored in the picture, or the AI guess, will appear here.</div>
 
                             <section class="reverse-draft-card">
                                 <h3 class="reverse-card-title" data-i18n="reverse.draftTitle">Your draft</h3>

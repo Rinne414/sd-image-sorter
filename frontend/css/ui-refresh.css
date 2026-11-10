@@ -13720,3 +13720,10 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .autosep-preview-empty .autosep-preview-start {
     margin: 0;
 }
+
+/* Words on the censor detect buttons and the place a reverse-prompt answer
+   will appear: shown by the pro look (look-pro-pages.css). */
+.censor-detect-label,
+.reverse-results-empty {
+    display: none;
+}

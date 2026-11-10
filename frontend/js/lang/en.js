@@ -1494,6 +1494,9 @@ window.I18nLang_en = {
 
     // Auto-Detect Modal
     'censor.autoDetectSettings': 'Auto-Detect Settings',
+    'censor.detectSettingsLabel': 'Settings',
+    'censor.detectAllLabel': 'Detect all',
+    'censor.detectThisLabel': 'Detect this',
     'censor.autoDetectDesc': 'Configure AI detection and apply censoring automatically.',
     'censor.yoloModelPath': 'YOLO Model Path',
     'censor.confidenceThreshold': 'Confidence Threshold',
@@ -6547,6 +6550,7 @@ window.I18nLang_en = {
     'reverse.cancelled': 'Cancelled.',
     'reverse.inferFailed': 'Could not infer a prompt',
     'reverse.storedNote': 'Nothing on this page is written to your library.',
+    'reverse.resultsEmpty': 'The prompt stored in the picture, or the AI guess, will appear here.',
     'reverse.runNeedsImage': 'Drop a picture above first.',
     'reverse.noRecordedPrompt': 'This file stores no prompt, so inference is the only option.',
     'reverse.recordedBadge': 'Recorded in the file',
