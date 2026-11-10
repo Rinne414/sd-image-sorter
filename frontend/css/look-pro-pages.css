@@ -2840,3 +2840,17 @@ html[data-look="pro"] #view-similar .similar-result .similar-action-btn.similar-
     width: 13px;
     height: 13px;
 }
+
+/* Find Similar: a message or a spinner in the result area spans it (it sat in
+   one grid cell, a narrow box at the left). */
+html[data-look="pro"] #view-similar :is(#similar-results, #similar-duplicates) > :not(.similar-result):not(.duplicate-pair) {
+    grid-column: 1 / -1;
+}
+
+/* Prompt Helper statistics on a short window: rows keep the height of their
+   cards. The page scrolls inside a fixed height, and with stretched cards the
+   rows were squeezed to equal shares, cutting the lists (seen at 1366 x 768). */
+html[data-look="pro"] #promptlab-mode-stats.active {
+    grid-auto-rows: max-content;
+    align-content: start;
+}

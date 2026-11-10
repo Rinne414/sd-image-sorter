@@ -36,9 +36,9 @@ const WORDS = {
     nameA: 'thick paint', nameB: 'flat color', placeholder: 'e.g. thick paint', placeholderB: 'e.g. flat color', open: 'Axis meanings',
   },
   'zh-CN': {
-    tabCustom: '自订轴', tabModel: '模型算出的轴', apply: '套用', revert: '还原原本排法', add: '加入选取的图',
-    applied: '已套用：地图按你定义的轴排列', hiddenModel: '自订轴已套用', needTwo: '每一栏至少要 2 张图', applyNeed: '每栏至少放 2 张图才能套用',
-    nearNote: '自订轴排列下无法标出你的图的估计位置，下面是最像的图',
+    tabCustom: '自定义轴', tabModel: '模型算出的轴', apply: '套用', revert: '还原原来的排法', add: '加入选取的图',
+    applied: '已套用：地图按你定义的轴排列', hiddenModel: '自定义轴已套用', needTwo: '每一栏至少要 2 张图', applyNeed: '每栏至少放 2 张图才能套用',
+    nearNote: '自定义轴排列下无法标出你的图的估计位置，下面是最像的图',
     notSeparable: '这两组范例分不太开（3/5），模型可能看不出这个差别。可以多放几张，或换更典型的图',
     nameA: '厚涂', nameB: '平涂', placeholder: '例如：厚涂', placeholderB: '例如：平涂', open: '轴的含义',
   },

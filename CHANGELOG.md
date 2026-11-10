@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Small layout and wording fixes after a full pass over every page**: Prompt Helper's cards are no longer cut on a short window (1366 x 768); a message in Find Similar's result area spans it instead of sitting in a narrow box; Style Finder's status card says what was identified once results exist, and its "Load more" button no longer shows before an artist is picked.
+  - **全部页面检查一遍后的小修正**：窗口较矮（1366 x 768）时提示词助手的卡片不再被切掉；相似页结果区里的提示占满整行，不再挤在一个窄框里；画风识别有结果后，状态卡会说明已识别多少张，“加载更多”在没选画师时不再出现。
 - **Dataset Maker: "Import from the gallery" takes you there ready to pick**: with nothing selected it only said to go and select first, and the button that brings pictures back sat in the selection bar's More menu. It now opens the Gallery in select mode with "Send to Dataset Maker" first in the bar.
   - **数据集：“从图库选择导入”会直接带你去选图**：以前没有选图时只提示“先去图库选”，而把图片带回来的按钮藏在选择栏的“更多”里。现在会打开图库并进入选择模式，“送到数据集”排在底部栏第一个。
 - **Style Finder: "Is my artist in the vocabulary?" answers without the model in memory**: after a restart, or once the program had let the model go, it said to run an identification first. It now reads the model's name list from disk (39,261 names) and answers at once.

@@ -85,14 +85,22 @@ Object.assign(window.ArtistIdent, {
                 classes.push('model-health-banner-warning');
             }
 
+            // With results in the library the card says so: it kept inviting a
+            // first run ("you can start identification now") after one was done.
+            const identified = Number(this.stats?.identified_images || 0);
             const title = result.available
-                ? this.tText('Style Finder is ready', '画师识别已就绪')
+                ? this.tText('Style Finder is ready', '画风识别已就绪')
                 : this.tText('Style Finder is not prepared', '画师识别尚未准备');
             const summary = result.available
-                ? this.tText(
-                    'You can start identification now, then review the strongest matches in the center panel.',
-                    '现在可以开始识别，然后在中间结果区查看最强匹配。'
-                )
+                ? (identified > 0
+                    ? this.tText(
+                        `${identified.toLocaleString()} pictures of this library are identified. Pick an artist below to see the pictures; run Identify all again after importing new ones.`,
+                        `这个图库已经识别过 ${identified.toLocaleString()} 张图。点下面的画师看对应的图片；导入新图后再点一次「识别全部」。`
+                    )
+                    : this.tText(
+                        'You can start identification now, then review the strongest matches in the center panel.',
+                        '现在可以开始识别，然后在中间结果区查看最强匹配。'
+                    ))
                 : this.tText(
                     'Click Identify to download it (~2.8 GB, with progress), or prepare it in Model Center first.',
                     '点「识别」会下载它（约 2.8 GB，显示进度），也可以先到模型中心准备。'

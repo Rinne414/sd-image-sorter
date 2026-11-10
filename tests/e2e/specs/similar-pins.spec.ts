@@ -242,7 +242,7 @@ test('beginSearchRequest / beginDuplicateRequest share requestSequence but track
 // 5. searchByImage — request URL shape + result cards + load-more toggle.
 // ---------------------------------------------------------------------------
 
-test('searchByImage issues the paged/threshold/scope URL, renders scored cards + 6 action buttons, toggles load-more', async ({ page }) => {
+test('searchByImage issues the paged/threshold/scope URL, renders scored cards + 7 action buttons, toggles load-more', async ({ page }) => {
   const searchUrls: string[] = []
   let searchResponse: unknown = {}
   await page.route('**/api/similarity/search/**', (route) => {
@@ -277,7 +277,7 @@ test('searchByImage issues the paged/threshold/scope URL, renders scored cards +
   const actions = await page
     .locator('#similar-results .similar-result[data-id="501"] .similar-action-btn')
     .evaluateAll((els) => els.map((el) => el.getAttribute('data-action')))
-  expect(actions).toEqual(['preview', 'reader', 'edit', 'dataset', 'collection', 'build'])
+  expect(actions).toEqual(['similar', 'preview', 'reader', 'edit', 'dataset', 'collection', 'build'])
 
   // has_more:true -> Load More is shown.
   await expect(page.locator('#btn-similar-load-more')).toBeVisible()

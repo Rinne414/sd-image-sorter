@@ -20,7 +20,10 @@ Object.assign(window.ArtistIdent, {
         try {
             const result = await window.App.API.get('/api/artists/stats');
             if (requestToken !== this.statsRequestToken) return;
+            const hadResults = Number(this.stats?.identified_images || 0) > 0;
             this.stats = result;
+            // The status card words itself by whether results exist.
+            if (hadResults !== Number(result.identified_images || 0) > 0) void this.loadDiagnostics?.();
 
             // artist_counts / artist_stats are CONFIDENT-ONLY since 2c15c9e, so
             // "identified" would over-report by every unconfirmed row. The three
