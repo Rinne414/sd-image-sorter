@@ -3076,6 +3076,8 @@
                                 <button class="btn btn-ghost btn-small" id="btn-filter-bw" data-i18n="censor.filterBW">B&W</button>
                                 <button class="btn btn-ghost btn-small" id="btn-filter-dramatic" data-i18n="censor.filterHDR">HDR</button>
                             </div>
+                            <!-- What the three buttons do: without this line they read "Current / Selected / All" with nothing saying of what. -->
+                            <div class="censor-filter-apply-label" data-i18n="censor.applyToLabel">Apply these adjustments to</div>
                             <div class="censor-filter-apply-group">
                                 <button class="btn btn-primary btn-small censor-apply-filters-btn" id="btn-apply-filters">
                                     <svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg> <span data-i18n="censor.applyToCurrent">Apply to Current</span>
@@ -3308,6 +3310,8 @@
                     <!-- Header with stats -->
                     <div class="similar-header">
                         <h3 data-i18n="similar.title">Similar Images</h3>
+                        <!-- One sentence on what the page is for (shown by the pro look, look-pro-pages.css). -->
+                        <p class="page-lead" data-i18n="similar.lead">Find pictures that look alike: search with a picture from the library, a few words or a picture from outside, and find duplicates. Everything runs on this computer.</p>
                         <div class="model-health-banner" id="similar-model-health"></div>
                         <div id="similar-stats">
                             <div class="stat-card">
@@ -3850,6 +3854,10 @@
             <!-- Artist Identification View -->
             <section id="view-artist" class="view">
                 <div class="artist-container">
+                    <header class="page-head">
+                        <h2 class="page-title" data-i18n="nav.artist">Style Finder</h2>
+                        <p class="page-lead" data-i18n="artist.lead">Finds the artist whose style each picture is closest to, then lets you browse the library by artist.</p>
+                    </header>
                     <div class="workspace-start-card" id="artist-start-card" hidden>
                         <div class="workspace-start-copy">
                             <span class="workspace-start-eyebrow" data-i18n="artist.startEyebrow">Start Here</span>
@@ -4043,6 +4051,7 @@
                  re-apply cannot reset them. -->
             <section id="view-stylemap" class="view" role="tabpanel" aria-labelledby="nav-tab-stylemap">
                 <div class="stylemap-container">
+                    <p class="page-lead" data-i18n="stylemap.lead">Every picture is a dot; pictures drawn in a similar style sit close together.</p>
                     <div class="stylemap-toolbar">
                         <label class="stylemap-field">
                             <span data-i18n="stylemap.space">Space</span>

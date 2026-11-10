@@ -816,3 +816,24 @@ test('the shared confirm button does not keep the last dialog’s own label', as
   await expect.poll(label).toBe('Yes, proceed')
   await page.click('#btn-confirm-cancel')
 })
+
+test('the error strip ignores the browser’s size-observer note and still shows real errors', async ({ page }) => {
+  await open(page, null)
+  const shown = () => page.evaluate(() => Boolean(document.querySelector('#app-error-strip:not([hidden])')))
+  await page.evaluate(() => window.dispatchEvent(new ErrorEvent('error', { message: 'ResizeObserver loop completed with undelivered notifications.' })))
+  expect(await shown()).toBe(false)
+  await page.evaluate(() => window.dispatchEvent(new ErrorEvent('error', { message: 'boom', error: new Error('boom') })))
+  expect(await shown()).toBe(true)
+})
+
+test('pro look: Similar, Style Finder and Style Map say in one sentence what the page is for', async ({ page }) => {
+  await open(page, 'pro-b')
+  for (const [view, text] of [['similar', /look alike/], ['artist', /artist whose style/], ['stylemap', /Every picture is a dot/]] as const) {
+    await page.evaluate((v) => (document.querySelector(`.nav-tab[data-view="${v}"]`) as HTMLElement).click(), view)
+    await expect(page.locator(`#view-${view} .page-lead`)).toBeVisible()
+    await expect(page.locator(`#view-${view} .page-lead`)).toHaveText(text)
+  }
+  // Today's look keeps these pages as they were.
+  await page.evaluate(() => (window as any).SdLook.set(null))
+  await expect(page.locator('#view-stylemap .page-lead')).toBeHidden()
+})

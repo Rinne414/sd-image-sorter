@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **No more "Something went wrong" for a browser note**: the Style Map could show the error strip ("reloading usually fixes it") while everything worked, because the browser's size-observer note was treated as an error. Real errors are still shown.
+  - **不再把浏览器的一条提示报成“出了点问题”**：画风地图一切正常时也可能弹出错误条（“重新载入通常就好了”），原因是把浏览器关于尺寸监听的提示当成了错误。真正的错误照常显示。
+- **Dataset check speaks plainly, in your language**: problems read "This picture has no caption to write" or "This picture cannot be opened" with what to do next, instead of English sentences with the path quoted inside; the path keeps its own line.
+  - **数据集检查用你的语言把问题说清楚**：问题会写成“这张图片没有可写出的 caption”“这张图片打不开”，并说明下一步怎么做，不再是夹着路径的英文句子；路径仍单独一行。
+- **Manual Sort says what was done when you stop**: leaving a session shows how many pictures were sorted, skipped and left, instead of only "paused".
+  - **手动排序中途退出时会说明做了多少**：退出时显示已排序、跳过和剩余的张数，不再只有“已暂停”。
+- **Censor > Adjust says what its three buttons apply to**; in the Professional look Save All is not highlighted while the queue is empty, and Find Similar, Style Finder and Style Map open with one sentence on what the page is for.
+  - **打码 > 调整：三个按钮上方写明了应用范围**；专业外观下队列为空时“全部保存”不再高亮，相似、画风识别、画风地图的开头各有一句话说明这一页是做什么的。
 - **Dataset export no longer calls a readable picture "missing"**: pictures whose EXIF Orientation is 0 or another undefined value (common from editors and phone apps) were reported as "Source image is missing or unreadable" and blocked from export. They are read as normal, unrotated pictures, as viewers show them.
   - **数据集导出不再把能打开的图片说成“缺失”**：EXIF 方向值是 0 或其他未定义数值的图片（修图软件和手机应用常见）会被报成“源图片缺失或无法读取”并挡住导出。现在按不旋转的普通图片处理，和看图软件显示的一样。
 - **Messages that stay on screen can be closed and do not follow you**: a "saved, open folder" message and the "what next?" banner stayed until clicked, with nothing showing that a click closes them, and sat over the next page's controls. They now have a close button and go away when you move to another page.

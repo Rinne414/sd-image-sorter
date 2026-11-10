@@ -369,11 +369,14 @@ test('Ready and Blocked keep Export enabled and Blocked renders an image-linked 
   await page.getByTestId('dataset-readiness-check').click()
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'blocked')
   await expect(page.locator('#btn-dataset-export')).toBeEnabled()
-  const issue = page.getByTestId('dataset-readiness-issue').filter({ hasText: blocker.message })
+  // A problem the UI has its own words for (keyed by its code) is shown in
+  // those words, not in the check's sentence; the paths keep their own lines.
+  const issue = page.getByTestId('dataset-readiness-issue').filter({ hasText: 'This picture has no caption to write.' })
   await expect(issue).toHaveAttribute('data-image-id', '-902')
   await expect(issue).toContainText(blocker.source_path || '')
   await expect(issue).toContainText(blocker.destination || '')
-  await expect(issue).toContainText(blocker.action)
+  await expect(issue).toContainText('Add tags or type a caption, then check again.')
+  await expect(issue).not.toContainText(blocker.message)
   await issue.click()
   await expect(page.locator('.dataset-maker')).toHaveAttribute('data-active-tab', 'workbench')
   expect(await page.evaluate(() => (window as any).DatasetMaker.activeId)).toBe(-902)

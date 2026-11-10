@@ -1666,3 +1666,37 @@ html[data-look="pro"] #view-sorting #autosep-filter-summary {
 html[data-look="pro"] #view-reader .reader-tools-subtitle {
     display: block;
 }
+
+/* Nothing in the queue: Save All is not the thing to press yet, so it does
+   not wear the accent. */
+html[data-look="pro"] #view-censor .censor-workspace-v2:has(#censor-queue-list .queue-empty-state-v2) .censor-save-actions .btn.btn-primary {
+    border-color: var(--border);
+    background: var(--surface-3);
+    color: var(--text-2);
+}
+
+/* ---- A page says what it is for ---- */
+
+html[data-look="pro"] .page-head {
+    display: block;
+}
+
+html[data-look="pro"] .page-head .page-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+
+html[data-look="pro"] .page-lead {
+    display: block;
+    margin: 2px 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-stylemap .page-lead {
+    margin: 0 0 8px;
+}

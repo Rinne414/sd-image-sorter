@@ -13692,3 +13692,17 @@ html:not([data-look-variant="b"]) #pro-library-views {
     background: rgba(255, 255, 255, 0.06);
     color: var(--text);
 }
+
+/* Censor > Adjust: the line above "Current / Selected / All". */
+.censor-filter-apply-label {
+    margin: 10px 0 6px;
+    color: var(--text-2);
+    font-size: 12px;
+}
+
+/* A page's title and one sentence on what it is for. The pro look shows
+   them (look-pro-pages.css); today's look keeps its pages as they were. */
+.page-head,
+.page-lead {
+    display: none;
+}

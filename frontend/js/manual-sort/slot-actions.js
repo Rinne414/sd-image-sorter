@@ -610,7 +610,20 @@ function exitSorting() {
         );
     }
 
-    showToast(manualSortText('manual.sortingPaused', 'Sorting paused. You can resume later.', '排序已暂停，稍后可以继续。'), 'info');
+    // Say what was done so far: "paused" alone left the user guessing whether
+    // the five pictures they had just sorted counted (walkthrough 2026-11-10).
+    const done = ManualSortState.sortedCount + ManualSortState.skippedCount;
+    showToast(
+        done > 0
+            ? formatManualSortI18n(
+                'manual.sortingPausedSummary',
+                'Sorting paused: {sorted} sorted, {skipped} skipped, {remaining} left. You can resume later.',
+                { sorted: ManualSortState.sortedCount, skipped: ManualSortState.skippedCount, remaining }
+            )
+            : manualSortText('manual.sortingPaused', 'Sorting paused. You can resume later.', '排序已暂停，稍后可以继续。'),
+        'info',
+        { duration: done > 0 ? 6000 : 3000 }
+    );
 
     // Refresh gallery to show updated image locations
     if (window.App && window.App.loadImages) {

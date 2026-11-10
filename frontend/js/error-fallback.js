@@ -79,6 +79,10 @@
     window.addEventListener('error', function (event) {
         // A missing image or stylesheet fires here too, without an error object: not ours to report.
         if (!event.error && !event.message) return;
+        // The browser's note that a size observer will finish its work on the
+        // next frame. Nothing failed, so it is not reported (it showed "something
+        // went wrong, reload" on the Style Map with everything working).
+        if (!event.error && /^ResizeObserver loop/.test(String(event.message))) return;
         show(event.error || new Error(event.message));
     });
     window.addEventListener('unhandledrejection', function (event) { show(event.reason); });

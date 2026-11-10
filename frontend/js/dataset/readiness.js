@@ -372,7 +372,8 @@
         if (messageElement) {
             const idleMessage = this._t('dataset.readinessIdleDetail', 'Export runs this check for you. You can also run it now.');
             const staleMessage = this._t('dataset.readinessStaleDetail', 'Settings changed. Export checks again for you.');
-            messageElement.textContent = view.message || (view.state === 'idle' ? idleMessage : (view.state === 'stale' ? staleMessage : ''));
+            messageElement.textContent = this._readinessFinishedText(view)
+                || view.message || (view.state === 'idle' ? idleMessage : (view.state === 'stale' ? staleMessage : ''));
         }
 
         const active = typeof view.activeJobId === 'string' && view.activeJobId.length > 0;
@@ -436,10 +437,11 @@
                 item.type = 'button';
                 item.dataset.readinessImageId = String(linkedImageId);
             }
+            const text = this._readinessIssueText(issue);
             const message = document.createElement('strong');
-            message.textContent = issue.message;
+            message.textContent = text.message;
             const action = document.createElement('span');
-            action.textContent = issue.action;
+            action.textContent = text.action;
             item.append(message, action);
             if (issue.source_path) {
                 const source = document.createElement('span');
@@ -453,6 +455,33 @@
             }
             issuesElement.appendChild(item);
         }
+    };
+
+    // The check writes its messages in English with the path quoted inside the
+    // sentence. Where the UI language has its own words for a problem (keyed by
+    // the problem's code) those are shown; the path already has its own line.
+    // No key for a code or a language: the check's own text stays.
+    DM._readinessIssueText = function (issue) {
+        const own = (key) => {
+            const value = this._t(key, '');
+            return value && value !== key ? value : '';
+        };
+        const skipped = issue.severity === 'warning' && /^Skipped: /.test(issue.message);
+        const message = own(`dataset.readinessIssue_${issue.code}`);
+        const action = skipped
+            ? own('dataset.readinessSkippedAction')
+            : own(`dataset.readinessAction_${issue.code}`);
+        const skippedMessage = message && skipped
+            ? (own('dataset.readinessSkippedPrefix') || 'Skipped: {message}').replace('{message}', message)
+            : message;
+        return { message: skippedMessage || issue.message, action: action || issue.action };
+    };
+
+    DM._readinessFinishedText = function (view) {
+        const status = view?.report?.summary?.status;
+        if (!status || !/^Dataset readiness finished: /.test(view.message || '')) return '';
+        const value = this._t(`dataset.readinessFinished_${status}`, '');
+        return value && value !== `dataset.readinessFinished_${status}` ? value : '';
     };
 
     // Export itself starts the check (see _renderConfirmCheck in export-run.js),
