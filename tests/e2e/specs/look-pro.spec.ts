@@ -925,3 +925,83 @@ test('All features: typing finds a feature, Enter opens the first match', async 
   await expect(page.locator('#entry-catalog-search')).toHaveValue('')
   await expect.poll(() => rows.count()).toBe(all)
 })
+
+test('select mode: toggling one picture after a Shift range keeps the range', async ({ page }) => {
+  await open(page, null)
+  const tiles = page.locator('#gallery-grid .gallery-item')
+  await expect.poll(() => tiles.count()).toBeGreaterThan(2)
+  await page.click('#btn-toggle-select')
+  await tiles.nth(0).click()
+  await tiles.nth(1).click({ modifiers: ['Shift'] })
+  const picked = () => page.evaluate(() => ({
+    store: (window as any).App.AppState.selectedIds.size,
+    outlined: document.querySelectorAll('#gallery-grid .gallery-item.selected').length,
+  }))
+  expect(await picked()).toEqual({ store: 2, outlined: 2 })
+  // The range is scope "loaded"; one more click used to start again from nothing.
+  await tiles.nth(2).click({ modifiers: ['Control'] })
+  expect(await picked()).toEqual({ store: 3, outlined: 3 })
+  await tiles.nth(0).click()
+  expect(await picked()).toEqual({ store: 2, outlined: 2 })
+})
+
+test('Clear all filters empties the search box even while it has focus', async ({ page }) => {
+  await open(page, null)
+  const box = page.locator('#gallery-search-input')
+  await box.fill('zz-no-such-word')
+  await box.press('Enter')
+  await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(0)
+  // Keep focus in the box: press the button without moving focus, as the keyboard does.
+  await page.evaluate(() => (document.querySelector('#empty-state-clear-filters-btn, #btn-clear-filters') as HTMLElement).click())
+  await expect(box).toHaveValue('')
+  await expect.poll(() => page.locator('#gallery-grid .gallery-item').count()).toBeGreaterThan(0)
+})
+
+test('viewer: Escape closes an open Tools menu first, the picture stays', async ({ page }) => {
+  await open(page, null)
+  const tiles = page.locator('#gallery-grid .gallery-item')
+  await expect.poll(() => tiles.count()).toBeGreaterThan(0)
+  await tiles.first().click()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('#image-modal')).toHaveClass(/visible/)
+  await page.locator('#modal-tools-menu > summary').click()
+  await expect(page.locator('#modal-tools-menu')).toHaveAttribute('open', '')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#modal-tools-menu')).not.toHaveAttribute('open', '')
+  await expect(page.locator('#image-modal')).toHaveClass(/visible/)
+  // The list fits inside the details panel (it was cut on its left at 1366).
+  await page.locator('#modal-tools-menu > summary').click()
+  const fits = await page.evaluate(() => {
+    const list = document.querySelector('#modal-tools-menu .modal-tools-menu-list')!.getBoundingClientRect()
+    const panel = document.querySelector('#image-modal .modal-info')!.getBoundingClientRect()
+    return list.left >= panel.left - 1 && list.right <= panel.right + 1
+  })
+  expect(fits).toBe(true)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#image-modal')).not.toHaveClass(/visible/)
+})
+
+test('gallery keys: arrows start at the first picture, "/" reaches search, Ctrl+A selects in select mode', async ({ page }) => {
+  await open(page, null)
+  const tiles = page.locator('#gallery-grid .gallery-item')
+  await expect.poll(() => tiles.count()).toBeGreaterThan(1)
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.keyboard.press('ArrowRight')
+  await expect(tiles.first()).toBeFocused()
+
+  await page.keyboard.press('/')
+  await expect(page.locator('#gallery-search-input')).toBeFocused()
+  await page.keyboard.type('a/b')
+  await expect(page.locator('#gallery-search-input')).toHaveValue('a/b')
+  await page.locator('#gallery-search-input').fill('')
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+
+  // Outside select mode Ctrl+A is left to the browser.
+  await page.keyboard.press('Control+a')
+  expect(await page.evaluate(() => (window as any).App.AppState.selectionMode)).toBe(false)
+  await page.click('#btn-toggle-select')
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.keyboard.press('Control+a')
+  await expect.poll(() => page.locator('#gallery-grid .gallery-item.selected').count()).toBeGreaterThan(1)
+})

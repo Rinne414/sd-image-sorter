@@ -12137,8 +12137,10 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 /* Step 2, narrower still: the search box may go down to 170px before the
-   chips have to scroll, and the chips and toggles pack tighter. */
-@container gallery-search (max-width: 940px) {
+   chips have to scroll, and the chips and toggles pack tighter. The step
+   starts at 1080px since the fourth chip (Untagged) joined the row: at
+   1366px wide the English chips were 31px short and scrolled. */
+@container gallery-search (max-width: 1080px) {
     .gallery-search-box {
         flex-basis: 170px;
         min-width: 170px;
@@ -12157,7 +12159,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     }
 }
 
-@container gallery-search (max-width: 1060px) {
+@container gallery-search (max-width: 1200px) {
     .gallery-search-row.has-media-toggle .gallery-search-box {
         flex-basis: 170px;
         min-width: 170px;
@@ -13788,4 +13790,43 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .catalog-group-title[hidden],
 .catalog-item[hidden] {
     display: none;
+}
+
+/* Viewer > Tools: the list hung from the Tools button's right edge and was
+   wider than the room to its left, so the details panel cut its left column
+   (1366 px screens). It hangs from the button row instead and fits the panel. */
+#image-modal .modal-tools-menu {
+    position: static;
+}
+
+#image-modal .modal-actions:has(> .modal-tools-menu),
+#image-modal :is(.modal-header-actions, .modal-toolbar, .modal-info-actions):has(.modal-tools-menu) {
+    position: relative;
+}
+
+#image-modal .modal-tools-menu-list {
+    max-width: calc(100% - 8px);
+    right: 4px;
+}
+
+/* Last step before the chips scroll, when the video toggle shares the row on
+   a 1366px screen: the chips keep their words and drop their small icons
+   (four chips were 61px short there in English). */
+@container gallery-search (max-width: 1060px) {
+    .gallery-search-row.has-media-toggle .gallery-quick-chips .gallery-chip > :is(svg, .icon, .chip-icon, span[aria-hidden="true"]) {
+        display: none;
+    }
+
+    .gallery-search-row.has-media-toggle .gallery-quick-chips {
+        gap: 4px;
+    }
+
+    .gallery-search-row.has-media-toggle .gallery-quick-chips .gallery-chip {
+        padding: 5px 6px;
+    }
+
+    .gallery-search-row.has-media-toggle .gallery-search-box {
+        flex-basis: 150px;
+        min-width: 150px;
+    }
 }

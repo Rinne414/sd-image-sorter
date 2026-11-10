@@ -2338,3 +2338,37 @@ html[data-look="pro"] #vlm-settings-modal .vlm-segmented-btn {
 html[data-look="pro"] .entry-identity {
     background: radial-gradient(ellipse 50% 50% at 34% 56%, rgba(14, 14, 16, 0.82) 0%, rgba(14, 14, 16, 0.6) 50%, rgba(14, 14, 16, 0) 100%);
 }
+
+/* ---- Select mode's batch panel (pro look) ----
+   On laptop heights the two buttons sat side by side in a 220 px column and
+   wrapped their labels onto three and four lines (about 66 px tall). Two
+   28 px rows are shorter and readable. The accent stays on the action bar's
+   main action, so "select everything in this filter" is a plain button.
+   #selection-actions: the laptop-height rule in styles.css uses the id. */
+html[data-look="pro"] #selection-actions .selection-panel-pick-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+}
+
+html[data-look="pro"] #selection-actions .selection-panel-pick-actions .btn {
+    min-height: 28px;
+    height: 28px;
+    padding: 0 10px;
+    justify-content: flex-start;
+    font-size: 12.5px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] #selection-actions .selection-panel-pick-actions .btn,
+html[data-look="pro"] #selection-actions .selection-panel-pick-actions .btn span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+html[data-look="pro"] #selection-actions .selection-panel-pick-actions #btn-select-all.btn.btn-primary:not(.btn-icon-only):not(#btn-toggle-select) {
+    border-color: var(--border-strong);
+    background: var(--surface-3);
+    color: var(--text);
+}

@@ -158,14 +158,20 @@ Object.assign(window.Gallery, {
         const isNowSelected = !AppState.selectedIds.has(normalizedImageId);
 
         updateSelectionState((selection) => {
-            const nextIds = selectionBaseForScope(selection, 'visible');
+            // A range pick (Shift) is scope "loaded" and one click is "visible";
+            // both hold the picked ids themselves. Toggling one picture after a
+            // range used to start from an empty set (the scopes differed), so
+            // five outlined pictures silently became a selection of one.
+            const currentScope = selection?.scope || selection?.selectionScope || 'visible';
+            const keepsIds = currentScope === 'visible' || currentScope === 'loaded';
+            const nextIds = keepsIds ? new Set(selection?.selectedIds || []) : new Set();
             if (isNowSelected) {
                 nextIds.add(normalizedImageId);
             } else {
                 nextIds.delete(normalizedImageId);
             }
             selection.selectedIds = nextIds;
-            selection.scope = 'visible';
+            selection.scope = currentScope === 'loaded' ? 'loaded' : 'visible';
             selection.filterKey = null;
             selection.selectionToken = null;
             selection.selectionTotal = 0;

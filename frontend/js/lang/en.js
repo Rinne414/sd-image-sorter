@@ -139,7 +139,7 @@ window.I18nLang_en = {
     'gallerySearch.chipHasParams': 'Has params',
     'gallerySearch.chipAesthetic7': 'Aesthetic 7+',
     'gallerySearch.chipNoCaption': 'No caption',
-    'gallerySearch.chipUntagged': 'Not tagged yet',
+    'gallerySearch.chipUntagged': 'Untagged',
     'gallerySearch.appliedToast': 'Added to filters: ',
     'gallerySearch.helpTooltip': 'Search syntax help',
     'gallerySearch.suggestAria': 'Search suggestions',

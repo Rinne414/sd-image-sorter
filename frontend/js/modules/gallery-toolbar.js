@@ -649,6 +649,10 @@
             || [...boxOwnedScalars].some((field) => !same(filters[field], SCALAR_DEFAULTS[field]))
             || [...boxOwnedNarrows].some((field) => !same(filters[field], defaults[field]));
         if (stillOn) return;
+        emptySearchBox(input);
+    }
+
+    function emptySearchBox(input) {
         input.value = '';
         boxOwnedScalars = new Set();
         boxOwnedNarrows = new Set();
@@ -656,6 +660,21 @@
         syncClearButton(input, document.getElementById('gallery-search-clear'));
         renderSearchPreview('', parseQuery(''));
         hideSuggest();
+    }
+
+    // "Clear all filters" is the user's own word that the search goes too: the
+    // box empties even while it still has focus (typed text, Enter, then the
+    // button left "sampler:Euler" in the box over 147 unfiltered pictures).
+    // Emptying the box by hand also drops the "read as" line under it.
+    function wireSearchBoxClearing() {
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest?.('#btn-clear-filters, #empty-state-clear-filters-btn')) return;
+            const input = document.getElementById('gallery-search-input');
+            if (input?.value.trim()) setTimeout(() => emptySearchBox(input), 0);
+        });
+        document.getElementById('gallery-search-input')?.addEventListener('input', (event) => {
+            if (!event.target.value.trim()) renderSearchPreview('', parseQuery(''));
+        });
     }
 
     function syncFromFilters(filters) {
@@ -901,6 +920,7 @@
         wireSearchSideButtons();
         wireChips();
         wireMoreMenu();
+        wireSearchBoxClearing();
         wireTagSelected();
         const a = app();
         if (a && a.AppState) syncFromFilters(a.AppState.filters);

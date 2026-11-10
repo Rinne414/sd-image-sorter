@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Quick filters fit on a laptop again**: since the Untagged chip joined the search row, the English quick filters needed a sideways scroll at 1366 px. The row packs tighter earlier, the English chip reads "Untagged", and with the video switch present the chips drop their small icon.
+  - **笔记本宽度下快速筛选又能放在一行了**：加入“未打标签”后，英文界面在 1366 px 宽时快速筛选需要横向滚动。现在这一行会更早收紧，英文按钮改为“Untagged”，有视频开关时按钮会省掉小图标。
+- **Select mode: a Shift range no longer collapses when you add one more picture**: after picking a range with Shift, clicking or Ctrl-clicking another picture left the range outlined but reduced the real selection to that one picture, so Move, Add to collection and the rest acted on a different set than the one shown.
+  - **选择模式：用 Shift 选了一段后再点一张，不会再把整段丢掉**：以前用 Shift 选了一段，再点击或 Ctrl 点击另一张图，画面上那一段还带着选中框，实际选中的却只剩最后那一张，移动、加入合集等操作处理的和你看到的不是同一批。
+- **Clear all filters also empties the search box**, even while the cursor is still in it; emptying the box by hand drops the "read as" line under it. In the picture viewer, Escape closes an open Copy or Tools menu first instead of the whole viewer, and the Tools list is no longer cut off on 1366-wide screens.
+  - **“清除所有筛选”会连搜索框一起清空**，光标还在框里也一样；手动删空搜索框时，下面的“解析为”一行也会消失。看图窗口里，“复制”或“工具”菜单打开时按 Esc 先关菜单，不再直接关掉整个窗口；1366 宽的屏幕上“工具”列表也不再被切掉。
 - **AI tagging dialog: the model scores say what they are**: the line under the model read "Q4/5 • S1/5 • Stable 3/5"; it now reads "Quality 4/5 • Speed 1/5 • Stability 3/5 (5 is best)". The Chinese subtitle no longer mixes in "tagger" and "Tags".
   - **AI 打标对话框：模型评分写明了含义**：模型下方原本是“质量4/5 • 速度1/5 • 稳定3/5”，现在是“质量 4/5 • 速度 1/5 • 稳定性 3/5（5 分最好）”。中文副标题不再夹着“tagger”“Tags”。
 - **Dialogs no longer draw a frame around the whole window**: every open dialog put a 2 px coloured line around the program window (the focus mark was on the full-screen layer behind the dialog).
@@ -86,6 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **All features can be searched**: the list behind "Find a feature... Ctrl K" has a search field. Type a word to narrow the list, press Enter to open the first match, use the arrow keys to move between rows.
   - **“所有功能”可以搜索了**：“查找功能… Ctrl K”打开的清单顶部有搜索框。输入一个词就会筛选，按 Enter 打开第一项，方向键在各行之间移动。
+- **Gallery keys**: the arrow keys start at the first picture on screen without a click first; `/` puts the cursor in the search box; in select mode Ctrl+A selects everything in the current filter.
+  - **图库快捷键**：不用先点一下，方向键就会从屏幕上的第一张图开始；`/` 把光标放进搜索框；选择模式下 Ctrl+A 选中当前筛选的全部图片。
 - **Interface look: Professional (preview)** (classic, Settings › Appearance, off by default): the start of the new look. The owner's brand magenta as the one accent, flat sidebar rows of one height with quiet counts, one corner shape, the picture count as a title (kept on laptop widths), no box around the toolbar or the grid, and only the source tabs the library has pictures from. Settings › Reset also clears it, the Group runs switch and folded collections.
   - **界面外观：专业（预览）**（经典界面，“设置 › 外观”，默认关闭）：新外观的开始。用作者品牌的洋红作为唯一强调色，侧栏每行一样高、数量安静靠右，统一圆角，图片数量作为标题（笔记本宽度也显示），工具栏和图片区不再有外框，只显示图库里真的有图片的来源。“设置 › 重置”也会清除它、“同批合并”开关和收起的合集。
 - **Professional look: every page, not only the gallery**: Read Image, Organize, Censor, Find Similar, Dataset Maker, Reverse Prompt, Prompt Helper, Style Finder and Style Map now share one frame: the same content width, one panel style, one switch for the tools inside a page, regular-weight buttons and fields of one height. Boxes inside boxes became sections parted by a line, counts at the top of a page are a line of text, labels that ran at 8 to 11 px are 12 px or more, and the yellow "start here" pills and typed arrows are gone. Today's look is unchanged.

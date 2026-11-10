@@ -24,6 +24,15 @@ Object.assign(window.Gallery, {
     // so, the second press gives the changes up and closes the editor.
     // Returns true when the editor answered the key and the preview stays.
     _escapeInlineEditor() {
+        // An open Copy or Tools menu is the top layer: Escape closes the menu
+        // and the picture stays (it used to close the whole viewer and leave
+        // the menu marked open).
+        const openMenu = document.querySelector('#modal-copy-menu[open], #modal-tools-menu[open]');
+        if (openMenu) {
+            openMenu.removeAttribute('open');
+            openMenu.querySelector('summary')?.focus();
+            return true;
+        }
         const editing = this._tagsEditMode ? 'tags' : (this._captionEditMode ? 'caption' : '');
         if (!editing) return false;
         if (this._editorHasUnsaved(editing) && this._escapeWarnedFor !== editing) {
