@@ -580,7 +580,14 @@
         const result = emptyResult();
         const tightened = tightenOperators(raw);
         const tokens = tightened.match(/(?:[^\s"]+"[^"]*"|[^\s"]+|"[^"]*")+/g) || [];
-        tokens.forEach((token) => handleToken(result, token));
+        // Each part keeps the index of the typed token it came from, so the
+        // toolbar can take one term out of the text again (removable chips).
+        tokens.forEach((token, index) => {
+            const from = result.parts.length;
+            handleToken(result, token);
+            for (let i = from; i < result.parts.length; i += 1) result.parts[i].tokenIndex = index;
+        });
+        result.tokens = tokens;
         return result;
     }
 

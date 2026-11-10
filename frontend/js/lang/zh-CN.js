@@ -148,6 +148,7 @@ window.I18nLang_zhCN = {
     'gallerySearch.suggestAria': '搜索建议',
     'searchPreview.understood': '解析为：',
     'searchPreview.free': '自由文本',
+    'searchPreview.remove': '移除',
     'searchPreview.exclude': '排除',
     'searchKey.tag': '标签',
     'searchKey.checkpoint': '模型',

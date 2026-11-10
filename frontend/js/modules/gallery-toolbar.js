@@ -255,6 +255,7 @@
                     ? `${keyLabel(part.key)} ${part.op} ${part.value}`
                     : window.I18n.joinLabel(keyLabel(part.key), part.value);
             }
+            addChipRemove(chip, parsed, [part.tokenIndex]);
             host.appendChild(chip);
         });
 
@@ -263,10 +264,40 @@
             const chip = document.createElement('span');
             chip.className = 'gsq-chip gsq-chip-free';
             chip.textContent = window.I18n.joinLabel(t('searchPreview.free', 'free text'), free);
+            addChipRemove(chip, parsed, (parsed.parts || [])
+                .filter((part) => part.kind === 'free')
+                .map((part) => part.tokenIndex));
             host.appendChild(chip);
         }
 
         host.hidden = host.childElementCount <= 1;
+    }
+
+    /**
+     * A small remove button on a "read as" chip: takes that term's typed
+     * token(s) out of the box and searches again. The terms could only be
+     * removed by editing the text, or all at once.
+     */
+    function addChipRemove(chip, parsed, tokenIndexes) {
+        const indexes = new Set(tokenIndexes.filter((index) => Number.isInteger(index)));
+        if (!indexes.size || !Array.isArray(parsed.tokens)) return;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'gsq-chip-remove';
+        remove.setAttribute('aria-label', `${t('searchPreview.remove', 'Remove')} ${chip.textContent}`);
+        remove.title = t('searchPreview.remove', 'Remove');
+        if (window.UiIcon?.fill) window.UiIcon.fill(remove, 'i-close');
+        remove.addEventListener('click', () => {
+            const input = document.getElementById('gallery-search-input');
+            if (!input) return;
+            const next = parsed.tokens.filter((_token, index) => !indexes.has(index)).join(' ');
+            input.value = next;
+            syncClearButton(input, document.getElementById('gallery-search-clear'));
+            renderSearchPreview(next, parseQuery(next));
+            applySearch(next);
+            input.focus();
+        });
+        chip.appendChild(remove);
     }
 
     function syncClearButton(input, clearBtn) {

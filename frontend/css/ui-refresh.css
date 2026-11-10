@@ -13830,3 +13830,37 @@ html:not([data-look-variant="b"]) #pro-library-views {
         min-width: 150px;
     }
 }
+
+/* The remove button on a "read as" search chip (gallery-toolbar.js addChipRemove). */
+.gsq-chip:has(.gsq-chip-remove) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 3px;
+}
+
+.gsq-chip-remove {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    opacity: 0.65;
+    cursor: pointer;
+}
+
+.gsq-chip-remove:hover {
+    background: rgba(255, 255, 255, 0.12);
+    opacity: 1;
+}
+
+.gsq-chip-remove .icon {
+    width: 11px;
+    height: 11px;
+}

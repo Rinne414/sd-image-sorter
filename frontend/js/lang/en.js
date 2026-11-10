@@ -145,6 +145,7 @@ window.I18nLang_en = {
     'gallerySearch.suggestAria': 'Search suggestions',
     'searchPreview.understood': 'Understood as:',
     'searchPreview.free': 'free text',
+    'searchPreview.remove': 'Remove',
     'searchPreview.exclude': 'exclude',
     'searchKey.tag': 'tag',
     'searchKey.checkpoint': 'checkpoint',

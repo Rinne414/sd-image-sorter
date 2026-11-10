@@ -1005,3 +1005,22 @@ test('gallery keys: arrows start at the first picture, "/" reaches search, Ctrl+
   await page.keyboard.press('Control+a')
   await expect.poll(() => page.locator('#gallery-grid .gallery-item.selected').count()).toBeGreaterThan(1)
 })
+
+test('search: each "read as" term has a remove button that takes it out of the box', async ({ page }) => {
+  await open(page, null)
+  const box = page.locator('#gallery-search-input')
+  await box.fill('tag:zz_no_such_tag lookprotoken')
+  await box.press('Enter')
+  const chips = page.locator('#gallery-search-preview .gsq-chip')
+  await expect(chips).toHaveCount(2)
+  await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(0)
+
+  await chips.filter({ hasText: 'zz_no_such_tag' }).locator('.gsq-chip-remove').click()
+  await expect(box).toHaveValue('lookprotoken')
+  await expect(chips).toHaveCount(1)
+  await expect.poll(() => page.locator('#gallery-grid .gallery-item').count()).toBeGreaterThan(0)
+
+  await chips.first().locator('.gsq-chip-remove').click()
+  await expect(box).toHaveValue('')
+  await expect(page.locator('#gallery-search-preview')).toBeHidden()
+})
