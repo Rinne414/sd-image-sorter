@@ -2783,3 +2783,47 @@ html[data-look="pro"] #view-reverse #btn-reverse-run {
     width: 100%;
     min-height: 36px;
 }
+
+/* Style Finder results (seen with the real model, 2026-11-10): the accent
+   stays on "Identify all". Avatars, percentages, the bar under a card and the
+   "view in gallery" button were all accent-coloured; the detail's two buttons
+   floated in the middle of an empty block. */
+html[data-look="pro"] #view-artist .artist-avatar {
+    border: 1px solid var(--border);
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-artist .artist-image-confidence {
+    color: var(--text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] #view-artist #artist-images-preview .preview-placeholder {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 0;
+    margin: 12px 0 16px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+html[data-look="pro"] #view-artist #btn-filter-by-artist.btn.btn-primary:not(.btn-icon-only):not(#btn-toggle-select) {
+    border: 1px solid var(--border-strong);
+    background: var(--surface-3);
+    box-shadow: none;
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-artist #btn-clear-artist-filter {
+    margin-top: 0 !important;
+}
+
+html[data-look="pro"] #view-artist .artist-image-action {
+    font-size: 12px;
+}

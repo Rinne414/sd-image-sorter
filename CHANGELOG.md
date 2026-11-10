@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Style Finder results**: the picture chips under an artist read "Reader" and "Build" in the Chinese interface; they now read 读图 and 构建. In the Professional look the accent stays on Identify all: avatars, percentages and "view in gallery" are plain, and the detail's two buttons sit together under the numbers.
+  - **画风识别结果**：中文界面下画师详情里图片的小按钮写着“Reader”“Build”，现在是“读图”“构建”。专业外观下强调色只留给“识别全部”：头像、百分比和“在图库中查看”改为普通样式，详情里的两个按钮并排放在数字下面。
 - **Top bar: More keeps its place**: a page opened from More gets its tab after More instead of before it, so More and the tabs before it no longer shift from page to page.
   - **顶栏：“更多”的位置固定了**：从“更多”里打开的页面，它的标签现在出现在“更多”后面而不是前面，“更多”和它前面的标签不会再随页面左右移动。
 - **After a third blind review of the other pages** (Professional look unless noted): a Find Similar result has six word buttons instead of six look-alike icons, and Reader, Collection and Edit no longer share icons in any look; the Censor page's Detect all and video censor have their own icons and its style menu shows an arrow; Organize's run button takes the accent only once a target folder is given; the Dataset grid no longer puts a warning triangle on every picture without a caption (every look), its steps line up and step 3 says what to do; Prompt Helper's cards sit in an even grid and a recipe's "send to build" is a plain button. Reverse Prompt's two panels fill the window height and its run button spans its panel.

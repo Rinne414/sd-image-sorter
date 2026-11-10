@@ -79,9 +79,9 @@ Object.assign(window.ArtistIdent, {
                     <span class="artist-image-name">${escapeHtml(image.filename)}</span>
                     <span class="artist-image-actions">
                         <span class="artist-image-action" data-action="preview">${escapeHtml(this.tText('Preview', '预览'))}</span>
-                        <span class="artist-image-action" data-action="reader">${escapeHtml(this.tText('Reader', 'Reader'))}</span>
+                        <span class="artist-image-action" data-action="reader">${escapeHtml(this.tText('Reader', '读图'))}</span>
                         <span class="artist-image-action" data-action="edit">${escapeHtml(this.tText('Edit', '编辑'))}</span>
-                        <span class="artist-image-action" data-action="build">${escapeHtml(this.tText('Build', 'Build'))}</span>
+                        <span class="artist-image-action" data-action="build">${escapeHtml(this.tText('Build', '构建'))}</span>
                     </span>
                 </button>
             `;
