@@ -1438,3 +1438,219 @@ html[data-look="pro"] #view-censor .censor-sidebar-v2.right .sidebar-bottom-acti
     padding: 12px 0 0;
     background: var(--pro-chrome);
 }
+
+/* ---- Censor: with a picture loaded ---- */
+
+html[data-look="pro"] #view-censor .tool-btn-v2 {
+    border-color: transparent;
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-censor .tool-btn-v2:hover:not(:disabled) {
+    border-color: transparent;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-censor .tool-btn-v2.active {
+    border-color: transparent;
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-censor .tool-btn-v2 .tool-label {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+html[data-look="pro"] #view-censor .tool-btn-v2 .tool-label span {
+    font-weight: inherit;
+}
+
+html[data-look="pro"] #view-censor .zoom-level-v2 {
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-censor .zoom-controls-v2 {
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background: var(--control-bg);
+}
+
+/* ---- Manual Sort: the session ----
+   The picture being judged was capped at 500 px on any screen; it now takes
+   the room between the four folder cards. */
+
+html[data-look="pro"] #sort-interface .image-stack {
+    --stack-size: min(calc(100vh - 424px), calc(100vw - 720px), 1100px);
+}
+
+html[data-look="pro"] #sort-interface .current-image-wrapper {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--pro-r-panel);
+    background: #000;
+}
+
+html[data-look="pro"] #sort-interface .key-hint {
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #view-censor .tool-btn-v2 {
+    min-width: 50px;
+    padding: 6px 8px;
+}
+
+/* Dataset editor: which caption is shown is a view choice, not the main action. */
+html[data-look="pro"] #view-dataset .dataset-caption-type-btn {
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-dataset .dataset-caption-type-btn.is-active {
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+}
+
+/* ---- Dataset Maker: export ---- */
+
+html[data-look="pro"] #view-dataset #btn-dataset-export {
+    min-height: 44px;
+    height: 44px;
+}
+
+html[data-look="pro"] #view-dataset #btn-dataset-export span {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-dataset .dataset-fieldset > legend {
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-dataset .dataset-preset-row {
+    border-color: transparent;
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #view-dataset .dataset-preset-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-look="pro"] #view-dataset .dataset-preset-row:has(input:checked) {
+    border-color: transparent;
+    background: rgba(255, 255, 255, 0.07);
+}
+
+/* File names are data, not actions: no accent. */
+html[data-look="pro"] #view-dataset .dataset-export-preview-pair :is(.file-img, .file-txt) {
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-dataset .dataset-export-preview-pair {
+    border: 0;
+    border-bottom: 1px solid var(--pro-panel-line);
+    border-radius: 0;
+    background: none;
+}
+
+/* ---- Prompt Helper: Compare, Build, Random ---- */
+
+html[data-look="pro"] #view-promptlab :is(.promptlab-browser, .promptlab-builder, .promptlab-output-panel) {
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-panel-bg);
+    box-shadow: none;
+    overflow: hidden;
+}
+
+html[data-look="pro"] #view-promptlab :is(.promptlab-browser-header, .promptlab-builder-header, .promptlab-output-header) {
+    background: none;
+    border-bottom: 1px solid var(--pro-panel-line);
+}
+
+html[data-look="pro"] #view-promptlab :is(.promptlab-browser-header, .promptlab-builder-header, .promptlab-output-header) h4 {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* Slots are rows of the panel, not cards in it. */
+html[data-look="pro"] #view-promptlab .slot-row {
+    border: 0;
+    border-bottom: 1px solid var(--pro-panel-line);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-admin-panel {
+    border: 0;
+    border-bottom: 1px solid var(--pro-panel-line);
+    border-radius: 0;
+    background: none;
+}
+
+html[data-look="pro"] #view-promptlab .cat-group {
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-affix-panel {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-affix-badge {
+    padding: 2px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-2);
+    font-weight: 500;
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-affix-title strong,
+html[data-look="pro"] #view-promptlab .promptlab-affix-field label,
+html[data-look="pro"] #view-promptlab .promptlab-build-source > label,
+html[data-look="pro"] #view-promptlab .promptlab-mode label {
+    font-weight: 500;
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-affix-title strong {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-promptlab :is(.promptlab-affix-title p, .promptlab-affix-example) {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-image-preview-card {
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-control);
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] #view-promptlab .tagset-selector select.input {
+    height: 32px;
+    min-height: 32px;
+    padding-block: 0;
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #view-promptlab .tagset-selector .btn {
+    height: 32px;
+    min-height: 32px;
+}

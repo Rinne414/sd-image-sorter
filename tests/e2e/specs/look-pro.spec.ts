@@ -754,3 +754,34 @@ test('Style Finder: the "Use GPU" option shows its checkbox in every look', asyn
     await expect.poll(() => page.locator('#artist-use-gpu').isChecked()).toBe(!before)
   }
 })
+
+test('Prompt Helper: the chosen template picture stays shown (the language refresh used to replace it)', async ({ page }) => {
+  await open(page, null)
+  await page.evaluate(() => (document.querySelector('.nav-tab[data-view="promptlab"]') as HTMLElement).click())
+  await page.click('.promptlab-tab[data-mode="build"]')
+  const source = page.locator('#pl-build-source')
+  await expect.poll(() => source.locator('option').count()).toBeGreaterThan(1)
+  await source.selectOption({ index: 1 })
+  const thumb = page.locator('#pl-build-preview .promptlab-image-preview-thumb')
+  await expect(thumb).toBeVisible()
+  // The refresh that overwrote it ran a moment after the pick.
+  await page.waitForTimeout(1500)
+  await expect(thumb).toBeVisible()
+  await expect(page.locator('#pl-build-preview')).not.toHaveAttribute('data-i18n', /.+/)
+  // Back to "nothing chosen": the empty text and its key return.
+  await source.selectOption({ index: 0 })
+  await expect(page.locator('#pl-build-preview')).toHaveAttribute('data-i18n', 'promptlab.buildPreviewEmpty')
+})
+
+test('pro look: the picture being sorted uses the room between the folder cards', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await open(page, 'pro-b')
+  const size = await page.evaluate(() => {
+    const sortInterface = document.getElementById('sort-interface') as HTMLElement
+    document.querySelectorAll<HTMLElement>('.view').forEach((view) => view.classList.toggle('active', view.id === 'view-sorting'))
+    ;(document.getElementById('view-manual') as HTMLElement).style.display = 'block'
+    sortInterface.style.display = 'block'
+    return Math.round((document.getElementById('image-stack') as HTMLElement).getBoundingClientRect().width)
+  })
+  expect(size).toBe(1080 - 424)
+})

@@ -81,10 +81,15 @@ Object.assign(window.PromptLab, {
         const image = this._getImageRecord(imageId);
         if (!image) {
             container.className = 'promptlab-image-preview-card promptlab-image-preview-empty';
+            container.dataset.i18n = emptyKey;
             container.textContent = this._t(emptyKey, emptyFallback);
             return;
         }
 
+        // The language refresh rewrites every [data-i18n] element's text: with
+        // the empty-state key left on, the chosen picture's preview was replaced
+        // by "choose a picture" again a moment after it appeared.
+        container.removeAttribute('data-i18n');
         container.className = 'promptlab-image-preview-card';
         container.innerHTML = `
             <div class="promptlab-image-preview-body">
