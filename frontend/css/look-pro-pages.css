@@ -2253,3 +2253,82 @@ html[data-look="pro"] #filter-modal .filter-section > h5,
 html[data-look="pro"] #filter-modal .filter-section-header h5 {
     font-size: 13px;
 }
+
+/* ---- Dialog forms in the pro look: one field, one label, one button weight ---- */
+
+html[data-look="pro"] :is(#smart-tag-modal, #mass-tag-modal, #batch-export-modal, #export-modal, #rename-modal, #save-options-modal, #vlm-settings-modal, #publish-set-modal, #media-censor-modal, #detect-modal, #autosep-settings-modal, #scan-modal, #input-modal, #reconnect-modal, #model-select-modal) :is(select, input[type="text"], input[type="number"], input[type="password"], input[type="search"], input[type="url"]) {
+    height: 36px;
+    min-height: 36px;
+    padding-block: 0;
+    padding-inline: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background-color: var(--control-bg);
+    box-shadow: none;
+    color: var(--text);
+    font-size: 13px;
+}
+
+html[data-look="pro"] :is(#smart-tag-modal, #mass-tag-modal, #batch-export-modal, #export-modal, #rename-modal, #save-options-modal, #vlm-settings-modal, #publish-set-modal, #media-censor-modal, #detect-modal, #autosep-settings-modal, #scan-modal, #input-modal, #reconnect-modal, #model-select-modal) select {
+    appearance: none;
+    padding-right: 32px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A6A6AB' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 11px center;
+}
+
+html[data-look="pro"] :is(#smart-tag-modal, #mass-tag-modal, #batch-export-modal, #export-modal, #rename-modal, #save-options-modal, #vlm-settings-modal, #publish-set-modal, #media-censor-modal, #detect-modal, #autosep-settings-modal, #scan-modal, #input-modal, #reconnect-modal, #model-select-modal) :is(select, input, textarea):hover {
+    border-color: var(--border-strong);
+}
+
+html[data-look="pro"] :is(#smart-tag-modal, #mass-tag-modal, #batch-export-modal, #export-modal, #rename-modal, #save-options-modal, #vlm-settings-modal, #publish-set-modal, #media-censor-modal, #detect-modal, #autosep-settings-modal, #scan-modal, #input-modal, #reconnect-modal, #model-select-modal) textarea {
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background-color: var(--control-bg);
+    box-shadow: none;
+    font-size: 13px;
+}
+
+html[data-look="pro"] :is(#smart-tag-modal, #mass-tag-modal, #batch-export-modal, #export-modal, #rename-modal, #save-options-modal, #vlm-settings-modal, #publish-set-modal, #media-censor-modal, #detect-modal, #autosep-settings-modal, #scan-modal, #input-modal, #reconnect-modal, #model-select-modal) .btn:not(.btn-icon-only) {
+    font-weight: 500;
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] :is(#smart-tag-modal, #mass-tag-modal, #batch-export-modal, #export-modal, #rename-modal, #save-options-modal, #vlm-settings-modal, #publish-set-modal, #media-censor-modal, #detect-modal, #autosep-settings-modal, #scan-modal, #input-modal, #reconnect-modal, #model-select-modal) .btn.btn-primary:not(.btn-icon-only) {
+    font-weight: 600;
+}
+
+/* Field labels: quieter than the values they name. */
+html[data-look="pro"] :is(#smart-tag-modal, #vlm-settings-modal, #media-censor-modal, #rename-modal) :is(label:not(.checkbox-label):not(.segmented-option), .form-label, .smart-tag-field-label) {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #smart-tag-modal .checkbox-label :is(span, strong) {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+/* A chosen option in a dialog is lifted, not outlined in the accent (the
+   accent stays on the dialog's one main button). */
+html[data-look="pro"] #mass-tag-modal .mass-tag-scope-card:has(input:checked),
+html[data-look="pro"] #mass-tag-modal .mass-tag-tab.active,
+html[data-look="pro"] #vlm-settings-modal .vlm-segmented-btn.active {
+    border-color: var(--border-strong);
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+    box-shadow: none;
+}
+
+html[data-look="pro"] #mass-tag-modal .mass-tag-scope-card {
+    border-color: var(--border);
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #mass-tag-modal .mass-tag-tab,
+html[data-look="pro"] #vlm-settings-modal .vlm-segmented-btn {
+    border-radius: var(--pro-r-control);
+    font-weight: 500;
+}
