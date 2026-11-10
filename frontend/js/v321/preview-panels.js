@@ -246,14 +246,16 @@ Object.assign(window.V321Integration, {
         const posPrepend = document.createElement('button');
         posPrepend.type = 'button';
         posPrepend.className = 'btn btn-small btn-ghost active';
-        posPrepend.textContent = '↑';
         posPrepend.title = this._i18n('batchExport.positionFront', 'Front');
+        posPrepend.setAttribute('aria-label', posPrepend.title);
+        if (window.UiIcon) posPrepend.append(window.UiIcon.svg('i-arrow-up'));
         posPrepend.dataset.pos = 'prepend';
         const posAppend = document.createElement('button');
         posAppend.type = 'button';
         posAppend.className = 'btn btn-small btn-ghost';
-        posAppend.textContent = '↓';
         posAppend.title = this._i18n('batchExport.positionBack', 'Back');
+        posAppend.setAttribute('aria-label', posAppend.title);
+        if (window.UiIcon) posAppend.append(window.UiIcon.svg('i-arrow-down'));
         posAppend.dataset.pos = 'append';
         const getPosition = () => posAppend.classList.contains('active') ? 'append' : 'prepend';
         posPrepend.addEventListener('click', () => { posPrepend.classList.add('active'); posAppend.classList.remove('active'); });

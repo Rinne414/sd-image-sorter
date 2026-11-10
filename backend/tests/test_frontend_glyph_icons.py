@@ -121,3 +121,27 @@ def test_stylesheets_draw_fold_arrows_instead_of_typing_them():
         "Draw the arrow (mask: var(--fold-chevron), see ui-refresh.css) "
         "instead of typing a glyph: " + "; ".join(offenders)
     )
+
+
+# A typed arrow as the whole face of a button (the queue's move buttons,
+# 2026-11-10). Arrows inside key hints and "A → B" sentences are typography.
+ARROW_BUTTON = re.compile(
+    r"<button[^>]*>\s*[↑↓⤒⤓]\s*</button>|textContent\s*=\s*'[↑↓⤒⤓]'"
+)
+
+
+def test_buttons_do_not_use_a_typed_arrow_as_their_icon():
+    files = [FRONTEND / "index.html"]
+    files += [
+        p for p in sorted((FRONTEND / "js").rglob("*.js")) if "lang" not in p.parts
+    ]
+    offenders = []
+    for path in files:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for number, line in enumerate(lines, 1):
+            if ARROW_BUTTON.search(line) and not _is_comment(line):
+                offenders.append(f"{path.relative_to(FRONTEND)}:{number}")
+    assert offenders == [], (
+        "Use i-arrow-up / i-arrow-down / i-arrow-up-to-line / "
+        "i-arrow-down-to-line from the sprite: " + "; ".join(offenders)
+    )
