@@ -323,6 +323,8 @@ function updateSortReverseButton() {
     if (dropdown) {
         dropdown.value = getBaseSortValue(sortBy);
     }
+    // Random has no reverse: the button means "shuffle again" there.
+    window.GalleryReshuffle?.sync();
 }
 
 function syncGallerySortLabels() {

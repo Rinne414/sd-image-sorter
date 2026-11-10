@@ -57,6 +57,7 @@ Notes:
 - Legacy integer cursors are still accepted for backward compatibility, but clients should not generate or parse cursors themselves.
 - Cursor pagination is intended for `sort_by=newest` and `sort_by=oldest`
 - For `sort_by=random`, do not use a cursor
+- `random_seed` (integer, 1 to 2147483646) picks the shuffle for `sort_by=random`: the same seed is the same order, so offset paging stays stable; without it the historical fixed order is used
 
 ### Comma-Separated Filters
 

@@ -11,6 +11,8 @@ from typing import Optional
 
 from fastapi import Depends, Query
 
+import random_order
+
 from routers.images import PROMPT_MATCH_MODE_EXACT, get_image_service, router
 from services.image_service import ImageService
 
@@ -162,6 +164,12 @@ def get_images(
         default="newest",
         description="Sort order: newest, oldest, name_asc, name_desc, generator, generator_desc, prompt_length, prompt_length_asc, tag_count, tag_count_asc, rating, rating_desc, character_count, character_count_asc, random, file_size, file_size_asc, aesthetic, aesthetic_asc, aesthetic_waifu, aesthetic_waifu_asc, aesthetic_anime, aesthetic_anime_asc, brightness, brightness_asc, saturation, saturation_asc, brightness_skew, brightness_skew_asc, user_rating, user_rating_asc. Cursor pagination works for newest/oldest only.",
         examples=["newest"],
+    ),
+    random_seed: Optional[int] = Query(
+        default=None,
+        ge=0,
+        le=random_order.MAX_SEED,
+        description="With sort_by=random: which shuffle to show. The same seed gives the same order (so paging is stable); a new seed reshuffles. Omitted or 0 keeps the historical fixed order.",
     ),
     limit: int = Query(
         default=100,
@@ -407,6 +415,7 @@ def get_images(
     checkpoints = _merge(checkpoints, checkpoint)
     loras = _merge(loras, lora)
 
+    random_order.use_seed(random_seed)
     return service.get_images(
         generators=generators,
         tags=tags,

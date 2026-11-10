@@ -10,10 +10,10 @@ feature code.
 Imports only from db_query_columns / stdlib to avoid an import cycle with
 the ``database`` facade.
 """
+import random_order
 from db_query_columns import (
     VALID_SORT_OPTIONS,
     _LIBRARY_ORDER_SQL,
-    _STABLE_RANDOM_ORDER_SQL,
     _DEFAULT_ORDER_CLAUSE,
 )
 
@@ -111,7 +111,8 @@ def _get_order_clause(sort_by: str) -> str:
         "rating_desc": "rating_order DESC, i.id DESC",
         "character_count": "char_count DESC, i.id DESC",
         "character_count_asc": "char_count ASC, i.id ASC",
-        "random": f"{_STABLE_RANDOM_ORDER_SQL} ASC, i.id ASC",
+        # The shuffle the request asked for (random_order.use_seed); no seed = the historical one.
+        "random": f"{random_order.order_sql()} ASC, i.id ASC",
         "file_size": "i.file_size DESC, i.id DESC",
         "file_size_asc": "i.file_size ASC, i.id ASC",
         "aesthetic": "COALESCE(i.aesthetic_score, 0) DESC, i.id DESC",

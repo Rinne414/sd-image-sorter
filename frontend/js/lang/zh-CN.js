@@ -5791,6 +5791,7 @@ window.I18nLang_zhCN = {
     'tip.invertSelectionAmongFilteredImages': '在当前筛选里反选',
     'tip.expandSidebar': '展开侧栏',
     'tip.reverseSortOrder': '反转排序',
+    'tip.shuffleAgain': '重新洗牌',
     'tip.clickToDismiss': '点一下关闭',
     'tip.moveSelectedImagesToAnotherFolder': '把选中的图移到别的文件夹',
     'tip.addSelectedImagesToACollection': '把选中的图加入合集（只记引用，不复制文件）',

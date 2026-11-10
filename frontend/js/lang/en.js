@@ -5794,6 +5794,7 @@ window.I18nLang_en = {
     'tip.invertSelectionAmongFilteredImages': 'Invert selection among filtered images',
     'tip.expandSidebar': 'Expand Sidebar',
     'tip.reverseSortOrder': 'Reverse sort order',
+    'tip.shuffleAgain': 'Shuffle again',
     'tip.clickToDismiss': 'Click to dismiss',
     'tip.moveSelectedImagesToAnotherFolder': 'Move selected images to another folder',
     'tip.addSelectedImagesToACollection': 'Add selected images to a collection (reference, no file copy)',

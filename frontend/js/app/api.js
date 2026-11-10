@@ -233,6 +233,10 @@ const API = {
         if (filters.artist) params.set('artist', filters.artist);  // Artist filter
         if (filters.search) params.set('search', filters.search);
         if (filters.sortBy) params.set('sort_by', filters.sortBy);
+        // Random sort: which shuffle (the same seed pages through one stable order).
+        if (filters.sortBy === 'random' && window.GalleryReshuffle) {
+            params.set('random_seed', String(window.GalleryReshuffle.currentSeed()));
+        }
         params.set('limit', filters.limit ?? 200);
         if (filters.cursor) params.set('cursor', filters.cursor);
         if (Number.isFinite(filters.offset)) params.set('offset', filters.offset);
