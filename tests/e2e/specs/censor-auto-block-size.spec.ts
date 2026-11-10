@@ -66,12 +66,12 @@ test('Auto is the default and follows each picture', async ({ page }) => {
   await openCensorWithBothImages(page)
 
   await expect(page.locator('#censor-block-size-auto')).toBeChecked()
-  await expect(page.locator('#censor-block-size-value')).toHaveText('40 px')
+  await expect(page.locator('#censor-block-size-value')).toHaveText('40px')
   expect(await activeBlockSize(page)).toBe(40)
 
   await page.locator(`#censor-queue-list [data-id="${IMAGES[1].id}"]`).first().click()
   await expect.poll(() => page.evaluate(() => (window as any).__CENSOR_STATE__?.activeId)).toBe(IMAGES[1].id)
-  await expect(page.locator('#censor-block-size-value')).toHaveText('8 px')
+  await expect(page.locator('#censor-block-size-value')).toHaveText('8px')
 })
 
 test('moving the slider picks a size by hand, and Auto comes back when ticked', async ({ page }) => {
@@ -80,7 +80,7 @@ test('moving the slider picks a size by hand, and Auto comes back when ticked', 
   await page.locator('#censor-block-size').fill('24')
 
   await expect(page.locator('#censor-block-size-auto')).not.toBeChecked()
-  await expect(page.locator('#censor-block-size-value')).toHaveText('24 px')
+  await expect(page.locator('#censor-block-size-value')).toHaveText('24px')
   expect(await activeBlockSize(page)).toBe(24)
 
   await page.reload()

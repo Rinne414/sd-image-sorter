@@ -776,7 +776,7 @@ function syncCensorBlockSizeControls() {
     if (slider) slider.value = String(Math.min(Number(slider.max) || size, Math.max(Number(slider.min) || 1, size)));
     if (valueLabel) {
         valueLabel.dataset.i18nLocked = '1';
-        valueLabel.textContent = censorT('censor.blockSizeValue', { size }, '{size} px');
+        valueLabel.textContent = censorT('censor.blockSizeValue', { size }, '{size}px');
     }
 }
 

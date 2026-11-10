@@ -1958,3 +1958,102 @@ html[data-look="pro"] #view-censor .censor-detect-actions-inline {
 html[data-look="pro"] #view-censor .censor-detect-actions-inline .censor-detect-action {
     flex: 1 1 auto;
 }
+
+/* ---- Round 21: no text under 12 px on these pages ----
+   (measured with verify/small.cjs; key badges and count badges included) */
+
+html[data-look="pro"] :is(
+    #view-reader .reader-generator-badge,
+    #view-reader .tag-category-copy-count,
+    #view-manual .space-indicator span,
+    #view-censor .tool-label kbd,
+    #view-censor .censor-block-auto span,
+    #view-censor .censor-detect-action kbd,
+    #view-dataset .import-thumb-order,
+    #view-dataset .import-thumb-keep,
+    #view-dataset .dataset-queue-filename,
+    #view-dataset .dataset-zoom-label,
+    #view-dataset .dataset-box-label,
+    #view-dataset .dataset-tag-pills-empty,
+    #view-dataset .dataset-review-keys,
+    #view-dataset .dataset-step-number,
+    #view-dataset .form-hint,
+    #view-dataset .dataset-lora-cat-name,
+    #view-dataset .dataset-cleanup-label,
+    #view-dataset .dataset-advanced > summary,
+    #view-dataset .flow-step-num,
+    #view-dataset .dataset-template-hint span,
+    #view-dataset .dataset-zh-aid-note,
+    #view-dataset .dataset-readiness-heading h4,
+    #view-dataset .dataset-export-disabled-hint,
+    #view-dataset .dataset-preset-label small,
+    #view-dataset .dataset-help,
+    #view-dataset .dataset-pair-chip code,
+    #view-dataset .dataset-export-caption-meta small,
+    #view-promptlab .promptlab-action-meta,
+    #view-promptlab .cat-count,
+    #view-promptlab .slot-empty,
+    #view-promptlab .slot-weight-value
+) {
+    font-size: 12px;
+}
+
+html[data-look="pro"] #view-dataset .dataset-box-label {
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+/* ---- Round 21 ---- */
+
+/* A button that is off stays readable: no fade to near-invisible. */
+html[data-look="pro"] .view:not(#view-gallery) .btn:not(.btn-primary):disabled,
+html[data-look="pro"] #view-censor .tool-btn-v2:disabled {
+    opacity: 1;
+    border-color: var(--hairline-2);
+    background: transparent;
+    color: #77777D;
+}
+
+/* Reverse Prompt: the place for the answer is a quiet panel, so the dashed
+   box stays the one place to drop a picture. */
+html[data-look="pro"] #view-reverse .reverse-results-empty {
+    border: 0;
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] #view-reverse .reverse-tipo-actions :is(select, .btn) {
+    height: 34px;
+    min-height: 34px;
+}
+
+/* Organize: the saved-setup buttons line up with the list above them. */
+html[data-look="pro"] #view-sorting .autosep-config-controls-row {
+    justify-content: flex-start;
+}
+
+html[data-look="pro"] #view-sorting .autosep-config-summary {
+    text-align: left;
+}
+
+/* Censor: every slider starts at the same place (label and number share a
+   fixed column). */
+html[data-look="pro"] #view-censor .censor-tab-pane .censor-side-row > .censor-side-inline-label {
+    flex: 0 0 132px;
+    min-width: 132px;
+}
+
+/* Read Image: the small copy buttons are one size. */
+html[data-look="pro"] #view-reader .reader-category-group .btn,
+html[data-look="pro"] #view-reader .reader-section-header .btn {
+    min-height: 26px;
+    height: 26px;
+    padding: 0 8px;
+    font-size: 12px;
+}
+
+/* Organize: while the empty preview shows its own start button, the same
+   button in the pane's header is not shown twice (it stays in the page: the
+   start button presses it). Pro look only: today's look keeps both. */
+html[data-look="pro"] .autosep-pane-preview:has(.autosep-preview-start) #btn-preview-autosep {
+    display: none;
+}
