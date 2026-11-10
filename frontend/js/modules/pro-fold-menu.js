@@ -156,7 +156,7 @@
         button: 'btn-pro-help',
         popover: 'pro-help-popover',
         body: 'pro-help-popover-body',
-        nodes: () => [el('btn-help'), el('btn-language-toggle')],
+        nodes: () => [el('btn-help'), el('btn-shortcuts'), el('btn-language-toggle')],
     });
     const tagging = relocate('pro-tag-slot', () => [el('btn-tag')]);
     whenReady(() => {

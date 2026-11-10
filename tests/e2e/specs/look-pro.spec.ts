@@ -1054,3 +1054,21 @@ test('viewer: the open picture can be favourited, and the number keys rate it', 
   await tiles.first().locator('.gallery-item-fav').click()
   await expect(tiles.first().locator('.gallery-item-fav')).toHaveAttribute('aria-pressed', 'false')
 })
+
+test('Professional look: Help has Keyboard shortcuts, and the panel lists the newer keys', async ({ page }) => {
+  await open(page, 'pro-b')
+  await page.click('#btn-pro-help')
+  const entry = page.locator('#pro-help-popover #btn-shortcuts')
+  await expect(entry).toBeVisible()
+  await expect(entry).toContainText('Keyboard shortcuts')
+  await entry.click()
+  const panel = page.locator('#keyboard-shortcuts-panel')
+  await expect(panel).toBeVisible()
+  for (const text of ['Ctrl+K', 'Put the cursor in the search box.', 'set the stars']) {
+    await expect(panel).toContainText(text)
+  }
+  // Today's look keeps its bar: the button is not shown there (the "?" key opens the panel).
+  await page.keyboard.press('Escape')
+  await page.evaluate(() => (window as any).SdLook.set(null))
+  await expect(page.locator('#btn-shortcuts')).toBeHidden()
+})

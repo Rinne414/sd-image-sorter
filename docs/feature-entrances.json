@@ -611,7 +611,8 @@
       "zh": "当前页面的说明",
       "classic": [
         "#btn-help",
-        "#btn-pro-help"
+        "#btn-pro-help",
+        "#btn-shortcuts"
       ],
       "vopus": {
         "at": "#/library",

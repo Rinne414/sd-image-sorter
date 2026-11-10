@@ -7,9 +7,16 @@ const KeyboardShortcutsPanel = (function () {
         global: [
             { key: '?', descKey: 'shortcuts.global.help', fallback: 'Open the keyboard shortcuts panel.' },
             { key: 'Esc', descKey: 'shortcuts.global.escape', fallback: 'Close a modal or cancel the current action.' },
+            { key: 'Ctrl+K', descKey: 'shortcuts.global.find', fallback: 'Find a feature by name.' },
         ],
         gallery: [
+            { key: 'Arrow keys', descKey: 'shortcuts.gallery.move', fallback: 'Move between pictures (starts at the first one on screen).' },
+            { key: 'Enter', descKey: 'shortcuts.gallery.open', fallback: 'Open the picture in focus.' },
+            { key: 'Space', descKey: 'shortcuts.gallery.peek', fallback: 'Quick look: tap to open and close, hold to peek.' },
+            { key: '/', descKey: 'shortcuts.gallery.search', fallback: 'Put the cursor in the search box.' },
+            { key: 'Ctrl+A', descKey: 'shortcuts.gallery.selectAll', fallback: 'In select mode: select everything in the current filter.' },
             { key: 'Arrow Left/Right', descKey: 'shortcuts.gallery.navigate', fallback: 'Navigate images in the detail modal.' },
+            { key: '1-5 / 0', descKey: 'shortcuts.gallery.rate', fallback: 'With a picture open: set the stars, 0 clears them.' },
             { key: 'S', descKey: 'shortcuts.gallery.selection', fallback: 'Toggle selection mode.' },
             { key: 'F', descKey: 'shortcuts.gallery.filters', fallback: 'Open the filter editor.' },
             { key: 'G / L / W', descKey: 'shortcuts.gallery.views', fallback: 'Grid, large or waterfall view.' },
@@ -172,6 +179,9 @@ const KeyboardShortcutsPanel = (function () {
                 renderPanel(panelElement);
             }
         });
+
+        // Help menu > Keyboard shortcuts (the panel had no entrance but the "?" key).
+        document.getElementById('btn-shortcuts')?.addEventListener('click', show);
 
         const helpBtn = document.getElementById('btn-help');
         if (helpBtn) {
