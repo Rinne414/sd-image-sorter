@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Organize: the page's settings button says what it opens**: it read "Settings" with the same icon as the program's Settings in the top bar; it now reads "Auto-Separate Settings", the name of the dialog it opens.
+  - **整理：页面上的设置按钮写明了它打开什么**：以前它和顶栏的程序“设置”同名同图标；现在叫“自动分类设置”，和它打开的对话框同名。
 - **Read Image (Professional look): the small buttons are one size**: Copy, Find and the format switch in the result panel came in three sizes and two greys; Copy and its options arrow now read as one control.
   - **读图（专业外观）：小按钮统一成一种**：结果面板里的“复制”“找图”和显示格式按钮以前有三种大小、两种灰色；“复制”和旁边的选项箭头现在连成一个控件。
 - **Fold arrows are drawn, not typed**: nine folds (Censor side cards, Dataset cards and its advanced and extra sections, the tagging dialog's advanced options, Model Center network settings, the selection panel, the dataset check sections, the export preview tools) used a typed triangle, a gear or a plus sign as their arrow. They now use the same line arrow as the rest of the program. The queue's four move buttons (top, up, down, bottom) and the caption position buttons use line icons instead of typed arrows, and screen readers get their names. Censor > Adjust: the eight sliders have a normal thin track again (it was as thick as its box), and in the Professional look they are plain rows instead of eight framed boxes.
