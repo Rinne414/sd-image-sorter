@@ -823,15 +823,15 @@ test('loaded issues and provider evidence relocalize when the language changes',
   await page.locator('#btn-language-toggle').click()
 
   await expect(issueKind).toHaveValue('caption')
-  await expect(issueKindDisplay).toHaveText('Caption')
+  await expect(issueKindDisplay).toHaveText('标注')
   await expect(page.getByTestId('review-cockpit-issue')).toContainText('ZH Empty caption')
   await expect(page.getByTestId('review-cockpit-issue')).toContainText('观察值')
   await expect(page.getByTestId('review-cockpit-issue')).toContainText('中文 Empty caption')
   await expect(page.locator('.sepcon-issue-severity')).toHaveText('中')
-  await expect(page.locator('.sepcon-issue-source')).toHaveText('当前 Caption · 可用')
+  await expect(page.locator('.sepcon-issue-source')).toHaveText('当前标注 · 可用')
   await expect(page.getByTestId('review-cockpit-provider-state').filter({
-    hasText: 'Caption 完整性',
-  })).toHaveText('Caption 完整性 · 部分可用 · 本地路径项目未覆盖。')
+    hasText: '标注完整性',
+  })).toHaveText('标注完整性 · 部分可用 · 本地路径项目未覆盖。')
   await expect(page.getByTestId('review-cockpit-provider-state').filter({
     hasText: '标签完整性',
   })).toHaveText('标签完整性 · 未请求 · 未请求 Rating 标签完整性检查。')

@@ -85,7 +85,7 @@ Object.assign(SeparationConsole, {
                 : exact
                     ? I18n.format(sepconT(
                         'Exact token counts with {tokenizers}, as the {model} text encoder reads captions (budget {budget}).',
-                        '用 {tokenizers} 得到的精确 token 数，这是 {model} 读取 caption 用的分词器（预算 {budget}）。',
+                        '用 {tokenizers} 得到的精确 token 数，这是 {model} 读取标注用的分词器（预算 {budget}）。',
                     ), { tokenizers: tok.tokenizerLabels().join(' + '), model: tok.modelLabel(), budget })
                     : sepconT(`Estimated tokens (budget ~${budget} for the chosen target model; CLIP default when unset).`,
                         `估算 token 数（当前目标模型预算约 ${budget}；未选择时按 CLIP 预算）。`);
@@ -227,7 +227,7 @@ Object.assign(SeparationConsole, {
                     : sepconT('Prune: blacklist at export so the trigger absorbs it', '剪除：加入导出黑名单，让触发词吸收'),
                 () => this.togglePrune(row.key)));
             actions.appendChild(this._actionBtn('i-trash',
-                sepconT('Remove this tag from every caption (session edit, Ctrl+Z-able per image)', '从所有 caption 中移除此标签（会话级编辑）'),
+                sepconT('Remove this tag from every caption (session edit, Ctrl+Z-able per image)', '从所有标注中移除此标签（会话级编辑）'),
                 () => this.removeEverywhere(row)));
             actions.appendChild(this._actionBtn('i-pin',
                 sepconT('Jump to the next image carrying this tag', '跳到下一张含此标签的图'),

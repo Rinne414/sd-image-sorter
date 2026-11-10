@@ -60,7 +60,7 @@ Object.assign(SeparationConsole, {
             if (tags.length === 0) {
                 panel.textContent = sepconT(
                     'The queue has no caption tags yet — load images (and captions) first.',
-                    '队列还没有任何 caption 标签 — 请先载入图片和 caption。');
+                    '队列还没有任何标注标签 — 请先载入图片和标注。');
                 return;
             }
             if (!(await this._tipoWeightsInstalled(model))) {
@@ -109,7 +109,7 @@ Object.assign(SeparationConsole, {
             title.className = 'sepcon-gaps-title';
             title.textContent = proposals.length === 0
                 ? sepconT('TIPO found no in-vocabulary tags to add — the caption set already covers its ideas.',
-                    'TIPO 没有找到可补充的词表内标签 — 现有 caption 已覆盖它的建议。')
+                    'TIPO 没有找到可补充的词表内标签 — 现有标注已覆盖它的建议。')
                 : I18n.format(sepconT(
                     `TIPO proposes {lengthCount} tags the taggers never scored — review and pick:`,
                     `TIPO 推荐了 {lengthCount} 个打标器从未评分的标签 — 请人工挑选：`,
@@ -124,7 +124,7 @@ Object.assign(SeparationConsole, {
             hint.className = 'sepcon-gap-line sepcon-tipo-hint';
             hint.textContent = sepconT(
                 'Checked tags are appended to the export "Common tags" box (added to every caption at export) — nothing is written to the library. Prefer per-image precision? Hand-edit captions in the editor instead.',
-                '勾选的标签会追加到导出的「公共标签」框（导出时加进每条 caption）— 不会写入图库。想按图精修？请直接在编辑器里手改 caption。');
+                '勾选的标签会追加到导出的「公共标签」框（导出时加进每条标注）— 不会写入图库。想按图精修？请直接在编辑器里手改标注。');
             panel.appendChild(hint);
 
             const list = document.createElement('div');

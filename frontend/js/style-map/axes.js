@@ -232,7 +232,7 @@ class AxisLabels {
         return rect;
     }
 
-    /** The label's words: axis letter, a direction arrow, the end's strongest tags or a dash. */
+    /** The label's words: axis letter, a direction arrow, the end's strongest tags, or nothing when they cannot name it. */
     writeText(item, arrow, arrowLast) {
         if (this.customNames) {
             const names = this.customNames[item.axis];
@@ -249,7 +249,9 @@ class AxisLabels {
         }
         const entry = this.data?.axes?.[item.axis];
         const words = entry?.weak ? null : endText(entry?.[item.end]);
-        const content = words ? (arrowLast ? `${words} ${arrow}` : `${arrow} ${words}`) : '—';
+        // An end the tags cannot name shows its axis letter alone (a dash read as a
+        // placeholder); the tooltip still says why.
+        const content = words ? (arrowLast ? `${words} ${arrow}` : `${arrow} ${words}`) : '';
         item.node.classList.toggle('is-weak', !words);
         const full = entry?.weak
             ? t('stylemap.axesWeak', 'The tags cannot name the difference along this axis; compare the pictures at both ends')

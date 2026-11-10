@@ -140,7 +140,7 @@ test('Krea guidance relocalizes and fits the 1366 desktop setup column', async (
   await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
 
   await expect(hint).toContainText('LoRA 请在 krea/Krea-2-Raw 上训练')
-  await expect(applyButton).toContainText('全部图片设为自然语言 caption')
+  await expect(applyButton).toContainText('全部图片设为自然语言标注')
   const layout = await field.evaluate((element) => {
     const hintElement = document.getElementById('dataset-target-model-hint')
     return {

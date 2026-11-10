@@ -227,7 +227,7 @@ test.describe('subject-count fixes in the health check', () => {
     const box = page.locator('[data-testid="check-subject-fixes"]')
     await expect(box.locator('[data-testid="check-subject-apply"]')).toHaveText('应用到已勾选的 1 张')
     await box.locator('[data-testid="check-subject-apply"]').click()
-    await expect(box.locator('.dchk-note')).toHaveText('已修改 1 条 caption。')
+    await expect(box.locator('.dchk-note')).toHaveText('已修改 1 条标注。')
     await expect(box.locator('[data-testid="check-subject-undo"]')).toHaveText('撤销（1）')
   })
 

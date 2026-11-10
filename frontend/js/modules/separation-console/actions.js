@@ -49,7 +49,7 @@ Object.assign(SeparationConsole, {
             window.App?.showToast?.(
                 I18n.format(sepconT(
                     `Removed "{spelling}" from {lengthCount} captions`,
-                    `已从 {lengthCount} 条 caption 移除「{spelling}」`,
+                    `已从 {lengthCount} 条标注移除「{spelling}」`,
                 ), { spelling: row.spelling, lengthCount: row.ids.length }),
                 'success');
             this.refresh();

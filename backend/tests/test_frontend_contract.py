@@ -1636,9 +1636,9 @@ def test_export_ui_explains_output_formats_before_action():
     assert "Combined Export..." in en_source
     assert "合并导出..." in zh_source
     assert "Training captions..." in en_source
-    assert "训练 caption..." in zh_source
-    assert "训练 caption" in zh_source
-    assert "可选 Class Token + AI caption + Prompt + Tags" in zh_source
+    assert "训练标注..." in zh_source
+    assert "训练标注" in zh_source
+    assert "可选 Class Token + AI 标注 + Prompt + Tags" in zh_source
     assert "训练用 .txt" in zh_source
     assert "Prompt Sheet..." not in en_source
     assert "Caption Files..." not in en_source

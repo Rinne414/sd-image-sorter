@@ -1282,7 +1282,7 @@ test('a failed read of the caption versions says so and asks for a reload', asyn
   await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
   await expect(page.getByTestId('dataset-readiness-check')).toHaveAttribute(
     'title',
-    '现在读不到项目的 caption 版本。重新载入项目后再导出。',
+    '现在读不到项目的标注版本。重新载入项目后再导出。',
   )
 })
 
@@ -3613,7 +3613,7 @@ test('restoring caption history appends a new active revision', async ({ page })
   await expect(page.getByTestId('dataset-annotation-status')).toHaveAttribute('data-state', 'conflict')
   await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
   await expect(page.getByTestId('dataset-annotation-status')).toHaveAttribute('data-state', 'conflict')
-  await expect(page.getByTestId('dataset-annotation-status')).toContainText('这条 caption 在别处被改过了')
+  await expect(page.getByTestId('dataset-annotation-status')).toContainText('这条标注在别处被改过了')
   await expect(page.getByTestId('dataset-annotation-provenance')).toContainText('从 #601 恢复')
   await expect(page.getByTestId('dataset-annotation-provenance')).toContainText('用户')
   const restoredHistoryRow = page.locator(

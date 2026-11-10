@@ -158,7 +158,7 @@ Object.assign(SeparationConsole, {
                     }
                     dm._addTriggerToCaptions(imageIds, trigger.trim());
                     window.App?.showToast?.(sepconT('Trigger added to project captions',
-                        '已把触发词加入项目 caption'), 'success');
+                        '已把触发词加入项目标注'), 'success');
                     await this.runHealthCheck();
                 } catch (e) {
                     window.App?.showToast?.(sepconT('Failed: ', '失败：') + String(e.message || e), 'error');

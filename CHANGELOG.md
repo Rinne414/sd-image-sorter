@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Chinese interface: "caption" reads 标注**: the Dataset Maker and the export, search and tagging texts mixed the English word into Chinese sentences ("生成 caption", "Caption 编辑器"). About 180 texts now say 标注. File names (`caption.txt`) and the search key `no:caption` are unchanged.
+  - **中文界面：“caption”统一写成“标注”**：数据集、导出、搜索和打标的文字里以前把这个英文词夹在中文句子里（“生成 caption”“Caption 编辑器”），约 180 处现在都写“标注”。文件名（`caption.txt`）和搜索关键字 `no:caption` 不变。
+- **Style Map: an axis end the tags cannot name shows its letter alone**: it showed "X —", which read as a missing value. The tooltip still says why.
+  - **画风地图：标签说不出含义的坐标轴端只显示轴名**：以前显示“X —”，看起来像缺了内容。鼠标悬停仍会说明原因。
 - **Small layout and wording fixes after a full pass over every page**: Prompt Helper's cards are no longer cut on a short window (1366 x 768); a message in Find Similar's result area spans it instead of sitting in a narrow box; Style Finder's status card says what was identified once results exist, and its "Load more" button no longer shows before an artist is picked.
   - **全部页面检查一遍后的小修正**：窗口较矮（1366 x 768）时提示词助手的卡片不再被切掉；相似页结果区里的提示占满整行，不再挤在一个窄框里；画风识别有结果后，状态卡会说明已识别多少张，“加载更多”在没选画师时不再出现。
 - **Dataset Maker: "Import from the gallery" takes you there ready to pick**: with nothing selected it only said to go and select first, and the button that brings pictures back sat in the selection bar's More menu. It now opens the Gallery in select mode with "Send to Dataset Maker" first in the bar.

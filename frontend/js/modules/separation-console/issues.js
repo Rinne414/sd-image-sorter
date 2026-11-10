@@ -47,14 +47,14 @@
     });
     const REVIEW_SOURCE_LABELS = Object.freeze({
         database: ['Database', '数据库'],
-        caption_states: ['Current caption', '当前 Caption'],
+        caption_states: ['Current caption', '当前标注'],
         persisted_duplicates: ['Saved duplicate scan', '已存重复扫描'],
         metadata_provenance: ['Metadata provenance', '元数据来源'],
     });
     const REVIEW_PROVIDER_LABELS = Object.freeze({
         scope: ['Scope', '范围'],
         file_integrity: ['File integrity', '文件完整性'],
-        caption_integrity: ['Caption integrity', 'Caption 完整性'],
+        caption_integrity: ['Caption integrity', '标注完整性'],
         dimensions: ['Dimensions', '图片尺寸'],
         aesthetic_scores: ['Stored aesthetics', '已存美学评分'],
         persisted_duplicates: ['Saved duplicate scan', '已存重复扫描'],
