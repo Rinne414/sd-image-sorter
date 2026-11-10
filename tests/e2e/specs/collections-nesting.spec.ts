@@ -239,3 +239,46 @@ test('deleting a collection keeps the ones inside it, one level up', async ({ pa
   await expect(row(page, child)).toHaveAttribute('data-depth', '0')
   expect(await parentOf(page, child)).toBeNull()
 })
+
+test('a collection emptied by another filter says so and offers the whole collection', async ({ page }) => {
+  // Power-user walkthrough 2026-11-09: a folder plus a collection gave 0 pictures
+  // under "No images in this collection yet", though the collection had pictures.
+  const empty = await make(page, 'Narrowed')
+  await open(page)
+  await row(page, empty).locator('[data-action="browse"]').click()
+  const title = page.locator('#gallery-empty-state h3')
+  const whole = page.locator('#empty-state-whole-collection-btn')
+  await expect(title).toHaveText('No images in this collection yet')
+  await expect(whole).toBeHidden()
+
+  await page.evaluate(() => {
+    const app = (window as any).App
+    app.updateFilters((filters: any) => { filters.search = 'zz-no-such-picture' })
+    app.loadImages()
+  })
+  await expect(title).toHaveText('Nothing in this collection matches the other filters')
+  await expect(whole).toBeVisible()
+
+  await whole.click()
+  await expect(title).toHaveText('No images in this collection yet')
+  await expect(whole).toBeHidden()
+  const filters = await page.evaluate(() => (window as any).App.AppState.filters)
+  expect(filters.search).toBe('')
+  expect(Number(filters.collectionId)).toBe(Number(empty))
+})
+
+test('the empty gallery\'s Clear all filters clears them without reloading the page', async ({ page }) => {
+  // It called functions that do not exist and reloaded the page, which restored the same filters.
+  await open(page)
+  await page.evaluate(() => {
+    const w = window as any
+    w.__stillTheSamePage = true
+    w.App.updateFilters((filters: any) => { filters.search = 'zz-no-such-picture' })
+    w.App.loadImages()
+  })
+  const clear = page.locator('#empty-state-clear-filters-btn')
+  await expect(clear).toBeVisible()
+  await clear.click()
+  await expect.poll(() => page.evaluate(() => (window as any).App.AppState.filters.search)).toBe('')
+  expect(await page.evaluate(() => (window as any).__stillTheSamePage)).toBe(true)
+})

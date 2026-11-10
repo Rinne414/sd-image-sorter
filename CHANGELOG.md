@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **"Clear all filters" on the empty gallery works**: the button shown when no picture matches reloaded the page instead, and the same filters came back with the same empty result. It now clears them at once.
+  - **空图库页上的“清除所有筛选”真的能清除了**：没有图片符合条件时出现的这个按钮，以前只是把页面重新加载一遍，筛选条件原样回来，结果还是空的。现在会立即清除。
+- **A collection that another filter empties says so**: with a folder, a search or a filter on as well, an empty result read "No images in this collection yet". It now says nothing in the collection matches the other filters and offers "Show the whole collection".
+  - **合集被其他筛选条件筛空时会如实说明**：同时开着文件夹、搜索或筛选条件时，空结果以前显示“此合集还没有图片”。现在会说明是其他筛选条件造成的，并提供“显示整个合集”按钮。
 - **Quick filters fit on a laptop again**: since the Untagged chip joined the search row, the English quick filters needed a sideways scroll at 1366 px. The row packs tighter earlier, the English chip reads "Untagged", and with the video switch present the chips drop their small icon.
   - **笔记本宽度下快速筛选又能放在一行了**：加入“未打标签”后，英文界面在 1366 px 宽时快速筛选需要横向滚动。现在这一行会更早收紧，英文按钮改为“Untagged”，有视频开关时按钮会省掉小图标。
 - **Select mode: a Shift range no longer collapses when you add one more picture**: after picking a range with Shift, clicking or Ctrl-clicking another picture left the range outlined but reduced the real selection to that one picture, so Move, Add to collection and the rest acted on a different set than the one shown.

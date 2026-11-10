@@ -49,6 +49,37 @@ function _syncGalleryLibraryEmpty(isLibraryEmpty) {
     document.getElementById('view-gallery')?.classList.toggle('gallery-library-empty', Boolean(isLibraryEmpty));
 }
 
+/**
+ * "Show the whole collection": drops every other filter and keeps the
+ * collection, for a collection that a folder, a search or a filter emptied.
+ */
+function _syncWholeCollectionButton(emptyState, isNarrowed) {
+    let button = emptyState.querySelector('#empty-state-whole-collection-btn');
+    if (!isNarrowed) {
+        if (button) button.style.display = 'none';
+        return;
+    }
+    if (!button) {
+        const actions = emptyState.querySelector('.empty-actions');
+        if (!actions) return;
+        button = document.createElement('button');
+        button.type = 'button';
+        button.id = 'empty-state-whole-collection-btn';
+        button.className = 'btn btn-primary';
+        const label = document.createElement('span');
+        label.setAttribute('data-i18n', 'collections.showWhole');
+        label.textContent = appT('collections.showWhole', 'Show the whole collection');
+        button.appendChild(label);
+        button.addEventListener('click', () => {
+            const collectionId = AppState.filters?.collectionId;
+            resetAllFilters();
+            if (collectionId != null) window.CollectionsUI?.browse?.(collectionId);
+        });
+        actions.appendChild(button);
+    }
+    button.style.display = '';
+}
+
 function _applyGalleryEmptyStateVariant(emptyState) {
     if (!emptyState) return;
     // v3.3.1 FEAT-COLLECTIONS: when the gallery is scoped to a collection
@@ -77,22 +108,32 @@ function _applyGalleryEmptyStateVariant(emptyState) {
     if (browsingCollection) {
         // Collection / Favorites empty scope.
         const isFavorites = Boolean(window.CollectionsUI?.isFavoritesActive?.());
-        const titleKey = isFavorites ? 'collections.favoritesEmpty' : 'collections.emptyImages';
-        const titleFallback = isFavorites
+        // Another filter is on as well: the collection may hold pictures that
+        // it hides, so "no images in this collection yet" would be untrue.
+        const isNarrowed = _galleryHasActiveFilter();
+        let titleKey = isFavorites ? 'collections.favoritesEmpty' : 'collections.emptyImages';
+        let titleFallback = isFavorites
             ? 'No favorites yet'
             : 'No images in this collection yet';
-        const hintFallback = isFavorites
+        let hintKey = isFavorites ? 'collections.favoritesEmptyHint' : 'collections.emptyImagesHint';
+        let hintFallback = isFavorites
             ? 'Click the ♥ on any image to add it to Favorites.'
             : 'Right-click an image and choose "Add to collection…" to fill this collection.';
+        if (isNarrowed) {
+            titleKey = 'collections.narrowedEmpty';
+            titleFallback = 'Nothing in this collection matches the other filters';
+            hintKey = 'collections.narrowedEmptyHint';
+            hintFallback = 'A folder, a search or a filter is on as well. Without them the collection may still have pictures.';
+        }
         if (titleEl) {
             titleEl.setAttribute('data-i18n', titleKey);
             titleEl.textContent = t(titleKey, titleFallback);
         }
         if (hintEl) {
-            const hintKey = isFavorites ? 'collections.favoritesEmptyHint' : 'collections.emptyImagesHint';
             hintEl.setAttribute('data-i18n', hintKey);
             hintEl.textContent = t(hintKey, hintFallback);
         }
+        _syncWholeCollectionButton(emptyState, isNarrowed);
         if (importBtn) importBtn.style.display = 'none';
         if (onboardingSteps) onboardingSteps.style.display = 'none';
         if (onboardingTip) onboardingTip.style.display = 'none';
@@ -103,6 +144,7 @@ function _applyGalleryEmptyStateVariant(emptyState) {
         return;
     }
 
+    _syncWholeCollectionButton(emptyState, false);
     if (filterActive) {
         if (titleEl) {
             titleEl.setAttribute('data-i18n', 'gallery.noMatchesTitle');
@@ -129,16 +171,9 @@ function _applyGalleryEmptyStateVariant(emptyState) {
                 labelSpan.textContent = t('gallery.clearFilters', 'Clear all filters');
                 if (window.UiIcon) cta.append(window.UiIcon.svg('i-broom'), document.createTextNode(' '));
                 cta.appendChild(labelSpan);
-                cta.addEventListener('click', () => {
-                    if (typeof window.resetFilters === 'function') {
-                        window.resetFilters();
-                    } else if (window.FilterStore?.resetFilters) {
-                        window.FilterStore.resetFilters();
-                    } else {
-                        // Last-ditch fallback: full reload
-                        location.reload();
-                    }
-                });
+                // It called two functions that do not exist and fell through to a
+                // page reload, which brought the same filters back.
+                cta.addEventListener('click', () => resetAllFilters());
                 actions.appendChild(cta);
             }
         } else {
