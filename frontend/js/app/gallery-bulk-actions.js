@@ -476,7 +476,8 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                         operation: operationLabel,
                         count: successes.length,
                     }),
-                    'info'
+                    'info',
+                    moveUndoToastOptions(finalProgress)
                 );
                 return;
             }
@@ -488,7 +489,8 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                         success: successes.length,
                         failed: failed.length,
                     }),
-                    successes.length > 0 ? 'warning' : 'error'
+                    successes.length > 0 ? 'warning' : 'error',
+                    moveUndoToastOptions(finalProgress)
                 );
                 return;
             }
@@ -498,7 +500,8 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                     operation: operationLabel,
                     count: successes.length,
                 }),
-                'success'
+                'success',
+                moveUndoToastOptions(finalProgress)
             );
         } catch (error) {
             _hideBgMoveProgress();

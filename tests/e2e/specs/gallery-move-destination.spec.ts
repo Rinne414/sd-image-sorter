@@ -105,3 +105,48 @@ test('the dialog lists the library folders by short name; a click fills the path
   await expect(page.locator('#input-modal-field')).toHaveValue(`${ROOT}/scenery`)
   await expect(list.locator('.folder-choice.is-chosen')).toHaveCount(1)
 })
+
+test('a finished move offers Undo, which asks the server to put the files back', async ({ page }) => {
+  // Power-user walkthrough 2026-11-09: a move to the wrong folder had no way back.
+  const TOKEN = '0123456789abcdef0123456789abcdef'
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openMoveDialog(page, { [MOVES_KEY]: JSON.stringify(['D:/sorted/best']) })
+  await page.route('**/api/move/start', (route) =>
+    route.fulfill({
+      json: { status: 'done', operation: 'move', run_token: TOKEN, results: [{ id: 1, success: true }] },
+    }))
+  let undoBody: unknown = null
+  await page.route('**/api/batch-move/undo', async (route) => {
+    undoBody = route.request().postDataJSON()
+    await route.fulfill({ json: { status: 'started', total: 1, run_token: TOKEN, operation: 'undo' } })
+  })
+  await page.route('**/api/batch-move/progress', (route) =>
+    route.fulfill({
+      json: { status: 'done', run_token: TOKEN, run_kind: 'undo', moved: 1, errors: 0, recent_errors: [] },
+    }))
+
+  await page.locator('#btn-input-ok').click()
+  await page.locator('#confirm-modal.visible #btn-confirm-ok').click()
+
+  const undo = page.locator('#toast-container .toast .toast-action-btn')
+  await expect(undo).toHaveText('撤销')
+  // Readable in today's look: it was white text on the pale accent.
+  const colours = await undo.evaluate((el) => {
+    const style = getComputedStyle(el)
+    return { background: style.backgroundColor, color: style.color }
+  })
+  expect(colours.background).toBe('rgba(0, 0, 0, 0)')
+  await undo.click()
+
+  await expect(page.locator('#toast-container .toast.success .toast-message')).toHaveText('已撤销：1 张图片回到原来的位置。')
+  expect(undoBody).toEqual({ run_token: TOKEN })
+})
+
+test('a move that changed nothing offers no Undo', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openMoveDialog(page, { [MOVES_KEY]: JSON.stringify(['D:/sorted/best']) })
+  await page.locator('#btn-input-ok').click()
+  await page.locator('#confirm-modal.visible #btn-confirm-ok').click()
+  await expect(page.locator('#toast-container .toast.success')).toBeVisible()
+  await expect(page.locator('#toast-container .toast .toast-action-btn')).toHaveCount(0)
+})

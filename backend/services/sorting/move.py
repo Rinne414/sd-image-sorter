@@ -19,6 +19,7 @@ from fastapi import BackgroundTasks, HTTPException
 import database as db
 from exceptions import FileOperationError
 from services import entry_stats_service
+from services.sorting import move_journal
 from services.sorting_models import MoveRequest, VALID_FILE_OPERATIONS
 from utils.path_validation import normalize_user_path, validate_folder_path
 from utils.reported_cause import describe_readability_failure, normalize_reported_cause
@@ -329,8 +330,12 @@ class MoveMixin:
         image: Optional[Dict[str, Any]],
         operation: str,
         destination_folder: str,
+        journal: Optional[move_journal.RunJournal] = None,
     ) -> Dict[str, Any]:
         """Process a single move/copy and return a normalized per-id result.
+
+        With a ``journal`` the file is written down before it is touched and
+        again where it landed, so the run can be undone afterwards.
 
         v3.3.0 USR-1: shared by the synchronous ``move_images`` endpoint and
         the background move job so both paths produce identical result rows
@@ -348,12 +353,14 @@ class MoveMixin:
             return {"id": image_id, "error": error_message, "operation": operation, "success": False}
 
         try:
+            step = self._journal_intent(journal, image_id, source_path, destination_folder)
             operation_result = self._apply_file_operation(
                 operation=operation,
                 image_id=image_id,
                 destination_folder=destination_folder,
                 source_path=source_path,
             )
+            self._journal_done(journal, image_id, source_path, operation_result["new_path"], step)
             return {
                 "id": image_id,
                 "new_path": operation_result["new_path"],
@@ -422,6 +429,45 @@ class MoveMixin:
         ]
         return {"results": results}
 
+    @staticmethod
+    def _open_move_journal(operation: str, destination_folder: str) -> tuple:
+        """The undo journal of a gallery move/copy and its token; (None, None) when it cannot be written."""
+        try:
+            token = move_journal.new_token()
+            return move_journal.RunJournal(token, operation, destination_folder), token
+        except OSError as journal_error:
+            # The move still runs; it just cannot be undone from the page afterwards.
+            logger.warning("Could not start the undo journal of a move: %s", journal_error)
+            return None, None
+
+    @staticmethod
+    def _journal_intent(
+        journal: Optional[move_journal.RunJournal],
+        image_id: int,
+        source_path: str,
+        destination_folder: str,
+    ) -> Optional[int]:
+        """On disk before the file is touched; an unwritable journal stops the file, not the run."""
+        if journal is None:
+            return None
+        return journal.intend(image_id, source_path, destination_folder)
+
+    @staticmethod
+    def _journal_done(
+        journal: Optional[move_journal.RunJournal],
+        image_id: int,
+        source_path: str,
+        new_path: Optional[str],
+        step: Optional[int],
+    ) -> None:
+        if journal is None or not new_path:
+            return
+        try:
+            journal.record(image_id, source_path, new_path, step)
+        except OSError as journal_error:
+            # The file moved; undo still finds it through the intent line.
+            logger.warning("Could not journal the move of image %s: %s", image_id, journal_error)
+
     def start_move_job(
         self,
         request: MoveRequest,
@@ -481,8 +527,11 @@ class MoveMixin:
             moved = 0
             processed = 0
             errors: List[Dict[str, Any]] = []
+            journal: Optional[move_journal.RunJournal] = None
+            run_token: Optional[str] = None
             try:
                 os.makedirs(destination_folder, exist_ok=True)
+                journal, run_token = self._open_move_journal(operation, destination_folder)
 
                 def _write_cancelled_state() -> None:
                     completed_verb_local = "Copied" if operation == "copy" else "Moved"
@@ -505,6 +554,7 @@ class MoveMixin:
                             "recent_errors": errors[-3:],
                             "operation": operation,
                             "results": results,
+                            "run_token": run_token if moved else None,
                             "started_at": self._move_progress.get("started_at"),
                             "updated_at": time.time(),
                         },
@@ -526,7 +576,7 @@ class MoveMixin:
                             return
 
                         image = image_map.get(image_id)
-                        result = self._move_one_image(image_id, image, operation, destination_folder)
+                        result = self._move_one_image(image_id, image, operation, destination_folder, journal)
                         results.append(result)
                         filename = (image.get("filename") if image else None) or f"id-{image_id}"
                         if result.get("success"):
@@ -570,6 +620,7 @@ class MoveMixin:
                         "recent_errors": errors[-3:],
                         "operation": operation,
                         "results": results,
+                        "run_token": run_token if moved else None,
                         "started_at": self._move_progress.get("started_at"),
                         "updated_at": time.time(),
                     },
@@ -594,11 +645,14 @@ class MoveMixin:
                         "recent_errors": errors[-3:],
                         "operation": operation,
                         "results": results,
+                        "run_token": run_token if moved else None,
                         "started_at": self._move_progress.get("started_at"),
                         "updated_at": time.time(),
                     },
                 )
             finally:
+                if journal is not None:
+                    journal.close()
                 with self._move_lock:
                     if (
                         self._move_run_id == run_id

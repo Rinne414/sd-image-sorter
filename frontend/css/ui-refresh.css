@@ -13901,3 +13901,23 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .modal-favorite-btn.is-favorited .icon {
     fill: currentColor;
 }
+
+/* A toast's action (Undo, Open folder, View): a quiet framed button. It was the
+   accent fill with white text, unreadable on today's pale accent and louder
+   than the page's own main action in the Professional look. */
+.toast .toast-action-btn {
+    flex: none;
+    min-height: 28px;
+    padding: 4px 12px;
+    border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.24));
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text, #F2F2F4);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.toast .toast-action-btn:hover {
+    border-color: var(--text-2, rgba(255, 255, 255, 0.6));
+    background: rgba(255, 255, 255, 0.08);
+}
