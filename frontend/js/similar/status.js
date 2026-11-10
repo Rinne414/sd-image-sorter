@@ -222,19 +222,32 @@ Object.assign(window.SimilarImages, {
             cta.hidden = true;
         }
 
+        // A "not ready" message is taken back once it is no longer true: it
+        // stayed on screen over a complete index (written while the numbers
+        // were still loading).
         if (this.searchResults.length === 0 && !this.currentSearchMode) {
             if (!modelReady) {
                 this.renderSearchMessage(setupNeedsDetail);
+                this._searchBlockedShown = true;
             } else if (embedded === 0) {
                 this.renderSearchMessage(this._t('similar.searchBlockedNeedsIndex', 'Similarity search is waiting for indexing. Start indexing first.'));
+                this._searchBlockedShown = true;
+            } else if (this._searchBlockedShown) {
+                this.renderSearchMessage(this._t('similar.searchEmpty', 'Type a few words, enter an image ID, or drop a picture to find similar ones.'));
+                this._searchBlockedShown = false;
             }
         }
 
         if (this.duplicateResults.length === 0) {
             if (!modelReady) {
                 this.renderDuplicateMessage(setupNeedsDetail);
+                this._duplicateBlockedShown = true;
             } else if (embedded < 2) {
                 this.renderDuplicateMessage(this._t('similar.duplicatesBlockedNeedsIndex', 'Duplicate search is waiting for more indexed images.'));
+                this._duplicateBlockedShown = true;
+            } else if (this._duplicateBlockedShown) {
+                this.renderDuplicateMessage(this._t('similar.duplicatesEmpty', 'Click "Find Duplicates" to scan for duplicate images.'));
+                this._duplicateBlockedShown = false;
             }
         }
 

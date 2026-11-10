@@ -621,12 +621,18 @@
                 const ta = document.getElementById('dataset-editor-textarea');
                 if (!ta || this.activeId == null) return;
                 const stack = this._undoStacks.get(this.activeId);
-                if (!stack || stack.length === 0) return;
+                if (!stack || stack.length === 0) {
+                    // The button looked dead when there was nothing to take back.
+                    this._toast(this._t('dataset.nothingToUndoCaption', 'Nothing to undo for this caption.'), 'info', 2500);
+                    return;
+                }
                 const prev = stack.pop();
                 ta.value = prev;
                 this.captionEdits.set(this.activeId, prev);
                 this._refreshQueueItem(this.activeId);
                 this._renderTagPills();
+                this._updateCaptionDiff?.(Number(this.activeId));
+                window.dispatchEvent(new CustomEvent('dataset:changed'));
             });
             document.getElementById('btn-dataset-drop-image')?.addEventListener('click', () => {
                 if (this.activeId != null) this._dropImageForReview(this.activeId);
@@ -706,8 +712,23 @@
                 this._restoringSession = true;
                 try {
                     for (const update of updates) {
-                        if (update.channel === 'nl') this.nlEdits.set(update.id, update.value);
-                        else this.captionEdits.set(update.id, update.value);
+                        if (update.channel === 'nl') {
+                            this.nlEdits.set(update.id, update.value);
+                        } else {
+                            // The caption as it was goes onto the picture's undo
+                            // stack, so Undo takes the trigger word back out (it
+                            // did nothing after "add to captions").
+                            const previous = this.captionEdits.has(update.id)
+                                ? this.captionEdits.get(update.id)
+                                : (this.captions.get(update.id) || '');
+                            if (previous !== update.value) {
+                                const stack = this._undoStacks.get(update.id) || [];
+                                stack.push(previous);
+                                if (stack.length > 20) stack.shift();
+                                this._undoStacks.set(update.id, stack);
+                            }
+                            this.captionEdits.set(update.id, update.value);
+                        }
                         const id = update.id;
                         this._refreshQueueItem?.(id);
                         if (Number(this.activeId) === id) {
@@ -728,6 +749,8 @@
                     this._updateExportEnabled?.();
                     this._renderTagPills?.();
                     this._renderQueue?.();
+                    this._updateCaptionDiff?.(Number(this.activeId));
+                    window.dispatchEvent(new CustomEvent('dataset:changed'));
                     this._renderAnnotationLedger?.();
                     this._scheduleSaveSession?.();
                     this._refreshExportPreview?.();

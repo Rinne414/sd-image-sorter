@@ -105,9 +105,11 @@ const ArtistIdent = {
         const safeName = String(name ?? '').trim();
         if (!safeName || safeName === 'undefined') return '?';
 
+        // Letters and digits only: "rito_(ritoxiaying)" gave "R(".
         const parts = safeName
             .replace(/_/g, ' ')
             .split(/\s+/)
+            .map((part) => part.replace(/^[^\p{L}\p{N}]+/u, ''))
             .filter(Boolean);
 
         if (parts.length === 0) return '?';

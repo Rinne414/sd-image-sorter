@@ -3374,8 +3374,8 @@
                                 <input type="number" id="similar-search-id" class="input" placeholder="Image ID" data-i18n-placeholder="similar.searchById">
                                 <button class="btn btn-secondary" id="btn-similar-search" data-i18n="similar.searchById">Search by ID</button>
                                 <div class="similar-threshold-row" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;">
-                                    <label for="similar-search-threshold" style="font-size:12px;white-space:nowrap;color:var(--text-muted,#8899aa);" data-i18n="similar.searchThreshold">Threshold:</label>
-                                    <input type="range" id="similar-search-threshold" min="0.0" max="1.0" step="0.05" value="0.50" style="flex:1;">
+                                    <label for="similar-search-threshold" style="font-size:12px;white-space:nowrap;color:var(--text-muted,#8899aa);" data-i18n="similar.searchThreshold" title="Applies when you search with a picture. A text search always lists its best matches." data-i18n-title="similar.searchThresholdTitle">Picture similarity at least:</label>
+                                    <input type="range" id="similar-search-threshold" min="0.0" max="0.95" step="0.05" value="0.50" style="flex:1;">
                                     <span id="similar-search-threshold-value" style="font-size:12px;min-width:32px;">50%</span>
                                 </div>
                                 <div class="similar-scope-row" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;">
@@ -3394,7 +3394,7 @@
                                 </div>
                             </div>
                             <div id="similar-results">
-                                <div class="empty-state" data-i18n="similar.searchEmpty">Enter an image ID or upload an image to find similar images.</div>
+                                <div class="empty-state" data-i18n="similar.searchEmpty">Type a few words, enter an image ID, or drop a picture to find similar ones.</div>
                             </div>
                             <div class="promptlab-load-more-row">
                                 <button class="btn btn-ghost btn-small" id="btn-similar-load-more" type="button" data-i18n="common.loadMore">Load More</button>

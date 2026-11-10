@@ -134,6 +134,13 @@ Object.assign(window.SimilarImages, {
         searchThresholdSlider?.addEventListener('input', () => {
             if (searchThresholdValue) searchThresholdValue.textContent = (parseFloat(searchThresholdSlider.value) * 100).toFixed(0) + '%';
         });
+        // Letting go of the slider searches again: it changed nothing until
+        // the search button was pressed once more. A text search has no
+        // lower limit (its scores are on another scale), so it is left alone.
+        searchThresholdSlider?.addEventListener('change', () => {
+            if (this.currentSearchMode === 'id' && this.currentSearchId) this.searchByImage(this.currentSearchId);
+            else if (this.currentSearchMode === 'upload' && this.currentSearchFile) this.searchByUpload(this.currentSearchFile);
+        });
 
         // Search scope selector (All / Favorites / collections)
         const scopeSelect = document.getElementById('similar-search-scope');

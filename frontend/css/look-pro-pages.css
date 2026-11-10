@@ -2827,3 +2827,16 @@ html[data-look="pro"] #view-artist #btn-clear-artist-filter {
 html[data-look="pro"] #view-artist .artist-image-action {
     font-size: 12px;
 }
+
+/* Find Similar: "find similar" leads a result's actions, across the card. */
+html[data-look="pro"] #view-similar .similar-result .similar-action-btn.similar-action-more {
+    grid-column: 1 / -1;
+    gap: 6px;
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-similar .similar-result .similar-action-btn.similar-action-more > .icon {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+}

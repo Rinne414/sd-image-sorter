@@ -380,10 +380,17 @@
             el.hidden = true;
             return;
         }
+        // Built as nodes with translated words (it read "+4 tags" in the Chinese UI).
+        const part = (className, key, fallback, count) => {
+            const span = document.createElement('span');
+            span.className = className;
+            span.textContent = this._t(key, fallback, { count });
+            return span;
+        };
         const parts = [];
-        if (added > 0) parts.push(`<span class="dataset-diff-added">+${added} tag${added > 1 ? 's' : ''}</span>`);
-        if (removed > 0) parts.push(`<span class="dataset-diff-removed">-${removed} tag${removed > 1 ? 's' : ''}</span>`);
-        el.innerHTML = parts.join(', ');
+        if (added > 0) parts.push(part('dataset-diff-added', 'dataset.diffAdded', '+{count} tags', added));
+        if (removed > 0) parts.push(part('dataset-diff-removed', 'dataset.diffRemoved', '-{count} tags', removed));
+        el.replaceChildren(...parts.flatMap((node, index) => (index ? [document.createTextNode(', '), node] : [node])));
         el.hidden = false;
     };
 

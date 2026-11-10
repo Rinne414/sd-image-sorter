@@ -1179,6 +1179,19 @@
         _initProjectStore() {
             if (this._projectStoreInitialized) return;
             this._projectStoreInitialized = true;
+            // The "..." menu closes like any menu: a click elsewhere, Escape,
+            // or leaving the tab. It stayed open over the export form.
+            document.addEventListener('click', (event) => {
+                const menu = document.getElementById('dataset-project-menu');
+                if (menu?.open && !menu.contains(event.target)) menu.open = false;
+            });
+            document.addEventListener('keydown', (event) => {
+                const menu = document.getElementById('dataset-project-menu');
+                if (event.key !== 'Escape' || !menu?.open) return;
+                menu.open = false;
+                menu.querySelector('summary')?.focus();
+                event.stopPropagation();
+            }, true);
             document.getElementById('dataset-project-selector')?.addEventListener('change', (event) => {
                 const value = String(event.currentTarget.value || '');
                 if (!value) {

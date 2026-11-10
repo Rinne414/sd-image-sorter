@@ -87,6 +87,9 @@
             window.addEventListener('dataset:changed', () => {
                 this._ensureHooks();
                 this._scheduleRefresh();
+                // A caption changed by a button (trigger word, cleanup) never
+                // fires `input` on the box, so its tag count stayed behind.
+                setTimeout(() => this._updateTokenCounter(), 0);
             });
             document.getElementById('sepcon-search')?.addEventListener('input', () => this._scheduleRefresh(120));
             document.getElementById('sepcon-sort')?.addEventListener('change', () => this.refresh());

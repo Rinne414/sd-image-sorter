@@ -109,7 +109,7 @@ Object.assign(window.SimilarImages, {
         const requestToken = this.beginSearchRequest();
         this.searchEmptyMessage = this._t(
             'similar.searchEmptyByText',
-            'No images match this description. If the library is new, click Build Similarity Index first.'
+            'No pictures match this description. Try other words, or check that the search scope above has pictures.'
         );
         if (!append) {
             this.currentSearchOffset = 0;

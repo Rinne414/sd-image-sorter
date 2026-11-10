@@ -446,13 +446,13 @@ function setSelectionMode(enabled, options = {}) {
     }
 }
 
+// Opens the big picture viewer over the page the user is on. It used to switch
+// to the Gallery first, so closing the viewer left the user there instead of
+// on Find Similar, Organize, Prompt Helper or the search they came from.
 function openGalleryPreview(imageId) {
-    switchView('gallery');
-    requestAnimationFrame(() => {
-        if (window.Gallery && typeof window.Gallery.openPreview === 'function') {
-            window.Gallery.openPreview(imageId);
-        }
-    });
+    if (window.Gallery && typeof window.Gallery.openPreview === 'function') {
+        window.Gallery.openPreview(imageId);
+    }
 }
 
 function applyPromptFilter(prompt) {

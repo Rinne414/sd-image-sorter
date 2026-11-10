@@ -16,7 +16,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Tuple
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 from config import get_thumbnail_cache_dir, get_thumbnail_cache_max_mb
 import scan_state
 
@@ -83,6 +83,20 @@ def _get_thumb_scan_semaphore() -> "asyncio.Semaphore":
     return _thumb_scan_semaphore
 
 
+# 2: the EXIF Orientation tag is applied (1 drew rotated JPEGs as stored, so
+# they were upside-down or sideways beside an upright full picture).
+THUMBNAIL_RENDER_VERSION = 2
+
+
+def _upright(image: Image.Image) -> Image.Image:
+    """The picture turned as its EXIF Orientation says, like a browser shows it."""
+    try:
+        return ImageOps.exif_transpose(image)
+    except Exception as exc:  # a damaged EXIF block must not cost the thumbnail
+        logger.debug("Could not read the EXIF orientation: %s", exc)
+        return image
+
+
 def _ensure_cache_dir() -> Path:
     """Ensure the thumbnail cache directory exists."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -97,8 +111,10 @@ def _get_cache_key(source_path: str, size: int, mtime: float) -> str:
     # Normalize the source path
     normalized_path = os.path.abspath(source_path)
 
-    # Create a hash from path + mtime for uniqueness
-    key_data = f"{normalized_path}:{size}:{mtime}"
+    # Create a hash from path + mtime for uniqueness. THUMBNAIL_RENDER_VERSION
+    # changes when the way a thumbnail is drawn changes, so files drawn the old
+    # way are made again instead of served.
+    key_data = f"{normalized_path}:{size}:{mtime}:{THUMBNAIL_RENDER_VERSION}"
     hash_key = hashlib.md5(key_data.encode(), usedforsecurity=False).hexdigest()
 
     return f"{hash_key}_{size}.webp"
@@ -365,7 +381,7 @@ def generate_and_cache_thumbnail(source_path: str, size: int) -> Tuple[bytes, da
 
     # Generate thumbnail (a video gives one frame through ffmpeg)
     with _open_thumbnail_source(source_path) as source_img:
-        thumb = source_img.copy()
+        thumb = _upright(source_img.copy())
 
         # Handle different color modes
         if thumb.mode in ("P", "RGBA", "LA"):

@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Thumbnails are the right way up**: a JPEG stored rotated (phones and some editors mark it with an orientation tag) showed upside-down or sideways in the gallery, Style Finder and the style map while the big picture was upright. Thumbnails now follow the tag; ones made before are redrawn the first time they are shown.
+  - **缩略图方向正确了**：带方向标记的 JPEG（手机和部分软件会这样存）在图库、画风识别和画风地图里是倒着或横着的，而大图是正的。缩略图现在会按标记转正；以前生成的会在第一次显示时重新生成。
+- **Closing the picture viewer leaves you where you were**: opening a picture from Find Similar, the Organize preview, Prompt Helper or the search panel switched to the Gallery first, so closing it left you there.
+  - **关掉看图窗口后还在原来的页面**：以前从相似、整理预览、提示词助手或搜索面板打开图片会先跳到图库，关掉后人就留在图库了。
+- **Find Similar**: every result has "Find similar" (it needed a picture ID you could not see); the slider is named "Picture similarity at least", says it does not limit a text search, and searches again when you let go; a stale "waiting for the index" message no longer stays over a finished index.
+  - **相似**：每条结果都有“找相似”（以前要先知道看不到的图片 ID）；滑块改名为“图片相似度至少”，说明它不限制文字搜索，松手后会自动重新搜索；索引已经建好时不会再留着“还在等索引”的提示。
+- **Dataset workbench**: Undo takes back a trigger word added with "add to captions" (it did nothing), and says so when there is nothing to undo; the line above the caption reads "+4 个标签" instead of "+4 tags" and the tag count under it follows changes made by buttons; the "..." menu closes on Escape or a click elsewhere.
+  - **数据集工作台**：用“加入 caption”加的触发词现在可以撤销（以前点了没反应），没有可撤销的内容时会提示；caption 上方的“+4 tags”改为“+4 个标签”，下方的标签数会跟着按钮造成的修改更新；“...”菜单按 Esc 或点别处会关上。
+- **Wording**: 自订 is 自定义 everywhere; the export page's "Setup" and "Gallery" and the reader's "Prompt 标签" are Chinese; an artist named "rito_(ritoxiaying)" shows "RR" as its initials, not "R(".
+  - **用词**：“自订”统一为“自定义”；导出页的“Setup”“Gallery”和读图页的“Prompt 标签”改成中文；画师“rito_(ritoxiaying)”的首字母显示为“RR”，不再是“R(”。
 - **Style Finder results**: the picture chips under an artist read "Reader" and "Build" in the Chinese interface; they now read 读图 and 构建. In the Professional look the accent stays on Identify all: avatars, percentages and "view in gallery" are plain, and the detail's two buttons sit together under the numbers.
   - **画风识别结果**：中文界面下画师详情里图片的小按钮写着“Reader”“Build”，现在是“读图”“构建”。专业外观下强调色只留给“识别全部”：头像、百分比和“在图库中查看”改为普通样式，详情里的两个按钮并排放在数字下面。
 - **Top bar: More keeps its place**: a page opened from More gets its tab after More instead of before it, so More and the tabs before it no longer shift from page to page.

@@ -48,6 +48,7 @@ Object.assign(window.SimilarImages, {
                 const action = btn.dataset.action;
                 const id = parseInt(btn.dataset.id, 10);
                 if (!id) return;
+                if (action === 'similar') this._searchMoreLikeThis(id);
                 if (action === 'preview') this._previewImage(id);
                 if (action === 'reader') this._openInReader(id, btn.dataset.filename || '');
                 if (action === 'edit') this._sendToEdit(id);
@@ -126,6 +127,17 @@ Object.assign(window.SimilarImages, {
         await this.findDuplicates({ append: true });
     },
 
+    // "Find similar" on a result: the same search the id box runs, with the
+    // boxes showing what the results now belong to.
+    _searchMoreLikeThis(id) {
+        const idInput = document.getElementById('similar-search-id');
+        const textInput = document.getElementById('similar-search-text');
+        if (idInput) idInput.value = String(id);
+        if (textInput) textInput.value = '';
+        document.getElementById('panel-similar-search')?.scrollIntoView({ block: 'start' });
+        this.searchByImage(id);
+    },
+
     _previewImage(id) {
         if (window.App && typeof window.App.openGalleryPreview === 'function') {
             window.App.openGalleryPreview(id);
@@ -193,6 +205,7 @@ Object.assign(window.SimilarImages, {
         const actions = document.createElement('div');
         actions.className = 'similar-actions';
         actions.innerHTML = `
+            <button class="btn btn-ghost btn-small similar-action-btn similar-action-more" data-action="similar" data-id="${result.id}" title="${this._t('similar.moreLikeThis', 'Find similar')}" aria-label="${this._t('similar.moreLikeThis', 'Find similar')}"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg> <span class="similar-action-label">${this._t('similar.moreLikeThis', 'Find similar')}</span></button>
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="preview" data-id="${result.id}" title="${this._t('similar.preview', 'Preview')}" aria-label="${this._t('similar.preview', 'Preview')}"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg> <span class="similar-action-label">${this._t('similar.preview', 'Preview')}</span></button>
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="reader" data-id="${result.id}" data-filename="${escapeHtml(result.filename || '')}" title="${this._t('similar.reader', 'Reader')}" aria-label="${this._t('similar.reader', 'Reader')}"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg> <span class="similar-action-label">${this._t('similar.reader', 'Reader')}</span></button>
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${result.id}" title="${this._t('similar.edit', 'Edit')}" aria-label="${this._t('similar.edit', 'Edit')}"><svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg> <span class="similar-action-label">${this._t('similar.edit', 'Edit')}</span></button>
