@@ -1072,3 +1072,26 @@ test('Professional look: Help has Keyboard shortcuts, and the panel lists the ne
   await page.evaluate(() => (window as any).SdLook.set(null))
   await expect(page.locator('#btn-shortcuts')).toBeHidden()
 })
+
+test('Professional look: More keeps its place; a page opened from it gets its tab after More', async ({ page }) => {
+  // Blind round 22: the bar gained a tab before More for such pages, so More moved by up to 130 px.
+  await open(page, 'pro-b')
+  const moreLeft = () => page.locator('#nav-tools-toggle').evaluate((el) => Math.round(el.getBoundingClientRect().left))
+  const go = async (view: string) => {
+    await page.evaluate((name) => (document.querySelector(`.nav-tab[data-view="${name}"]`) as HTMLElement).click(), view)
+    await expect(page.locator(`#view-${view}`)).toHaveClass(/active/)
+  }
+  const home = await moreLeft()
+  for (const view of ['dataset', 'promptlab', 'reverse']) {
+    await go(view)
+    await expect.poll(moreLeft).toBe(home)
+    const tab = page.locator(`#nav-tab-${view}`)
+    await expect(tab).toBeVisible()
+    await expect(tab).toHaveClass(/nav-tab-visiting/)
+    const tabLeft = await tab.evaluate((el) => Math.round(el.getBoundingClientRect().left))
+    expect(tabLeft).toBeGreaterThan(home)
+  }
+  await go('gallery')
+  await expect.poll(moreLeft).toBe(home)
+  await expect(page.locator('.nav-tab-visiting')).toHaveCount(0)
+})

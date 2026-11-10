@@ -13947,3 +13947,13 @@ html:not([data-look-variant="b"]) #pro-library-views {
     border-color: var(--text-2, rgba(255, 255, 255, 0.6));
     background: rgba(255, 255, 255, 0.08);
 }
+
+/* A page opened from More shows its tab after More, so More keeps its place
+   from page to page (it moved by up to 130 px; blind round 22). */
+.nav-tabs > .nav-tools {
+    order: 1;
+}
+
+.nav-tabs > .nav-tab.nav-tab-visiting {
+    order: 2;
+}

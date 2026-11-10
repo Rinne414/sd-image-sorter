@@ -325,11 +325,16 @@
         orderTabs(baseTabs());
         const visible = missionKey ? MISSIONS[missionKey].tabs.slice() : baseTabs();
         const active = currentView();
-        if (active && !visible.includes(active)) visible.push(active);
+        // A page opened from More gets a tab while it is open. It sits after
+        // More (CSS order), so More and the tabs before it never move.
+        const visiting = active && !visible.includes(active) ? active : null;
+        if (visiting) visible.push(visiting);
 
         ALL_VIEWS.forEach((view) => {
             const tab = document.getElementById(`nav-tab-${view}`);
-            if (tab) tab.classList.toggle('nav-tab-tucked', !visible.includes(view));
+            if (!tab) return;
+            tab.classList.toggle('nav-tab-tucked', !visible.includes(view));
+            tab.classList.toggle('nav-tab-visiting', view === visiting);
         });
 
         document.querySelectorAll('[data-mirror-view]').forEach((mirror) => {
