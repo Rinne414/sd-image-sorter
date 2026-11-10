@@ -1,0 +1,1440 @@
+/* ==========================================================================
+   look-pro-pages.css - the pro look on every page beside the gallery.
+
+   The gallery got its Professional pass first (look-pro.css, look-pro-b.css);
+   the other pages still wore today's parts: a different content width and
+   left edge on each page, cards inside cards, six corner sizes, every label
+   bold, yellow "start here" pills. This file gives them one frame:
+   - one content width and gutter for form pages, one for workspaces;
+   - one panel (surface, hairline, 12 px corner); a card inside a panel is a
+     group with no box of its own;
+   - one type scale: page title 20/700, panel title 13/600, text 13/400,
+     labels 12/500 in the second text colour, buttons 13/500;
+   - one segmented control for the tools inside a page;
+   - the accent only on the page's main action; setup notes are neutral.
+   Scoped to html[data-look="pro"] (both layouts); today's look is untouched.
+   ========================================================================== */
+
+html[data-look="pro"] {
+    --pro-page-max: 1440px;
+    --pro-page-pad: 24px;
+    --pro-panel-bg: var(--surface-1);
+    --pro-panel-line: var(--hairline-2);
+    --pro-group-bg: rgba(255, 255, 255, 0.025);
+    /* The third accent was today's amber, used for decoration ("paste",
+       "first time" pills). Real warnings keep --warning. */
+    --accent-tertiary: var(--text);
+    --accent-tertiary-rgb: 200, 200, 206;
+}
+
+/* ---- One frame ---- */
+
+html[data-look="pro"] :is(#view-similar .similar-container, #view-artist .artist-container, #view-reverse .reverse-container, #view-promptlab .promptlab-container),
+html[data-look="pro"] #view-similar.is-comfort-room .similar-container {
+    width: min(100%, var(--pro-page-max));
+    margin: 0 auto;
+    padding: 20px var(--pro-page-pad) 28px;
+    background: transparent;
+    gap: 16px;
+}
+
+/* ---- One page title ---- */
+
+html[data-look="pro"] :is(.reader-tools-title, #view-sorting .panel-title, #view-reverse .view-title) {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--text);
+}
+
+html[data-look="pro"] :is(.reader-tools-subtitle, #view-sorting .panel-description, #view-reverse .reverse-lead) {
+    margin: 2px 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-2);
+}
+
+/* ---- Buttons on pages: regular weight, one height, one corner ---- */
+
+html[data-look="pro"] .view:not(#view-gallery) .btn:not(.btn-icon-only) {
+    font-weight: 500;
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] .view:not(#view-gallery) .btn:not(.btn-icon-only) :is(span, .ui-label) {
+    font-weight: inherit;
+}
+
+html[data-look="pro"] .view:not(#view-gallery) .btn.btn-small,
+html[data-look="pro"] .view:not(#view-gallery) .btn.btn-sm {
+    min-height: 30px;
+    font-size: 12.5px;
+}
+
+/* ---- Setup notes (a model not ready yet): neutral, one box ---- */
+
+html[data-look="pro"] .scope-status-card,
+html[data-look="pro"] .scope-status-card.is-warning {
+    padding: 16px 18px;
+    gap: 10px;
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] .scope-status-badge,
+html[data-look="pro"] .scope-status-card.is-warning .scope-status-badge {
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+html[data-look="pro"] .scope-status-detail,
+html[data-look="pro"] .scope-status-card.is-warning .scope-status-detail {
+    color: var(--text-2);
+}
+
+html[data-look="pro"] .scope-status-meta {
+    font-size: 12.5px;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] .model-health-banner.model-health-banner-warning {
+    padding: 14px 16px;
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-group-bg);
+    color: var(--text-2);
+}
+
+html[data-look="pro"] .model-health-banner .model-health-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* The fold had no arrow, so "Technical details" read as a heading with
+   nothing under it. */
+html[data-look="pro"] .model-health-banner .model-health-details {
+    padding: 0;
+    border: 0;
+}
+
+html[data-look="pro"] .model-health-banner .model-health-details summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-2);
+    cursor: pointer;
+}
+
+html[data-look="pro"] .model-health-banner .model-health-details summary::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 0.15s ease;
+}
+
+html[data-look="pro"] .model-health-banner .model-health-details[open] summary::before {
+    transform: rotate(45deg);
+}
+
+html[data-look="pro"] .model-health-banner .model-health-details summary:hover {
+    color: var(--text);
+}
+
+/* ---- One segmented control for the tools inside a page ---- */
+
+html[data-look="pro"] :is(.reader-tools-tabs, .sorting-sub-tabs, .promptlab-tabs, .similar-tabs, #view-artist .view-toggle) {
+    align-items: center;
+    align-self: flex-start;
+    gap: 2px;
+    width: fit-content;
+    min-height: 0;
+    margin: 0;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background: var(--control-bg);
+    box-shadow: none;
+}
+
+html[data-look="pro"] :is(.reader-tools-tabs .reader-tool-tab, .sorting-sub-tabs .btn.sorting-sub-tab, .promptlab-tabs .promptlab-tab, .similar-tabs .similar-tab, #view-artist .view-toggle .toggle-btn) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-width: 0;
+    min-height: 28px;
+    height: 28px;
+    margin: 0;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-2);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+}
+
+html[data-look="pro"] :is(.reader-tools-tabs .reader-tool-tab, .sorting-sub-tabs .btn.sorting-sub-tab, .promptlab-tabs .promptlab-tab, .similar-tabs .similar-tab, #view-artist .view-toggle .toggle-btn) span {
+    font-weight: inherit;
+}
+
+html[data-look="pro"] :is(.reader-tools-tabs .reader-tool-tab, .sorting-sub-tabs .btn.sorting-sub-tab, .promptlab-tabs .promptlab-tab, .similar-tabs .similar-tab, #view-artist .view-toggle .toggle-btn):hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+}
+
+html[data-look="pro"] :is(.reader-tools-tabs .reader-tool-tab.active, .sorting-sub-tabs .btn.sorting-sub-tab.active, .promptlab-tabs .promptlab-tab.active, .similar-tabs .similar-tab.active, #view-artist .view-toggle .toggle-btn.active) {
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-sorting .sorting-sub-tabs {
+    align-self: center;
+}
+
+html[data-look="pro"] :is(.similar-tabs, .promptlab-tabs)[hidden] {
+    display: none;
+}
+
+/* ---- Read Image ---- */
+
+html[data-look="pro"] #view-reader .reader-tools-header,
+html[data-look="pro"] #view-reader .reader-container {
+    width: min(100%, var(--pro-page-max));
+    margin-inline: auto;
+    padding-inline: var(--pro-page-pad);
+}
+
+html[data-look="pro"] #view-reader .reader-tools-header {
+    align-items: center;
+    padding-block: 8px;
+}
+
+/* Nothing dropped yet: the dashed area is the only frame (it sat in a card),
+   and it sits under the title instead of floating in the middle of the page. */
+html[data-look="pro"] #view-reader .reader-container:not(.reader-has-image) {
+    align-content: start;
+    padding-top: clamp(32px, 11vh, 140px);
+}
+
+html[data-look="pro"] #view-reader .reader-container:not(.reader-has-image) .reader-left {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-reader .reader-drop-zone {
+    min-height: 340px;
+    border: 1.5px dashed var(--border-strong);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] #view-reader .reader-drop-zone:is(:hover, .drag-over, .dragover) {
+    border-color: var(--text-2);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+html[data-look="pro"] #view-reader .drop-icon svg {
+    filter: grayscale(1) brightness(1.5);
+}
+
+html[data-look="pro"] #view-reader .drop-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-reader .reader-paste-btn {
+    min-height: 32px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--pro-r-control);
+    background: var(--surface-3);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] #view-reader .reader-paste-btn span {
+    font-weight: inherit;
+}
+
+html[data-look="pro"] #view-reader .reader-paste-btn:hover {
+    border-color: var(--text-2);
+    color: var(--text);
+}
+
+/* ---- Find Similar ---- */
+
+html[data-look="pro"] #view-similar .similar-header {
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-similar .similar-header > h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+/* The setup card says what is needed; the model note under it is a footnote. */
+html[data-look="pro"] #view-similar .similar-header .model-health-banner.model-health-banner-warning {
+    padding: 0 2px;
+    border: 0;
+    background: none;
+}
+
+/* ---- One panel, one field ---- */
+
+html[data-look="pro"] :is(.autosep-pane, #view-reverse .reverse-pane, #view-artist .artist-controls, #view-artist .artist-results, #view-artist .artist-details, #view-promptlab .promptlab-stats-col) {
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-panel-bg);
+    box-shadow: none;
+}
+
+html[data-look="pro"] :is(#view-sorting, #view-reverse, #view-artist, #view-promptlab) :is(input.input-field, input.form-input, select.input-field, select.form-input, select.form-select, input[type="text"], input[type="number"], input[type="search"]) {
+    height: 36px;
+    min-height: 36px;
+    padding-block: 0;
+    padding-inline: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background-color: var(--control-bg);
+    box-shadow: none;
+    color: var(--text);
+    font-size: 13px;
+}
+
+html[data-look="pro"] :is(#view-sorting, #view-reverse, #view-artist, #view-promptlab) :is(input.input-field, input.form-input, select.input-field, select.form-input, select.form-select, input[type="text"], input[type="number"], input[type="search"], textarea):hover {
+    border-color: var(--border-strong);
+}
+
+html[data-look="pro"] :is(#view-sorting, #view-reverse, #view-artist, #view-promptlab) textarea {
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background-color: var(--control-bg);
+    box-shadow: none;
+    font-size: 13px;
+}
+
+/* A button beside a field is as tall as the field. */
+html[data-look="pro"] :is(#view-sorting .folder-input-group, #view-artist .artist-vocabulary-row-input) > .btn {
+    height: 36px;
+    min-height: 36px;
+    padding-block: 0;
+}
+
+/* The radio pair "move / copy" is the same segmented control as the page tools. */
+html[data-look="pro"] .view:not(#view-gallery) .segmented-control {
+    align-self: flex-start;
+    gap: 2px;
+    width: fit-content;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background: var(--control-bg);
+}
+
+html[data-look="pro"] .view:not(#view-gallery) .segmented-control .segmented-option > span {
+    min-height: 28px;
+    height: 28px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-2);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] .view:not(#view-gallery) .segmented-control .segmented-option > input:checked + span {
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+}
+
+html[data-look="pro"] .view:not(#view-gallery) .segmented-control .segmented-option > input:focus-visible + span {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+}
+
+/* ---- Organize ---- */
+
+html[data-look="pro"] #view-sorting .autosep-pane-head {
+    min-height: 48px;
+    padding: 8px 12px 8px 16px;
+    border-bottom: 1px solid var(--pro-panel-line);
+}
+
+html[data-look="pro"] #view-sorting .autosep-pane-head > strong {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-sorting .autosep-pane-body {
+    padding: 16px;
+}
+
+html[data-look="pro"] #view-sorting :is(.autosep-action-block-label, .autosep-card-summary-text) {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-sorting #autosep-filter-summary .summary-item > strong {
+    font-size: 12.5px;
+    font-weight: 400;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-sorting .checkbox-label .checkbox-text {
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-sorting .stat-number {
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-sorting #btn-execute-autosep {
+    min-height: 40px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* A plain <select> gets the same arrow as the styled ones. */
+html[data-look="pro"] :is(#view-reverse, #view-dataset) select:is(.form-input, .dataset-project-select) {
+    appearance: none;
+    padding-right: 32px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A6A6AB' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 11px center;
+}
+
+/* ---- Reverse Prompt ---- */
+
+html[data-look="pro"] #view-reverse .reverse-pane {
+    padding: 16px;
+    gap: 16px;
+}
+
+/* Groups inside a panel carry no box of their own; a hairline parts them. */
+html[data-look="pro"] #view-reverse :is(.reverse-draft-card, .reverse-tipo-card, .reverse-modes) {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+}
+
+html[data-look="pro"] #view-reverse .reverse-results-pane > section + section {
+    padding-top: 16px;
+    border-top: 1px solid var(--pro-panel-line);
+}
+
+html[data-look="pro"] #view-reverse .reverse-modes > legend {
+    padding: 0;
+    margin-bottom: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-reverse .reverse-mode-option {
+    padding: 8px 10px;
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #view-reverse .reverse-mode-option:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-look="pro"] #view-reverse .reverse-mode-option:has(input:checked) {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+html[data-look="pro"] #view-reverse .reverse-mode-name {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] #view-reverse .reverse-mode-help,
+html[data-look="pro"] #view-reverse .reverse-card-help,
+html[data-look="pro"] #view-reverse .reverse-drop-hint,
+html[data-look="pro"] #view-reverse .form-help,
+html[data-look="pro"] #view-reverse .reverse-stored-note {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-reverse .reverse-card-title {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-reverse .reverse-drop-zone {
+    border: 1.5px dashed var(--border-strong);
+    border-radius: var(--pro-r-control);
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] #view-reverse .reverse-drop-title {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-reverse .reverse-field > span:first-child {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-reverse #btn-reverse-run {
+    min-height: 36px;
+    font-weight: 600;
+}
+
+/* ---- Dataset Maker ---- */
+
+html[data-look="pro"] #view-dataset.is-comfort-room .dataset-maker,
+html[data-look="pro"] #view-dataset .dataset-maker {
+    padding: 12px var(--pro-page-pad) 24px;
+    background: transparent;
+}
+
+html[data-look="pro"] #view-dataset .dataset-title {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+html[data-look="pro"] #view-dataset .dataset-title span {
+    font-weight: inherit;
+}
+
+/* Steps 1-2-3: the same quiet shape as a segmented control, numbers kept. */
+html[data-look="pro"] #view-dataset .dataset-tabs {
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background: var(--control-bg);
+}
+
+html[data-look="pro"] #view-dataset .dataset-tab {
+    min-height: 28px;
+    height: 28px;
+    padding: 0 12px 0 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+    font-weight: 500;
+}
+
+html[data-look="pro"] #view-dataset .dataset-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-dataset .dataset-tab.active {
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-dataset :is(.dataset-project-selector, #dataset-folder-import-path) {
+    height: 32px;
+    min-height: 32px;
+    padding-block: 0;
+    padding-inline: 10px;
+    border-radius: var(--pro-r-control);
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-dataset select.dataset-project-selector {
+    appearance: none;
+    padding-right: 30px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A6A6AB' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+}
+
+html[data-look="pro"] #view-dataset .dataset-count-pill {
+    border: 0;
+    background: none;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-dataset .dataset-count-pill :is(strong, span) {
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] #view-dataset .dataset-count-pill strong {
+    font-weight: 600;
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-dataset .dataset-import-actions {
+    align-items: stretch;
+}
+
+html[data-look="pro"] #view-dataset .dataset-import-card {
+    padding: 16px;
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-panel-bg);
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-dataset .dataset-import-card-kicker {
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+}
+
+html[data-look="pro"] #view-dataset .dataset-import-card-copy > strong {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-dataset .dataset-import-card-gallery {
+    justify-content: space-between;
+}
+
+html[data-look="pro"] #view-dataset #btn-dataset-import-gallery {
+    min-height: 40px;
+    height: 40px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-dataset .dataset-import-card-benefits li::before {
+    content: "";
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    margin-right: 8px;
+    border-radius: 50%;
+    background: var(--text-2);
+    vertical-align: middle;
+}
+
+html[data-look="pro"] #view-dataset .dataset-import-card {
+    align-self: stretch;
+}
+
+html[data-look="pro"] #view-dataset .dataset-folder-bar {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+html[data-look="pro"] #view-dataset .dataset-import-notes {
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-panel-bg);
+}
+
+html[data-look="pro"] #view-dataset .dataset-import-notes > summary {
+    padding: 12px 16px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] #view-dataset .dataset-import-notes > summary span {
+    font-weight: inherit;
+}
+
+html[data-look="pro"] #view-dataset .dataset-dropzone {
+    border: 1.5px dashed var(--border-strong);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] #view-dataset .dataset-dropzone-text {
+    font-size: 15px;
+}
+
+/* ---- Censor: an editor, so chrome at the sides and the stage in the middle ---- */
+
+html[data-look="pro"] #view-censor .censor-workspace-v2,
+html[data-look="pro"] #view-censor.is-comfort-room .censor-workspace-v2 {
+    background: var(--pro-stage);
+}
+
+/* !important: tokens.css sets these sidebars with !important. */
+html[data-look="pro"] #view-censor .censor-sidebar-v2 {
+    background: var(--pro-chrome) !important;
+    border-color: var(--hairline-2) !important;
+}
+
+html[data-look="pro"] #view-censor .sidebar-title-v2 {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-censor .censor-tab-bar {
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background: var(--control-bg);
+}
+
+html[data-look="pro"] #view-censor .censor-tab {
+    min-height: 28px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-2);
+    font-weight: 500;
+}
+
+html[data-look="pro"] #view-censor .censor-tab span {
+    font-weight: inherit;
+}
+
+html[data-look="pro"] #view-censor .censor-tab.is-active {
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+}
+
+/* The cards in the sidebar become its sections: a title and a hairline,
+   not a box inside the panel. */
+html[data-look="pro"] #view-censor .censor-sidebar-v2.right .censor-side-card {
+    padding: 14px 0;
+    border: 0;
+    border-top: 1px solid var(--hairline-2);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-censor .censor-tab-pane > .censor-side-card:first-child {
+    border-top: 0;
+    padding-top: 6px;
+}
+
+html[data-look="pro"] #view-censor .censor-side-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-censor .censor-side-inline-label,
+html[data-look="pro"] #view-censor .censor-side-small-label,
+html[data-look="pro"] #view-censor .sidebar-flat-label {
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-censor .censor-side-inline-label span {
+    font-weight: inherit;
+}
+
+html[data-look="pro"] #view-censor .censor-side-value,
+html[data-look="pro"] #view-censor .censor-side-inline-label .censor-side-value {
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-censor .no-image-state-v2 {
+    border: 0;
+    background: none;
+}
+
+html[data-look="pro"] #view-censor .queue-empty-state-v2 {
+    border: 1.5px dashed var(--border-strong);
+    border-radius: var(--pro-r-control);
+    background: none;
+}
+
+/* ---- Facts line: the counts at the top of a page are text, not a row of boxes ---- */
+
+html[data-look="pro"] :is(#view-artist .artist-stats, #view-promptlab .promptlab-stats-grid) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0;
+    padding: 4px 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+html[data-look="pro"] :is(#view-artist .artist-stats .stat-card, #view-promptlab .promptlab-stat-card) {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    width: auto;
+    padding: 0 28px;
+    border: 0;
+    border-left: 1px solid var(--pro-panel-line);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    text-align: left;
+}
+
+html[data-look="pro"] :is(#view-artist .artist-stats .stat-card, #view-promptlab .promptlab-stat-card):first-child {
+    padding-left: 0;
+    border-left: 0;
+}
+
+html[data-look="pro"] :is(#view-artist .artist-stats .stat-number, #view-promptlab .promptlab-stat-number) {
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+}
+
+html[data-look="pro"] :is(#view-artist .artist-stats .stat-label, #view-promptlab .promptlab-stat-label) {
+    font-size: 12px;
+    color: var(--text-2);
+}
+
+/* ---- Prompt Helper ---- */
+
+html[data-look="pro"] #view-promptlab .promptlab-tabs {
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--border);
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-stats-col {
+    padding: 16px;
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-stats-col > h4 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* Rows of a list: no fill per row, a hover instead; the bar is neutral so the
+   accent stays for the page's main action. */
+html[data-look="pro"] #view-promptlab .promptlab-tag-item {
+    min-height: 32px;
+    padding: 0 4px 0 8px;
+    border-radius: 6px;
+    background: none;
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-tag-item:hover,
+html[data-look="pro"] #view-promptlab .promptlab-tag-item:focus-within {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-tag-item .tag-bar-fill {
+    background: var(--text-2);
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-tag-item .tag-count {
+    font-size: 12px;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-tag-item .promptlab-inline-actions .btn {
+    min-height: 26px;
+    height: 26px;
+    padding: 0 8px;
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 12px;
+}
+
+html[data-look="pro"] #view-promptlab .promptlab-tag-item:hover .promptlab-inline-actions .btn,
+html[data-look="pro"] #view-promptlab .promptlab-tag-item:focus-within .promptlab-inline-actions .btn {
+    border-color: var(--border);
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-promptlab :is(.promptlab-empty-note, .promptlab-empty-fact) {
+    color: var(--text-2);
+}
+
+/* ---- Style Finder ---- */
+
+html[data-look="pro"] #view-artist .artist-controls {
+    padding: 16px;
+}
+
+html[data-look="pro"] #view-artist :is(.artist-controls, .artist-details, .results-header) h3 {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-artist :is(.artist-controls, .artist-details, .results-header) h3 span {
+    font-weight: inherit;
+}
+
+html[data-look="pro"] #view-artist .results-header {
+    min-height: 48px;
+    padding: 8px 12px 8px 16px;
+    border-bottom: 1px solid var(--pro-panel-line);
+}
+
+html[data-look="pro"] #view-artist .artist-controls .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+}
+
+html[data-look="pro"] #view-artist .artist-controls .checkbox-text {
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-artist .artist-controls :is(.helper-text, .artist-vocabulary-size) {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-artist .artist-vocabulary-result {
+    border: 0;
+    border-radius: var(--pro-r-control);
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] #view-artist #btn-artist-identify-all,
+html[data-look="pro"] #view-artist .artist-controls .btn.btn-primary {
+    font-weight: 600;
+}
+
+/* ---- "Start here" cards (Style Map, Find Similar) ---- */
+
+html[data-look="pro"] .workspace-start-card {
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-panel);
+    background: var(--surface-2);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+}
+
+html[data-look="pro"] .workspace-start-card .workspace-start-eyebrow {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+html[data-look="pro"] .workspace-start-card h3 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+/* ---- Style Map ---- */
+
+html[data-look="pro"] #view-stylemap .stylemap-container {
+    padding: 12px var(--pro-page-pad) 16px;
+}
+
+html[data-look="pro"] #view-stylemap .stylemap-toolbar select.input-field {
+    height: 32px;
+    min-height: 32px;
+    padding-block: 0;
+    padding-inline: 10px 30px;
+    border-radius: var(--pro-r-control);
+    box-shadow: none;
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-stylemap .stylemap-field > span {
+    font-size: 12.5px;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-stylemap :is(.stylemap-preview, .stylemap-near, .stylemap-help) {
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-panel-bg);
+}
+
+html[data-look="pro"] #view-stylemap .stylemap-near-title {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* The fold used the browser's triangle; it gets the same drawn arrow as the
+   other folds. */
+html[data-look="pro"] #view-stylemap .stylemap-help summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    list-style: none;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-stylemap .stylemap-help summary::-webkit-details-marker {
+    display: none;
+}
+
+html[data-look="pro"] #view-stylemap .stylemap-help summary::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    margin-left: 2px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 0.15s ease;
+}
+
+html[data-look="pro"] #view-stylemap .stylemap-help details[open] summary::before {
+    transform: rotate(45deg);
+}
+
+/* ---- Read Image: the result panel ----
+   Every section was its own box inside the panel, and labels ran at 8.6 px.
+   Sections are parted by a hairline; text is 12 px or more. */
+
+html[data-look="pro"] #view-reader :is(.reader-left, .reader-right) {
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-panel-bg);
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-reader .reader-header {
+    background: var(--pro-panel-bg);
+}
+
+html[data-look="pro"] #view-reader .reader-file-info {
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-reader :is(.reader-section, .reader-meta-item) {
+    padding: 12px 0;
+    border: 0;
+    border-top: 1px solid var(--pro-panel-line);
+    border-radius: 0;
+    background: none;
+}
+
+html[data-look="pro"] #view-reader .reader-meta-row {
+    gap: 0 24px;
+}
+
+html[data-look="pro"] #view-reader .reader-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-reader .reader-section-text {
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+html[data-look="pro"] #view-reader .reader-meta-label {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-reader .reader-meta-value {
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-reader .reader-quick-facts {
+    gap: 6px;
+    padding-bottom: 12px;
+}
+
+html[data-look="pro"] #view-reader .reader-quick-fact {
+    gap: 6px;
+    padding: 4px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+html[data-look="pro"] #view-reader .reader-quick-fact-label {
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-reader .reader-quick-fact-value {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-reader .reader-copy-btn,
+html[data-look="pro"] #view-reader .reader-copy-menu-trigger {
+    min-height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 12px;
+}
+
+html[data-look="pro"] #view-reader :is(.reader-copy-btn, .reader-copy-menu-trigger):hover {
+    border-color: var(--border-strong);
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-reader .reader-category-group {
+    border: 0;
+    border-radius: var(--pro-r-control);
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] #view-reader .reader-color-histogram {
+    border: 0;
+    border-radius: var(--pro-r-control);
+}
+
+/* Privacy Tools share the page's fields. */
+html[data-look="pro"] #view-reader #reader-tool-panel-obfuscation :is(select, input[type="text"], input[type="password"]) {
+    height: 36px;
+    min-height: 36px;
+    padding-block: 0;
+    border-radius: var(--pro-r-control);
+    box-shadow: none;
+    font-size: 13px;
+}
+
+/* A section's buttons sit together at its right end (they were spread across the row). */
+html[data-look="pro"] #view-reader .reader-section-header {
+    justify-content: flex-start;
+    gap: 6px;
+}
+
+html[data-look="pro"] #view-reader .reader-section-header > .reader-section-toggle {
+    margin-right: auto;
+}
+
+html[data-look="pro"] #view-reader .reader-compact-header .reader-section-title {
+    font-size: 13px;
+}
+
+/* ---- Organize: Manual Sort setup ---- */
+
+html[data-look="pro"] #view-manual .sort-setup {
+    padding: 8px 0 24px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-manual .setup-title {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+
+html[data-look="pro"] #view-manual .setup-description {
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-manual .sort-mode-switch {
+    gap: 2px;
+    width: fit-content;
+    margin-inline: auto;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background: var(--control-bg);
+}
+
+html[data-look="pro"] #view-manual .sort-mode-label {
+    padding: 0 8px 0 10px;
+    font-size: 12px;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-manual .sort-mode-btn {
+    min-height: 28px;
+    height: 28px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-manual .sort-mode-btn span {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] #view-manual .sort-mode-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-manual .sort-mode-btn.is-active {
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+}
+
+html[data-look="pro"] #view-manual .sort-preset-bar {
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+html[data-look="pro"] #view-manual .sort-preset-label {
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-manual .sort-preset-select {
+    appearance: none;
+    height: 32px;
+    padding: 0 30px 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background-color: var(--control-bg);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A6A6AB' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-manual .sort-scope-count {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-manual #btn-start-sorting {
+    min-height: 44px;
+    height: 44px;
+    padding-inline: 22px;
+}
+
+html[data-look="pro"] #view-manual #btn-start-sorting .ui-label {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-manual :is(.folder-slot, .space-indicator) {
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-panel-bg);
+}
+
+/* The slot's place already says the direction; the typed arrow went. */
+html[data-look="pro"] #view-manual .folder-arrow {
+    display: none;
+}
+
+html[data-look="pro"] #view-manual .folder-key {
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #view-manual .folder-slot input[type="text"] {
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    box-shadow: none;
+    font-family: var(--font-body);
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-manual .filter-header-compact h4 {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-manual .filter-summary-compact {
+    gap: 0 24px;
+    padding: 4px 16px;
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-panel-bg);
+}
+
+html[data-look="pro"] #view-manual .filter-summary-compact .summary-item {
+    padding: 10px 0;
+    border-radius: 0;
+    background: none;
+}
+
+html[data-look="pro"] #view-manual .filter-summary-compact .summary-item > strong {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] .scope-status-card.is-synced {
+    border-color: var(--pro-panel-line);
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] .scope-status-card.is-synced .scope-status-badge {
+    background: none;
+    color: var(--text);
+    text-decoration: none;
+}
+
+/* ---- Dataset Maker: the workbench ---- */
+
+html[data-look="pro"] #view-dataset :is(.dataset-queue-pane, .dataset-editor-pane, .dataset-export-pane),
+html[data-look="pro"] #view-dataset.is-comfort-room :is(.dataset-queue-pane, .dataset-editor-pane, .dataset-export-pane) {
+    border: 1px solid var(--pro-panel-line);
+    border-radius: var(--pro-r-panel);
+    background: var(--pro-panel-bg);
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-dataset .dataset-pane-head > strong {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-dataset .dataset-selection-summary {
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-dataset .dataset-workflow-rail {
+    border: 0;
+    border-radius: var(--pro-r-control);
+    background: var(--pro-group-bg);
+}
+
+html[data-look="pro"] #view-dataset .dataset-workflow-step span {
+    font-size: 12px;
+}
+
+html[data-look="pro"] #view-dataset .dataset-workflow-step.is-active strong {
+    background: var(--text);
+    color: var(--pro-stage);
+}
+
+/* The cards in the right pane are its sections. */
+html[data-look="pro"] #view-dataset .dataset-export-pane .dataset-card {
+    padding: 14px 2px;
+    border: 0;
+    border-top: 1px solid var(--pro-panel-line);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-dataset .dataset-card-title {
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-dataset .dataset-card-title span:not(.dataset-step-number) {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+html[data-look="pro"] #view-dataset .dataset-step-number {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-2);
+    font-weight: 600;
+}
+
+/* Folds: a drawn arrow instead of a typed triangle or plus sign. */
+html[data-look="pro"] #view-dataset :is(.dataset-card-details, .dataset-secondary-actions) > summary::before {
+    content: "";
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    margin: 0 10px 2px 2px;
+    border-right: 1.5px solid var(--text-2);
+    border-bottom: 1.5px solid var(--text-2);
+    transform: rotate(-45deg);
+    transition: transform 0.15s ease;
+}
+
+html[data-look="pro"] #view-dataset :is(.dataset-card-details, .dataset-secondary-actions)[open] > summary::before {
+    content: "";
+    transform: rotate(45deg);
+}
+
+html[data-look="pro"] #view-dataset .dataset-secondary-actions {
+    border: 0;
+}
+
+html[data-look="pro"] #view-dataset .dataset-secondary-actions > summary {
+    font-size: 12.5px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] #view-dataset .dataset-export-pane :is(input.form-input, select, textarea.form-input) {
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background-color: var(--control-bg);
+    font-size: 13px;
+}
+
+html[data-look="pro"] #view-dataset #btn-dataset-smart-tag {
+    font-weight: 600;
+}
+
+/* The save section stays pinned over the scrolling tools, so it keeps a solid ground. */
+html[data-look="pro"] #view-censor .censor-sidebar-v2.right .sidebar-bottom-actions.censor-side-card {
+    padding: 12px 0 0;
+    background: var(--pro-chrome);
+}

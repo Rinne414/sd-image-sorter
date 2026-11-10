@@ -44,6 +44,7 @@
     <!-- The opt-in "pro" look (js/look.js sets data-look before paint); scoped, so it changes nothing until chosen. -->
     <link rel="stylesheet" href="/static/css/look-pro.css">
     <link rel="stylesheet" href="/static/css/look-pro-b.css">
+    <link rel="stylesheet" href="/static/css/look-pro-pages.css">
     <!-- Adaptive UI scaling for large/high-res desktops. Loaded synchronously
          (pre-paint) so the root zoom is set before first render. -->
     <script src="/static/js/ui-scale.js"></script>
@@ -3935,7 +3936,8 @@
                                 <div class="form-group">
                                     <label class="checkbox-label">
                                         <input type="checkbox" id="artist-use-gpu" checked>
-                                        <span data-i18n="artist.useGpu">Use GPU if available</span>
+                                        <span class="checkbox-custom" aria-hidden="true"></span>
+                                        <span class="checkbox-text" data-i18n="artist.useGpu">Use GPU if available</span>
                                     </label>
                                     <small class="helper-text" data-i18n="artist.useGpuHelp">Turn off to run on CPU (~2x slower but stable). Try this if your GPU driver freezes the desktop while identifying.</small>
                                 </div>

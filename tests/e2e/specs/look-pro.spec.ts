@@ -689,3 +689,68 @@ test('Professional look: whole pictures by default at the grid density; only a p
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.appReady)).toBe('1')
   await expect.poll(state).toEqual({ mode: 'grid', saved: 'grid' })
 })
+
+test('pro look: the pages beside the gallery share one frame, one tool switch and readable text', async ({ page }) => {
+  await open(page, 'pro-b')
+  const go = async (view: string) => {
+    await page.evaluate((v) => (document.querySelector(`.nav-tab[data-view="${v}"]`) as HTMLElement).click(), view)
+    await expect(page.locator(`#view-${view}`)).toHaveClass(/active/)
+  }
+  const box = (selector: string) => page.evaluate((s) => {
+    const el = document.querySelector(s) as HTMLElement
+    const cs = getComputedStyle(el)
+    return { height: Math.round(el.getBoundingClientRect().height), border: cs.borderTopWidth, bg: cs.backgroundColor, radius: cs.borderTopLeftRadius, weight: cs.fontWeight }
+  }, selector)
+
+  // Read Image: the dashed area is the only frame, and the tool switch is the shared segmented control.
+  await go('reader')
+  expect((await box('#view-reader .reader-left')).border).toBe('0px')
+  expect((await box('#reader-tool-tab-reader')).height).toBe(28)
+  expect((await box('#reader-paste-btn')).weight).toBe('500')
+
+  // Organize: the same switch; panels share the 12 px corner.
+  await go('sorting')
+  expect((await box('#view-sorting .sorting-sub-tab.active')).height).toBe(28)
+  expect((await box('#view-sorting .autosep-pane')).radius).toBe('12px')
+
+  // Censor: the sidebars are chrome like the top bar, their cards are sections without a box.
+  await go('censor')
+  const navBg = (await box('.nav-bar')).bg
+  expect((await box('#view-censor .censor-sidebar-v2.left')).bg).toBe(navBg)
+  expect((await box('#view-censor .censor-tab-pane.is-active .censor-side-card')).radius).toBe('0px')
+
+  // Style Finder: the counts are a line of text, not a row of boxes.
+  await go('artist')
+  expect((await box('#view-artist .artist-stats')).border).toBe('0px')
+
+  // No page text under 11 px in these pages' resting state.
+  for (const view of ['reader', 'sorting', 'reverse', 'promptlab', 'artist']) {
+    await go(view)
+    const small = await page.evaluate((v) => {
+      const out: string[] = []
+      const walker = document.createTreeWalker(document.getElementById(`view-${v}`)!, NodeFilter.SHOW_TEXT)
+      let node: Node | null
+      while ((node = walker.nextNode())) {
+        const text = (node.textContent || '').trim()
+        const el = node.parentElement!
+        if (!text || !el.getClientRects().length) continue
+        if (parseFloat(getComputedStyle(el).fontSize) < 11) out.push(`${text.slice(0, 20)} ${getComputedStyle(el).fontSize}`)
+      }
+      return out
+    }, view)
+    expect(small, view).toEqual([])
+  }
+})
+
+test('Style Finder: the "Use GPU" option shows its checkbox in every look', async ({ page }) => {
+  for (const look of [null, 'pro-b'] as const) {
+    await open(page, look)
+    await page.evaluate(() => (document.querySelector('.nav-tab[data-view="artist"]') as HTMLElement).click())
+    const mark = page.locator('#view-artist label:has(#artist-use-gpu) .checkbox-custom')
+    await expect(mark).toBeVisible()
+    // The choice is remembered, so the second look starts from the first one's click.
+    const before = await page.locator('#artist-use-gpu').isChecked()
+    await mark.click()
+    await expect.poll(() => page.locator('#artist-use-gpu').isChecked()).toBe(!before)
+  }
+})
