@@ -1654,3 +1654,15 @@ html[data-look="pro"] #view-promptlab .tagset-selector .btn {
     height: 32px;
     min-height: 32px;
 }
+
+/* Short screens: the filter list keeps all its rows and the pane scrolls
+   (the list shrank with its overflow hidden, so rows vanished without a hint). */
+html[data-look="pro"] #view-sorting #autosep-filter-summary {
+    flex-shrink: 0;
+}
+
+/* The line that says what the page does is shown (today's look hides it);
+   Privacy Tools had no sentence at all about what it does. */
+html[data-look="pro"] #view-reader .reader-tools-subtitle {
+    display: block;
+}

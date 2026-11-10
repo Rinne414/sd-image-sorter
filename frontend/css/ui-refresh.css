@@ -13656,3 +13656,39 @@ html:not([data-look-variant="b"]) #pro-library-views {
 #confirm-modal .modal-content :is(p, li) {
     overflow-wrap: anywhere;
 }
+
+/* ---- The close button of a message that stays on screen (toasts-modals.js) ---- */
+.toast-close-btn {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-left: 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.toast-close-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+}
+
+/* Hide only puts the progress away; it shared Cancel's red, so it looked like it stops the job. */
+#btn-hide-autosep-move.btn-cancel-operation {
+    border-color: var(--border);
+    background: transparent;
+    color: var(--text-2);
+}
+
+#btn-hide-autosep-move.btn-cancel-operation:hover {
+    border-color: var(--border-strong);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+}

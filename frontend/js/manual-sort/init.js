@@ -270,7 +270,9 @@ async function initManualSort() {
                             'error'
                         );
                     }
-                }
+                },
+                null,
+                { okLabel: manualSortText('manual.discardSessionOk', 'Discard session', '丢弃会话') }
             );
         });
     }

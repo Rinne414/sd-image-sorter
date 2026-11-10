@@ -25,6 +25,9 @@ function showConfirm(title, message, onOk, onCancel, options = {}) {
     if (options.okLabel) {
         lockDynamicI18nText('#btn-confirm-ok', 'modal.yes');
         $('#btn-confirm-ok').textContent = options.okLabel;
+    } else {
+        // The button is shared: without this, the last dialog's own label stayed on the next one.
+        unlockDynamicI18nText('#btn-confirm-ok', 'modal.yes', 'Yes, proceed');
     }
 
     // Each dialog answers exactly once. Anything but OK counts as Cancel:

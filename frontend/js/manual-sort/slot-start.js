@@ -33,7 +33,9 @@ async function confirmResumeSavedSessionFromStart(savedSession) {
             () => {
                 renderManualSortResumeBanner(savedSession, { visible: true });
                 resolve(false);
-            }
+            },
+            // Resuming loses nothing: not a red button, and it says what it does.
+            { tone: 'primary', okLabel: manualSortText('manual.resumeInsteadOk', 'Resume', '继续排序') }
         );
     });
 }

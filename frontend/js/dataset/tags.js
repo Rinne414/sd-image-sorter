@@ -193,7 +193,10 @@
         }
 
         if (tags.length === 0) {
-            wrap.innerHTML = '<span class="dataset-tag-pills-empty">No tags</span>';
+            const empty = document.createElement('span');
+            empty.className = 'dataset-tag-pills-empty';
+            empty.textContent = this._t('dataset.tagPillsEmpty', 'No tags yet');
+            wrap.replaceChildren(empty);
             section.hidden = false;
             return;
         }

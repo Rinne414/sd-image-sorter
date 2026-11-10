@@ -35,7 +35,7 @@ Object.assign(window.PromptLab, {
                         <span class="cat-arrow">${isExpanded ? '▼' : '▶'}</span>
                         <span class="cat-name">${safeCategory}</span>
                         <span class="cat-count">${tags.length}</span>
-                        ${selectedTags.length > 0 ? `<span class="cat-selected">${selectedTags.length} selected</span>` : ''}
+                        ${selectedTags.length > 0 ? `<span class="cat-selected">${this._escapeValue(this._t('promptlab.selectedCount', '{count} selected').replace('{count}', String(selectedTags.length)))}</span>` : ''}
                     </div>
                     <div class="cat-tags" style="display: ${isExpanded ? 'flex' : 'none'};">
                         ${tags.map((tag) => this._buildTagChip(tag, cat, selectedTags)).join('')}

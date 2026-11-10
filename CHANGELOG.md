@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Dataset export no longer calls a readable picture "missing"**: pictures whose EXIF Orientation is 0 or another undefined value (common from editors and phone apps) were reported as "Source image is missing or unreadable" and blocked from export. They are read as normal, unrotated pictures, as viewers show them.
+  - **数据集导出不再把能打开的图片说成“缺失”**：EXIF 方向值是 0 或其他未定义数值的图片（修图软件和手机应用常见）会被报成“源图片缺失或无法读取”并挡住导出。现在按不旋转的普通图片处理，和看图软件显示的一样。
+- **Messages that stay on screen can be closed and do not follow you**: a "saved, open folder" message and the "what next?" banner stayed until clicked, with nothing showing that a click closes them, and sat over the next page's controls. They now have a close button and go away when you move to another page.
+  - **停留在屏幕上的提示可以关掉，也不会跟着你走**：“已保存，打开文件夹”和“接下来做什么？”这类提示要点一下才消失，却没有任何关闭标记，还会盖住下一页的按钮。现在有关闭按钮，换页时也会自动消失。
+- **Manual Sort: the resume and discard questions name their buttons**: both said "Yes, proceed"; they now say "Resume" and "Discard session", and resuming is no longer a red button. A dialog with its own button label no longer leaves it on the next dialog.
+  - **手动排序：恢复和丢弃的确认框按钮写明了动作**：以前两个都是“确认执行”；现在分别是“继续排序”和“丢弃会话”，恢复也不再是红色按钮。自带按钮文字的确认框不会再把文字留给下一个确认框。
+- **Organize on short screens (Professional look)**: at 1366x768 the filter list showed two of its eight rows with nothing saying there were more; the list keeps all its rows and the panel scrolls. The progress panel's Hide button is no longer red like Cancel.
+  - **小屏幕上的整理页（专业外观）**：1366x768 下筛选列表八行只显示两行，也看不出下面还有；现在列表保留全部行，由面板滚动。进度面板的“隐藏”按钮不再和“取消”一样是红色。
+- **Privacy Tools says what it does**: the page line read "scramble prompts and metadata"; the tool scrambles the picture itself. The Professional look shows that line under the page title. The Censor brush and pen no longer share one icon; "No tags" and "N selected" are translated.
+  - **隐私处理写明了用途**：页面说明原本写“打乱 prompt 与 metadata”，实际是把图片画面本身打乱。专业外观会在页面标题下显示这行说明。打码页的画笔和钢笔不再共用同一个图标；“No tags”“N selected”补上了中文。
 - **Prompt Helper: the picture you chose stays shown**: in Build and Compare the preview of the chosen picture appeared and a moment later turned back into "choose a picture" (the language refresh rewrote it). It now stays until you pick another.
   - **提示词助手：选好的图片预览不会再消失**：在“构建”和“对比”里，选好的图片预览刚出现就又变回“请选择图片”（被语言刷新覆盖了）。现在会一直显示到你换一张为止。
 - **Style Finder: the "Use GPU if available" checkbox was invisible**: only its label showed, so it could not be seen whether it was on. It now shows its box in every look.

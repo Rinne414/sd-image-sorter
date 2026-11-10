@@ -3508,7 +3508,7 @@ window.I18nLang_en = {
     'reader.workspaceTitle': 'Read / Edit Metadata',
     'reader.workspaceSubtitle': 'Drop in an image to see Prompt, model, and generation parameters. Save a cleaned-up copy if needed.',
     'reader.workspaceTitleObfuscation': 'Privacy / Obfuscate',
-    'reader.workspaceSubtitleObfuscation': 'Scramble prompts and metadata so a shared image does not leak your generation settings.',
+    'reader.workspaceSubtitleObfuscation': 'Scramble a picture so its content cannot be seen when shared; the same method (and password) restores it.',
 
     // ========================
     // Censor zoom controls
@@ -4390,6 +4390,8 @@ window.I18nLang_en = {
     'promptlab.buildPreviewEmpty': 'Choose a template image to see it here before loading the prompt.',
     'promptlab.noImageMeta': 'No quick info yet',
     'promptlab.slotEmpty': 'Click tags in the browser to add',
+    'promptlab.selectedCount': '{count} selected',
+    'dataset.tagPillsEmpty': 'No tags yet',
     'promptlab.pickVisually': 'Pick Visually',
     'promptlab.pickImageTitle': 'Pick an Image',
     'promptlab.pickImageDesc': 'Pick by thumbnail instead of guessing from file names.',

@@ -22,13 +22,17 @@ _ORIENTATION_TRANSPOSE = {
 
 
 def read_exif_orientation(image: Image.Image) -> int:
-    """Return a validated EXIF orientation, treating an absent tag as normal."""
+    """Return the EXIF orientation, treating an absent or undefined tag as normal.
+
+    Real files carry values outside 1 through 8 (0 is common from editors and
+    phone apps). Viewers, browsers and Pillow's ``exif_transpose`` show such a
+    picture unrotated, so that is what the dataset does as well. Raising here
+    made readiness report a readable picture as "missing or unreadable" and
+    block its export (walkthrough 2026-11-10).
+    """
     orientation = image.getexif().get(_EXIF_ORIENTATION_TAG, 1)
     if type(orientation) is not int or not 1 <= orientation <= 8:
-        raise ValueError(
-            "EXIF Orientation must be an integer from 1 through 8; "
-            f"received={orientation!r}"
-        )
+        return 1
     return orientation
 
 

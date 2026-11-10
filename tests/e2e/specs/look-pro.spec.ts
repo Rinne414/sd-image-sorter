@@ -785,3 +785,34 @@ test('pro look: the picture being sorted uses the room between the folder cards'
   })
   expect(size).toBe(1080 - 424)
 })
+
+test('a message that stays on screen has a close button and leaves when the page changes', async ({ page }) => {
+  await open(page, null)
+  const show = () => page.evaluate(() => {
+    const app = (window as any).App
+    app.showToast('Saved 3 pictures', 'success', { persistent: true, actionLabel: 'Open folder', onAction() {} })
+    app.showPipelineNextStep({ icon: 'i-folders', title: 'Copied. What next?', actions: [{ icon: '#i-grid', label: 'Censor', action: 'view:censor' }] })
+  })
+  await show()
+  const toast = page.locator('.toast[data-persistent="1"]')
+  await expect(toast).toHaveCount(1)
+  await toast.locator('.toast-close-btn').click()
+  await expect(toast).toHaveCount(0)
+
+  await show()
+  await expect(page.locator('#pipeline-next-step')).toBeVisible()
+  await page.evaluate(() => (document.querySelector('.nav-tab[data-view="dataset"]') as HTMLElement).click())
+  await expect(toast).toHaveCount(0)
+  await expect(page.locator('#pipeline-next-step')).toBeHidden()
+})
+
+test('the shared confirm button does not keep the last dialog’s own label', async ({ page }) => {
+  await open(page, null)
+  const label = () => page.locator('#btn-confirm-ok').innerText()
+  await page.evaluate(() => (window as any).App.showConfirm('T', 'M', () => {}, () => {}, { okLabel: 'Discard session' }))
+  await expect.poll(label).toBe('Discard session')
+  await page.click('#btn-confirm-cancel')
+  await page.evaluate(() => (window as any).App.showConfirm('T', 'M', () => {}, () => {}))
+  await expect.poll(label).toBe('Yes, proceed')
+  await page.click('#btn-confirm-cancel')
+})

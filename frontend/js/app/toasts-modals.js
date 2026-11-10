@@ -90,6 +90,23 @@ function showToast(rawMessage, type = 'info', options = {}) {
         toast.appendChild(actionBtn);
     }
 
+    // A message that stays needs a visible way to close it (it only closed on
+    // a click anywhere on it, which nothing showed).
+    if (options.persistent) {
+        toast.dataset.persistent = '1';
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'toast-close-btn';
+        const closeLabel = window.I18n?.t?.('common.close');
+        closeBtn.setAttribute('aria-label', closeLabel && closeLabel !== 'common.close' ? closeLabel : 'Close');
+        _setSpriteIcon(closeBtn, 'i-close');
+        closeBtn.onclick = (e) => {
+            e.stopPropagation();
+            toast.remove();
+        };
+        toast.appendChild(closeBtn);
+    }
+
     container.appendChild(toast);
 
     // Announce to screen readers using A11y module
@@ -531,6 +548,15 @@ function hidePipelineNextStep() {
     banner.classList.remove('visible');
     banner.hidden = true;
 }
+
+// Going to another page is the user's answer to "what next?": the banner and
+// the messages that were kept on screen go, so they do not sit over the next
+// page's controls (walkthrough 2026-11-10: a "saved, open folder" message
+// covered the Dataset header five minutes later).
+window.addEventListener('view-changed', () => {
+    hidePipelineNextStep();
+    document.querySelectorAll('.toast[data-persistent="1"]').forEach((toast) => toast.remove());
+});
 
 // Render a Graphite sprite icon into `el`, replacing whatever was there.
 // Callers name a sprite symbol ("i-check"); anything else is treated as plain

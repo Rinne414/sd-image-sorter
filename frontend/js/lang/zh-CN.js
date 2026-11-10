@@ -2078,6 +2078,8 @@ window.I18nLang_zhCN = {
     'promptlab.buildPreviewEmpty': '选择模板图片后，这里会先显示预览，再载入提示词。',
     'promptlab.noImageMeta': '暂无快速信息',
     'promptlab.slotEmpty': '从下方标签浏览器点选标签加入',
+    'promptlab.selectedCount': '已选 {count} 个',
+    'dataset.tagPillsEmpty': '还没有标签',
     'promptlab.pickVisually': '按图片选',
     'promptlab.pickImageTitle': '选择图片',
     'promptlab.pickImageDesc': '按缩略图挑，不用对着文件名猜。',
@@ -3679,10 +3681,10 @@ window.I18nLang_zhCN = {
     // ========================
     // Reader Workspace header
     // ========================
-    'reader.workspaceTitle': '读取 / 编辑 Metadata',
+    'reader.workspaceTitle': '读取 / 编辑生成信息',
     'reader.workspaceSubtitle': '拖进图片后，马上看 Prompt、模型和生成参数；需要时可另存新图。',
     'reader.workspaceTitleObfuscation': '隐私处理 / 混淆',
-    'reader.workspaceSubtitleObfuscation': '打乱 prompt 与 metadata，分享图片时不泄露你的生成设置。',
+    'reader.workspaceSubtitleObfuscation': '把图片打乱成看不出内容的样子再分享；用同一种方式（和密码）就能还原。',
 
     // ========================
     // Censor zoom controls
