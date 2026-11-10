@@ -13737,3 +13737,55 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .modal:focus-visible {
     outline: none !important;
 }
+
+/* ---- The search field of the "All features" list (js/modules/catalog-search.js) ---- */
+.catalog-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    margin: 0 0 12px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--control-bg);
+    color: var(--text-2);
+}
+
+/* The field's own frame shows focus; the input inside draws no second ring. */
+.catalog-search:focus-within {
+    border-color: var(--focus-ring, var(--blue));
+}
+
+.catalog-search input:focus,
+.catalog-search input:focus-visible {
+    outline: none !important;
+}
+
+.catalog-search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+}
+
+.catalog-search input::-webkit-search-cancel-button {
+    display: none;
+}
+
+.catalog-search-empty {
+    margin: 8px 2px 0;
+    color: var(--text-2);
+    font-size: 13px;
+}
+
+.catalog-group[hidden],
+.catalog-group-title[hidden],
+.catalog-item[hidden] {
+    display: none;
+}

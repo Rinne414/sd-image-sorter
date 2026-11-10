@@ -2332,3 +2332,9 @@ html[data-look="pro"] #vlm-settings-modal .vlm-segmented-btn {
     border-radius: var(--pro-r-control);
     font-weight: 500;
 }
+
+/* ---- Start page (pro look): the greeting and counts stay readable on a
+   bright cover picture (white text sat on white artwork with only a shadow) ---- */
+html[data-look="pro"] .entry-identity {
+    background: radial-gradient(ellipse 50% 50% at 34% 56%, rgba(14, 14, 16, 0.82) 0%, rgba(14, 14, 16, 0.6) 50%, rgba(14, 14, 16, 0) 100%);
+}

@@ -176,10 +176,16 @@
         const modal = document.getElementById('entry-catalog-modal');
         if (!modal) return;
         render();
+        const search = document.getElementById('entry-catalog-search');
+        const body = document.getElementById('entry-catalog-body');
+        const emptyNote = document.getElementById('entry-catalog-empty');
+        window.CatalogSearch?.attach(search, body, emptyNote);
+        window.CatalogSearch?.reset(search, body, emptyNote);
         if (typeof window.App?.showModal === 'function') {
-            window.App.showModal('entry-catalog-modal', { onEscape: close });
+            window.App.showModal('entry-catalog-modal', { onEscape: close, initialFocus: search });
         } else {
             modal.classList.add('visible');
+            search?.focus();
         }
     }
 

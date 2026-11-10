@@ -898,3 +898,30 @@ test('an open dialog does not frame the whole window; Enter in the import path s
   await page.locator('#scan-folder-path').press('Enter')
   await expect.poll(() => scanStarted).toBe(true)
 })
+
+test('All features: typing finds a feature, Enter opens the first match', async ({ page }) => {
+  await open(page, 'pro-b')
+  await page.click('#btn-all-features')
+  await expect(page.locator('#entry-catalog-search')).toBeFocused()
+  const rows = page.locator('#entry-catalog-body .catalog-item:visible')
+  const all = await rows.count()
+  expect(all).toBeGreaterThan(10)
+
+  await page.keyboard.type('dataset')
+  await expect.poll(() => rows.count()).toBeLessThan(all)
+  await expect(rows.first()).toContainText(/dataset/i)
+
+  await page.fill('#entry-catalog-search', 'zzzz-nothing')
+  await expect(page.locator('#entry-catalog-empty')).toBeVisible()
+  await expect(rows).toHaveCount(0)
+
+  await page.fill('#entry-catalog-search', 'dataset')
+  await page.locator('#entry-catalog-search').press('Enter')
+  await expect(page.locator('#entry-catalog-modal')).not.toHaveClass(/visible/)
+  await expect(page.locator('#view-dataset')).toHaveClass(/active/)
+
+  // The next open starts clean.
+  await page.keyboard.press('Control+k')
+  await expect(page.locator('#entry-catalog-search')).toHaveValue('')
+  await expect.poll(() => rows.count()).toBe(all)
+})

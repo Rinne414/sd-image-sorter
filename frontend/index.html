@@ -5889,6 +5889,14 @@
                         <p class="modal-description" data-i18n="catalog.body">Main views and pipelines — click a row to go there. Some tools live inside another view.</p>
                     </div>
                 </div>
+                <!-- Type to find a feature (js/modules/catalog-search.js). -->
+                <label class="catalog-search">
+                    <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+                    <input type="search" id="entry-catalog-search" autocomplete="off" spellcheck="false"
+                           placeholder="Type a feature, e.g. censor, export" data-i18n-placeholder="catalog.searchPlaceholder"
+                           aria-label="Find a feature" data-i18n-aria="catalog.searchLabel">
+                </label>
+                <p class="catalog-search-empty" id="entry-catalog-empty" hidden data-i18n="catalog.searchEmpty">No feature matches. Try another word.</p>
                 <div class="entry-catalog-body" id="entry-catalog-body"></div>
             </div>
         </div>
@@ -9218,6 +9226,7 @@
     <script src="/static/js/modules/settings-tabs.js"></script>
     <script src="/static/js/modules/nav-missions.js"></script>
     <script src="/static/js/nav-history.js"></script>
+    <script src="/static/js/modules/catalog-search.js"></script>
     <script src="/static/js/modules/entry-catalog.js"></script>
     <script src="/static/js/modules/interface-switch.js"></script>
     <script src="/static/js/modules/trait-pruner.js"></script>
