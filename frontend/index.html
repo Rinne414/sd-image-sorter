@@ -6526,7 +6526,10 @@
                                 <span class="meta-item" id="modal-waifu-item" style="display:none" title="Waifu Scorer V3: an anime-focused aesthetic score (0-10)" data-i18n-title="modal.waifuScoreTitle"><strong data-i18n="modal.waifuScore">Waifu:</strong> <span id="modal-waifu-score">-</span></span>
                                 <span class="meta-item" id="modal-anime-item" style="display:none" title="deepghs anime aesthetic: a grade from masterpiece to worst, and how the picture ranks among the model's reference pictures" data-i18n-title="modal.animeGradeTitle"><strong data-i18n="modal.animeGrade">Anime grade:</strong> <span id="modal-anime-grade">-</span></span>
                                 <span id="modal-img2img-badge" class="img2img-badge" style="display:none">img2img</span>
-                                <span class="meta-item meta-item-rating"><strong data-i18n="rating.modalLabel">Your rating:</strong> <span class="star-rating star-rating-interactive" id="modal-user-rating" role="radiogroup" aria-label="Your star rating" data-i18n-aria="a11y.yourStarRating"></span></span>
+                                <span class="meta-item meta-item-rating"><strong data-i18n="rating.modalLabel">Your rating:</strong> <span class="star-rating star-rating-interactive" id="modal-user-rating" role="radiogroup" aria-label="Your star rating" data-i18n-aria="a11y.yourStarRating"></span>
+                                    <!-- Favourite the open picture (js/modules/viewer-favorite.js); keys 1-5 rate, 0 clears. -->
+                                    <button type="button" class="modal-favorite-btn" id="modal-favorite-btn" aria-pressed="false" hidden
+                                            title="Favorite" aria-label="Favorite" data-i18n-title="collections.favoriteToggle" data-i18n-aria="collections.favoriteToggle"><svg class="icon" aria-hidden="true"><use href="#i-heart"/></svg></button></span>
                             </div>
 
                             <!--
@@ -9226,6 +9229,7 @@
     <script src="/static/js/modules/settings-tabs.js"></script>
     <script src="/static/js/modules/nav-missions.js"></script>
     <script src="/static/js/nav-history.js"></script>
+    <script src="/static/js/modules/viewer-favorite.js"></script>
     <script src="/static/js/modules/gallery-quick-keys.js"></script>
     <script src="/static/js/modules/catalog-search.js"></script>
     <script src="/static/js/modules/entry-catalog.js"></script>

@@ -13864,3 +13864,39 @@ html:not([data-look-variant="b"]) #pro-library-views {
     width: 11px;
     height: 11px;
 }
+
+/* The heart beside "Your rating" in the picture viewer (js/modules/viewer-favorite.js). */
+.modal-favorite-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-left: 8px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.modal-favorite-btn[hidden] {
+    display: none;
+}
+
+.modal-favorite-btn:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+.modal-favorite-btn.is-favorited {
+    border-color: transparent;
+    background: rgba(var(--pink-rgb, 213, 35, 122), 0.16);
+    color: var(--pink, #D5237A);
+}
+
+.modal-favorite-btn.is-favorited .icon {
+    fill: currentColor;
+}

@@ -961,7 +961,8 @@ test('viewer: Escape closes an open Tools menu first, the picture stays', async 
   await open(page, null)
   const tiles = page.locator('#gallery-grid .gallery-item')
   await expect.poll(() => tiles.count()).toBeGreaterThan(0)
-  await tiles.first().click()
+  // Keyboard only: a click and an Enter together raced each other in a full run.
+  await tiles.first().focus()
   await page.keyboard.press('Enter')
   await expect(page.locator('#image-modal')).toHaveClass(/visible/)
   await page.locator('#modal-tools-menu > summary').click()
@@ -1023,4 +1024,33 @@ test('search: each "read as" term has a remove button that takes it out of the b
   await chips.first().locator('.gsq-chip-remove').click()
   await expect(box).toHaveValue('')
   await expect(page.locator('#gallery-search-preview')).toBeHidden()
+})
+
+test('viewer: the open picture can be favourited, and the number keys rate it', async ({ page }) => {
+  await open(page, null)
+  const tiles = page.locator('#gallery-grid .gallery-item')
+  await expect.poll(() => tiles.count()).toBeGreaterThan(0)
+  // Keyboard only: a click and an Enter together raced each other in a full run.
+  await tiles.first().focus()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('#image-modal')).toHaveClass(/visible/)
+
+  const heart = page.locator('#modal-favorite-btn')
+  await expect(heart).toBeVisible()
+  await expect(heart).toHaveAttribute('aria-pressed', 'false')
+  await heart.click()
+  await expect(heart).toHaveAttribute('aria-pressed', 'true')
+
+  const rating = page.locator('#modal-user-rating')
+  await page.locator('#image-modal .modal-info').click({ position: { x: 5, y: 5 } })
+  await page.keyboard.press('3')
+  await expect(rating).toHaveAttribute('data-rating', '3')
+  await page.keyboard.press('0')
+  await expect(rating).toHaveAttribute('data-rating', '0')
+
+  // The tile's own heart shows the same state; then put it back.
+  await page.keyboard.press('Escape')
+  await expect(tiles.first().locator('.gallery-item-fav')).toHaveAttribute('aria-pressed', 'true')
+  await tiles.first().locator('.gallery-item-fav').click()
+  await expect(tiles.first().locator('.gallery-item-fav')).toHaveAttribute('aria-pressed', 'false')
 })

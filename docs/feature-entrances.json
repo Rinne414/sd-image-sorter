@@ -1003,6 +1003,7 @@
       "en": "Collections",
       "zh": "收藏集",
       "classic": [
+        "#modal-favorite-btn",
         "#collections-list",
         "#btn-new-collection"
       ],
