@@ -1107,6 +1107,9 @@ Create a collection from a `name`. The name is slugified and a numeric suffix is
 #### PATCH /api/collections/{collection_id}
 Rename a collection. The display `name` changes while the stable `slug` is preserved so existing references keep working.
 
+#### POST /api/collections/{collection_id}/move
+Put a collection inside another one, or back at the top level. JSON body `{"parent_id": 7}` (`null` for the top level). Returns `{"status": "ok", "parent_id": 7}`. Answers 400 when the move would put a collection inside itself or one of its own children, and 404 when either collection does not exist (hidden pinned sets count as not existing).
+
 #### DELETE /api/collections/{collection_id}
 Delete a collection. The built-in Favorites collection is protected and returns `400`.
 

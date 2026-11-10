@@ -6079,7 +6079,7 @@ window.I18nLang_en = {
     'stylemap.scopeAll': 'Every picture in the current Gallery filter has style data ({total}).',
     'stylemap.scopeEmpty': 'The current Gallery filter matches no pictures.',
     'stylemap.unlocatable': '{n} cannot be placed',
-    'stylemap.mergedDots': 'shown as {dots} dots: near-identical pictures share one',
+    'stylemap.mergedDots': 'dots on the map: {dots} (near-identical pictures share one)',
     'stylemap.emptyEyebrow': 'Start Here',
     'stylemap.emptyEyebrowRunning': 'In progress',
     'stylemap.refreshIndex': 'Refresh style index',

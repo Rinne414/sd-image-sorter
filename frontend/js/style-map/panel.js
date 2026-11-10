@@ -168,7 +168,7 @@ export class StyleMapPanel {
         const merged = Number(points.merged_away || 0);
         const dots = Array.isArray(points.points) ? points.points.length : 0;
         if (merged > 0 && dots > 0) {
-            text += ` · ${t('stylemap.mergedDots', 'shown as {dots} dots: near-identical pictures share one', { dots })}`;
+            text += ` · ${t('stylemap.mergedDots', 'dots on the map: {dots} (near-identical pictures share one)', { dots })}`;
         }
         scope.textContent = text;
     }

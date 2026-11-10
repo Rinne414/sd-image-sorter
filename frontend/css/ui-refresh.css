@@ -13957,3 +13957,9 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .nav-tabs > .nav-tab.nav-tab-visiting {
     order: 2;
 }
+
+/* Style Finder: an artist's initials are readable. They were white on the
+   pale accent circle of today's look. */
+.artist-card .artist-avatar {
+    color: #141517;
+}
