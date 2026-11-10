@@ -3489,3 +3489,10 @@
     font-weight: 700;
     line-height: 1;
 }
+
+/* Grid of a new dataset: every picture starts without a caption, and a warning
+   triangle on each one read as an error everywhere. In the grid a picture with
+   no caption carries no mark; captioned and edited ones keep theirs. */
+#view-dataset .dataset-queue-grid-mode .dataset-queue-badge-untagged {
+    display: none;
+}

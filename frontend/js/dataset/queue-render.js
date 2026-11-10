@@ -328,6 +328,8 @@
         window.UiIcon ? window.UiIcon.fill(badgeIcon, b.icon) : (badgeIcon.textContent = b.icon);
         const badgeText = document.createElement('span');
         badgeText.textContent = this._t(b.key, b.fallback);
+        // The grid shows the mark alone: its meaning is the tooltip.
+        badge.title = badgeText.textContent;
         badge.append(badgeIcon, badgeText);
 
         item.append(selectToggle, orderBadge, img, metaWrap, badge);

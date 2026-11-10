@@ -195,9 +195,9 @@ Object.assign(window.SimilarImages, {
         actions.innerHTML = `
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="preview" data-id="${result.id}" title="${this._t('similar.preview', 'Preview')}" aria-label="${this._t('similar.preview', 'Preview')}"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg> <span class="similar-action-label">${this._t('similar.preview', 'Preview')}</span></button>
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="reader" data-id="${result.id}" data-filename="${escapeHtml(result.filename || '')}" title="${this._t('similar.reader', 'Reader')}" aria-label="${this._t('similar.reader', 'Reader')}"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg> <span class="similar-action-label">${this._t('similar.reader', 'Reader')}</span></button>
-            <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${result.id}" title="${this._t('similar.edit', 'Edit')}" aria-label="${this._t('similar.edit', 'Edit')}"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg> <span class="similar-action-label">${this._t('similar.edit', 'Edit')}</span></button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${result.id}" title="${this._t('similar.edit', 'Edit')}" aria-label="${this._t('similar.edit', 'Edit')}"><svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg> <span class="similar-action-label">${this._t('similar.edit', 'Edit')}</span></button>
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="dataset" data-id="${result.id}" title="${this._t('similar.dataset', 'Dataset')}" aria-label="${this._t('similar.dataset', 'Dataset')}"><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg> <span class="similar-action-label">${this._t('similar.dataset', 'Dataset')}</span></button>
-            <button class="btn btn-ghost btn-small similar-action-btn" data-action="collection" data-id="${result.id}" title="${this._t('similar.collection', 'Collection')}" aria-label="${this._t('similar.collection', 'Collection')}"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg> <span class="similar-action-label">${this._t('similar.collection', 'Collection')}</span></button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="collection" data-id="${result.id}" title="${this._t('similar.collection', 'Collection')}" aria-label="${this._t('similar.collection', 'Collection')}"><svg class="icon" aria-hidden="true"><use href="#i-folders"/></svg> <span class="similar-action-label">${this._t('similar.collection', 'Collection')}</span></button>
             <button class="btn btn-secondary btn-small similar-action-btn" data-action="build" data-id="${result.id}" title="${this._t('similar.build', 'Build')}" aria-label="${this._t('similar.build', 'Build')}"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg> <span class="similar-action-label">${this._t('similar.build', 'Build')}</span></button>
         `;
 
@@ -236,7 +236,7 @@ Object.assign(window.SimilarImages, {
         firstActions.innerHTML = `
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="preview" data-id="${id1}" title="${this._t('similar.preview', 'Preview')}"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></button>
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="reader" data-id="${id1}" data-filename="${escapeHtml(filename1 || '')}" title="${this._t('similar.reader', 'Reader')}"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></button>
-            <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${id1}" title="${this._t('similar.edit', 'Edit')}"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${id1}" title="${this._t('similar.edit', 'Edit')}"><svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg></button>
             <button class="btn btn-secondary btn-small similar-action-btn" data-action="build" data-id="${id1}" title="${this._t('similar.build', 'Build')}"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></button>
         `;
 
@@ -264,7 +264,7 @@ Object.assign(window.SimilarImages, {
         secondActions.innerHTML = `
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="preview" data-id="${id2}" title="${this._t('similar.preview', 'Preview')}"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></button>
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="reader" data-id="${id2}" data-filename="${escapeHtml(filename2 || '')}" title="${this._t('similar.reader', 'Reader')}"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></button>
-            <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${id2}" title="${this._t('similar.edit', 'Edit')}"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${id2}" title="${this._t('similar.edit', 'Edit')}"><svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg></button>
             <button class="btn btn-secondary btn-small similar-action-btn" data-action="build" data-id="${id2}" title="${this._t('similar.build', 'Build')}"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></button>
         `;
 

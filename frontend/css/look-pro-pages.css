@@ -2467,7 +2467,7 @@ html[data-look="pro"] #view-similar #similar-search-id {
 
 html[data-look="pro"] #view-similar #similar-results:not(:has(> .empty-state)) {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
     gap: 12px;
 }
 
@@ -2525,12 +2525,37 @@ html[data-look="pro"] #view-similar .similar-name {
     white-space: nowrap;
 }
 
-/* The actions: one row of icon buttons; the name is the tooltip. */
+/* The actions of a search result: six small word buttons in two rows. A row
+   of six icons could not be told apart (blind round 22, both judges). */
 html[data-look="pro"] #view-similar .similar-actions {
     display: flex;
     grid-column: 1 / -1;
     gap: 4px;
     margin: 0;
+}
+
+html[data-look="pro"] #view-similar .similar-result .similar-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+html[data-look="pro"] #view-similar .similar-result .similar-action-btn > .icon {
+    display: none;
+}
+
+html[data-look="pro"] #view-similar .similar-result .similar-action-label {
+    display: inline;
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+html[data-look="pro"] #view-similar .similar-result .similar-action-btn {
+    padding: 0 4px;
+    height: 26px;
+    min-height: 26px;
 }
 
 html[data-look="pro"] #view-similar .similar-actions .similar-action-btn {
@@ -2618,4 +2643,92 @@ html[data-look="pro"] #view-similar .similar-dup-bridge {
     align-items: center;
     gap: 8px 12px;
     margin-bottom: 16px;
+}
+
+/* Menus that are not `.input-field` get the same drawn arrow: the Censor
+   toolbar's style menu had none (it read as a text box), Find Similar's scope
+   menu had the browser's. */
+html[data-look="pro"] #view-censor select.toolbar-select,
+html[data-look="pro"] #view-similar select.input {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 30px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A6A6AB' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+    background-size: 14px 14px;
+}
+
+/* Organize: the run button takes the accent once a target folder is given.
+   Before that it is a plain button (it still answers: it says what is missing). */
+html[data-look="pro"] #view-sorting:has(#autosep-destination:placeholder-shown) #btn-execute-autosep.btn.btn-primary:not(:disabled) {
+    border-color: var(--border-strong) !important;
+    background: var(--surface-3) !important;
+    box-shadow: none !important;
+    color: var(--text) !important;
+}
+
+/* Dataset workbench steps (blind round 22): step 3 was a bare title, and the
+   folds' arrows sat before the step number, so numbers and titles started at
+   two different x. Step 3 says what to do; fold arrows sit at the right edge. */
+html[data-look="pro"] #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-review-card .dataset-card-help {
+    display: block;
+    margin: 6px 0 0;
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+html[data-look="pro"] #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-card-details > summary {
+    display: flex;
+    align-items: center;
+}
+
+html[data-look="pro"] #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-card-details > summary::before {
+    order: 9;
+    margin: 0 4px 2px auto;
+    transform: rotate(45deg);
+}
+
+html[data-look="pro"] #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-card-details[open] > summary::before {
+    margin-bottom: -2px;
+    transform: rotate(-135deg);
+}
+
+/* Prompt Helper statistics (blind round 22): cards in one row are one height,
+   so a short card no longer leaves a hole above the next one; the tall tag
+   list keeps its own height. A recipe's "send to build" is one of several row
+   actions, not the page's main button; "add to build" looks like a button. */
+html[data-look="pro"] #promptlab-mode-stats.active {
+    align-items: stretch;
+}
+
+html[data-look="pro"] #promptlab-mode-stats .promptlab-stats-col:has(> #pl-top-tags) {
+    align-self: start;
+}
+
+html[data-look="pro"] #promptlab-mode-stats .btn.btn-primary.btn-small[data-action="build"]:not(.btn-icon-only):not(#btn-toggle-select) {
+    border: 1px solid var(--border-strong);
+    background: var(--surface-3);
+    box-shadow: none;
+    color: var(--text);
+    font-weight: 500;
+}
+
+html[data-look="pro"] #promptlab-mode-stats .btn.btn-secondary.btn-small[data-action="build-tag"] {
+    min-height: 24px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] #promptlab-mode-stats .btn.btn-secondary.btn-small[data-action="build-tag"]:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-3);
+    color: var(--text);
 }
