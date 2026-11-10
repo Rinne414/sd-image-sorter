@@ -217,7 +217,10 @@ def vector_signature(
     if space == "clip":
         row = cursor.execute(
             "SELECT COUNT(*), SUM(id), MAX(id), "
-            "SUM(COALESCE(source_mtime_ns, 0)), SUM(COALESCE(source_size, 0)), "
+            # A file time is about 1.7e18 ns: six of them summed pass SQLite's
+            # 64-bit integers ("integer overflow"). The remainders still move
+            # when any one file time does.
+            "SUM(COALESCE(source_mtime_ns, 0) % 1000000007), SUM(COALESCE(source_size, 0)), "
             "SUM(content_fingerprint IS NULL) "
             "FROM images WHERE embedding IS NOT NULL"
         ).fetchone()

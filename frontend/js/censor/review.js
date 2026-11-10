@@ -222,9 +222,23 @@ function updateCensorReviewPanel() {
                 ? censorT('censor.reviewEmptyQueue', null, 'Queue is empty. Send images from the Gallery first.')
                 : '';
         } else if (CensorReviewState.detectedForId !== CensorState.activeId) {
-            statusEl.textContent = censorT('censor.reviewDetectFirst', null, 'Detect first to review regions on this image.');
+            statusEl.textContent = censorReviewNotDetectedHereText();
         }
     }
+}
+
+// The picture was not detected from this tab. Detect all or the Brush tab may
+// have looked at it already: say what they found, not "detect first".
+function censorReviewNotDetectedHereText() {
+    const item = CensorState.queue.find((entry) => entry.id === CensorState.activeId);
+    const outcome = typeof getCensorBatchOutcome === 'function' ? getCensorBatchOutcome(item) : null;
+    if (outcome === 'no-match') {
+        return censorT('censor.reviewCheckedNoMatch', null, 'This picture was checked and nothing to censor was found. Lower the confidence and detect again if something was missed.');
+    }
+    if (outcome === 'censored') {
+        return censorT('censor.reviewCheckedCensored', null, 'This picture was censored automatically. Detect it again to go through its regions one by one.');
+    }
+    return censorT('censor.reviewDetectFirst', null, 'Detect first to review regions on this image.');
 }
 
 async function censorReviewDetect() {

@@ -734,7 +734,15 @@ class StyleMapService(
         if len(vector_ids) == 0:
             return {**base, "status": "no_vectors"}, self._empty_inputs()
 
-        unlocatable = find_unlocatable(matrix)
+        # The one-dominant-component rule is for the style models' broken
+        # pictures. Every healthy CLIP embedding carries one large component
+        # (the same dimension, 0.42 to 0.66 of the unit vector), so the rule
+        # would leave most of a library out of the CLIP map.
+        unlocatable = (
+            np.zeros(len(vector_ids), dtype=bool)
+            if space == "clip"
+            else find_unlocatable(matrix)
+        )
         base["unlocatable"] = [int(value) for value in vector_ids[unlocatable]]
         if unlocatable.any():
             keep_ids = vector_ids[~unlocatable]

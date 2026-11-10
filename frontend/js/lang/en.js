@@ -1364,6 +1364,8 @@ window.I18nLang_en = {
     'censor.reviewNote': 'Approve censors the checked regions. For fine touch-ups, use the Brush tab.',
     'censor.reviewNoRegions': 'No regions detected. Try a lower confidence or another model.',
     'censor.reviewDetectFirst': 'Detect first to review regions on this image.',
+    'censor.reviewCheckedNoMatch': 'This picture was checked and nothing to censor was found. Lower the confidence and detect again if something was missed.',
+    'censor.reviewCheckedCensored': 'This picture was censored automatically. Detect it again to go through its regions one by one.',
     'censor.reviewRegionsFound': '{count} regions found. Uncheck any you want to leave uncensored.',
     'censor.reviewApproved': 'Approved {count} regions; moved to the next image',
     'censor.reviewApprovedNone': 'Approved with nothing censored; moved on',

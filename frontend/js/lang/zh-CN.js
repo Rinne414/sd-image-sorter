@@ -1375,6 +1375,8 @@ window.I18nLang_zhCN = {
     'censor.reviewNote': '「通过并下一张」会给勾选的区域打码。要细修就切到「画笔」分页。',
     'censor.reviewNoRegions': '没有检测到区域。可以调低置信度或换个模型再试。',
     'censor.reviewDetectFirst': '先检测才能审核这张的区域。',
+    'censor.reviewCheckedNoMatch': '这张已经检测过，没有找到需要打码的区域。如果有漏掉的，调低置信度后再检测一次。',
+    'censor.reviewCheckedCensored': '这张已经自动打码。想逐个确认区域，请再检测一次。',
     'censor.reviewRegionsFound': '检测到 {count} 个区域。不想打码的取消勾选。',
     'censor.reviewApproved': '已通过 {count} 个区域，跳到下一张',
     'censor.reviewApprovedNone': '已通过，没有打码，跳到下一张',

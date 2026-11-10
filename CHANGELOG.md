@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Style Map: the "similarity model" space works on a real library**: with the similarity index built, choosing this space answered "Internal server error" (the map added up every file's timestamp, which no longer fits in a whole number after six pictures). It also left most healthy pictures out as "cannot be placed": a rule meant for the style model's broken pictures does not fit this model, whose pictures all share one large value. On a 147-picture library the map went from an error, then 42 placed pictures, to all 147.
+  - **画风地图：“相似模型”坐标在真实图库上能用了**：建好相似索引后选这个坐标会报“Internal server error”（地图把每个文件的时间戳加在一起，六张图之后就超出了整数范围）。它还把大多数正常图片当成“无法定位”丢掉：那条规则是给画风模型的坏图准备的，不适用于这个模型。147 张的图库从报错、再到只放得下 42 张，变成 147 张全部在图上。
+- **Find Similar: the Find Duplicates button has its label back**: its text was painted in the button's own colour, so it looked like an empty block. In the Professional look, each search result is a picture with one row of icon buttons instead of four rows of buttons, a duplicate pair is one card with two large pictures, and the search form keeps one main button.
+  - **相似：“查找重复”按钮的文字回来了**：文字被涂成了和按钮一样的颜色，看起来是一个空色块。专业外观下，每条搜索结果是一张图加一行图标按钮（以前是四行按钮），一对重复图是一张卡片里两张大图，搜索区只保留一个主按钮。
+- **Censor > Review says what an earlier detection found**: after "Detect all", a picture with nothing to censor still read "Detect first to review regions". It now says it was checked and nothing was found, or that it was censored automatically.
+  - **打码 > 审核会说明之前的检测结果**：用过“检测全部”之后，没有需要打码区域的图片仍然显示“先检测才能审核”。现在会说明已经检测过、没有找到，或者已经自动打码。
 - **Organize: the page's settings button says what it opens**: it read "Settings" with the same icon as the program's Settings in the top bar; it now reads "Auto-Separate Settings", the name of the dialog it opens.
   - **整理：页面上的设置按钮写明了它打开什么**：以前它和顶栏的程序“设置”同名同图标；现在叫“自动分类设置”，和它打开的对话框同名。
 - **Read Image (Professional look): the small buttons are one size**: Copy, Find and the format switch in the result panel came in three sizes and two greys; Copy and its options arrow now read as one control.

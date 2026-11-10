@@ -664,7 +664,9 @@
 
 .dup-threshold-row input[type="range"] { flex: 1; min-width: 100px; }
 
-.dup-threshold-row span {
+/* The value beside the slider only: every span was coloured, which painted the
+   Find button's label in its own fill colour. */
+.dup-threshold-row > span {
     font-size: 13px;
     font-weight: 600;
     color: var(--accent-primary);
