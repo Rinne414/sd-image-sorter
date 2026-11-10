@@ -653,6 +653,17 @@ class ArtistService:
                 normalized = str(name or "").strip()
                 if normalized:
                     known[normalized] = bool(identifier.knows_artist(normalized))
+        else:
+            # The model is not in memory (never loaded, or let go since): its
+            # answer set is still on disk, so the question has an answer.
+            from artist.vocabulary_file import names_on_disk
+
+            on_disk = names_on_disk()
+            vocabulary_size = len(on_disk)
+            for name in names:
+                normalized = str(name or "").strip()
+                if normalized and on_disk:
+                    known[normalized] = normalized.lower() in on_disk
         return {
             "vocabulary_size": vocabulary_size,
             "vocabulary_loaded": vocabulary_size > 0,

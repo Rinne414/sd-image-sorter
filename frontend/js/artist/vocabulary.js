@@ -45,8 +45,8 @@ Object.assign(window.ArtistIdent, {
             )
             : this.tKey(
                 'artist.vocabularyNotLoaded',
-                'The artist model is not loaded yet, so its vocabulary cannot be read. Run an identification once, then check again.',
-                '画师模型还没有载入，读不到它的词表。先跑一次识别，然后再查。'
+                'The artist model is not on this computer yet, so its vocabulary cannot be read. Prepare it in the Model Center, then check again.',
+                '这台电脑上还没有画师模型，读不到它的词表。先到模型中心准备好，再来查。'
             );
         return line;
     },

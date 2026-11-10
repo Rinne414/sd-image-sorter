@@ -163,6 +163,13 @@ export class StyleMapPanel {
         if (unlocatable > 0) {
             text += ` · ${t('stylemap.unlocatable', '{n} cannot be placed', { n: unlocatable })}`;
         }
+        // 147 pictures but 48 dots read as pictures gone missing: near-identical
+        // pictures share one dot, which only a hover said.
+        const merged = Number(points.merged_away || 0);
+        const dots = Array.isArray(points.points) ? points.points.length : 0;
+        if (merged > 0 && dots > 0) {
+            text += ` · ${t('stylemap.mergedDots', 'shown as {dots} dots: near-identical pictures share one', { dots })}`;
+        }
         scope.textContent = text;
     }
 

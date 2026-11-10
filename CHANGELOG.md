@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Style Finder: "Is my artist in the vocabulary?" answers without the model in memory**: after a restart, or once the program had let the model go, it said to run an identification first. It now reads the model's name list from disk (39,261 names) and answers at once.
+  - **画风识别：“我的画师在词表里吗？”不需要模型在内存里也能回答**：以前重启之后或程序释放模型之后，它会让你先跑一次识别。现在直接读磁盘上的名单（39,261 个名字），马上回答。
+- **Style Map says why there are fewer dots than pictures**: "147 pictures … shown as 47 dots: near-identical pictures share one".
+  - **画风地图会说明为什么点比图少**：“147 张……画成 47 个点：几乎相同的图合成一个点”。
+- **Top bar: a page you were sent to shows its tab**: Send to Dataset Maker and other hand-offs opened the page without marking it in the bar.
+  - **顶栏：被带去的页面也会显示自己的标签**：“送到数据集”等跳转以前打开了页面，但顶栏没有标出当前在哪。
 - **Thumbnails are the right way up**: a JPEG stored rotated (phones and some editors mark it with an orientation tag) showed upside-down or sideways in the gallery, Style Finder and the style map while the big picture was upright. Thumbnails now follow the tag; ones made before are redrawn the first time they are shown.
   - **缩略图方向正确了**：带方向标记的 JPEG（手机和部分软件会这样存）在图库、画风识别和画风地图里是倒着或横着的，而大图是正的。缩略图现在会按标记转正；以前生成的会在第一次显示时重新生成。
 - **Closing the picture viewer leaves you where you were**: opening a picture from Find Similar, the Organize preview, Prompt Helper or the search panel switched to the Gallery first, so closing it left you there.
