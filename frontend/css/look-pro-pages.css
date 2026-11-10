@@ -1762,3 +1762,106 @@ html[data-look="pro"] #view-reader .reader-header-actions .btn {
 html[data-look="pro"] #view-reader .reader-header-actions .reader-copy-menu-trigger {
     min-height: 28px;
 }
+
+/* ---- After blind round 20 (the other pages) ---- */
+
+/* A page opened from More already shows as its own lifted tab; the More
+   button marked as well read as two pages chosen at once. */
+html[data-look="pro"] .nav-bar .nav-tools-toggle.active:not(.menu-open) {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-2);
+}
+
+html[data-look="pro"] .nav-bar .nav-tools-toggle.active:not(.menu-open)::after,
+html[data-look="pro"] .nav-bar .nav-tools-toggle.active:not(.menu-open)::before {
+    display: none;
+}
+
+/* The list stops on a whole row (eleven rows of 32 px with 3 px between),
+   not through the middle of one. */
+html[data-look="pro"] #view-promptlab .promptlab-tag-list {
+    max-height: 382px;
+}
+
+/* Reader: the half-width line under the negative prompt went; the short
+   labels of the folded rows match the other section titles. */
+html[data-look="pro"] #view-reader .reader-meta-row {
+    border-top: 1px solid var(--pro-panel-line);
+}
+
+html[data-look="pro"] #view-reader .reader-meta-row > .reader-meta-item {
+    border-top: 0;
+}
+
+html[data-look="pro"] #view-reader .reader-compact-header .reader-meta-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* Organize shares the form pages' width, so the content's left edge does
+   not jump when the page changes. */
+html[data-look="pro"] #view-sorting .autosep-shell,
+html[data-look="pro"] #view-manual .manual-sort-container {
+    width: min(100%, var(--pro-page-max));
+    max-width: var(--pro-page-max);
+    margin-inline: auto;
+}
+
+/* A main button that is off is plainly off: neutral, not a muddy accent. */
+html[data-look="pro"] .btn.btn-primary:not(.btn-icon-only):not(#btn-toggle-select):disabled {
+    border-color: var(--border);
+    background: var(--surface-3);
+    color: var(--muted);
+    opacity: 1;
+    box-shadow: none;
+}
+
+/* Organize: the line under the options repeated the controls above it. */
+html[data-look="pro"] #view-sorting #autosep-settings-summary {
+    display: none;
+}
+
+/* Read Image: the three buttons at the top are one kind of button. */
+html[data-look="pro"] #view-reader .reader-header-actions :is(.btn, .reader-copy-menu-trigger) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 28px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--pro-r-control);
+    background: transparent;
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 500;
+}
+
+html[data-look="pro"] #view-reader .reader-header-actions :is(.btn, .reader-copy-menu-trigger):hover {
+    border-color: var(--border-strong);
+    background: var(--surface-3);
+}
+
+/* Censor: "Brush size :" lost the gap before its colon (the colon was a
+   loose text node in a spaced row; the label and the number stay). */
+html[data-look="pro"] #view-censor .censor-side-inline-label:has(> span[data-i18n]) {
+    font-size: 0;
+}
+
+html[data-look="pro"] #view-censor .censor-side-inline-label:has(> span[data-i18n]) > span {
+    font-size: 12px;
+}
+
+/* Dataset: the 2 x 2 step strip repeated the numbered sections right under it. */
+html[data-look="pro"] #view-dataset .dataset-workflow-rail {
+    display: none;
+}
+
+html[data-look="pro"] #view-reverse .reverse-run-hint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-2);
+}

@@ -13706,3 +13706,17 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .page-lead {
     display: none;
 }
+
+/* Organize: the start button inside the empty preview. */
+.autosep-preview-empty:has(.autosep-preview-start) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+}
+
+.autosep-preview-empty .autosep-preview-start {
+    margin: 0;
+}

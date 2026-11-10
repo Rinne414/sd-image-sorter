@@ -269,6 +269,8 @@ Object.assign(window.ReversePrompt, {
         if (!run) return;
         const hasRecord = !!(this.state.recorded && String(this.state.recorded.prompt || '').trim());
         run.disabled = this.state.running || !this.state.sourcePath;
+        const needsImage = this._el('reverse-run-hint');
+        if (needsImage) needsImage.hidden = Boolean(this.state.sourcePath);
         this._lockedText(
             run.querySelector('.reverse-run-label') || run,
             this.state.running

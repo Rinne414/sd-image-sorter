@@ -2296,6 +2296,7 @@
       "zh": "自动分离：预览并移动",
       "classic": [
         "#btn-preview-autosep",
+        "#btn-preview-autosep-start",
         "#btn-browse-destination",
         "#btn-execute-autosep"
       ],

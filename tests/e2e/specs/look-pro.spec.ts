@@ -855,3 +855,29 @@ test('Read Image: a dropped picture’s copy is not saved into the upload temp f
   await expect(page.locator('#reader-editor-body')).toBeVisible()
   await expect(page.locator('#reader-edit-prompt')).toBeFocused()
 })
+
+test('Organize: the empty preview holds a start button that keeps its place after the language refresh', async ({ page }) => {
+  await open(page, null)
+  await page.evaluate(() => (document.querySelector('.nav-tab[data-view="sorting"]') as HTMLElement).click())
+  const start = page.locator('#autosep-preview-list #btn-preview-autosep-start')
+  await expect(start).toBeVisible()
+  // The refresh used to rewrite the whole empty state's text, which removed the button.
+  await page.waitForTimeout(1200)
+  await expect(start).toBeVisible()
+  await expect(page.locator('#autosep-preview-list .autosep-preview-empty-text')).not.toBeEmpty()
+})
+
+test('Reverse Prompt says why its button is off; in the pro look a main button that is off is not accent-coloured', async ({ page }) => {
+  await open(page, 'pro-b')
+  await page.evaluate(() => (document.querySelector('.nav-tab[data-view="reverse"]') as HTMLElement).click())
+  await expect(page.locator('#btn-reverse-run')).toBeDisabled()
+  await expect(page.locator('#reverse-run-hint')).toBeVisible()
+  const colours = await page.evaluate(() => {
+    const off = getComputedStyle(document.getElementById('btn-reverse-run')!).backgroundColor
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+    const probe = document.createElement('i'); probe.style.color = accent; document.body.appendChild(probe)
+    const accentRgb = getComputedStyle(probe).color; probe.remove()
+    return { off, accentRgb }
+  })
+  expect(colours.off).not.toBe(colours.accentRgb)
+})

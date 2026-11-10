@@ -1975,7 +1975,11 @@
                             </div>
                             <div class="autosep-pane-body autosep-pane-preview-body">
                                 <div class="autosep-preview-list" id="autosep-preview-list">
-                                    <div class="autosep-preview-empty" data-i18n="autosep.previewEmpty">Click "Preview Results" to review matching images before moving them.</div>
+                                    <div class="autosep-preview-empty">
+                                        <span class="autosep-preview-empty-text" data-i18n="autosep.previewEmpty">Click "Preview Results" to review matching images before moving them.</span>
+                                        <!-- The first step of the page, where the eye lands (the same action as the button in this pane's header). -->
+                                        <button class="btn btn-secondary autosep-preview-start" id="btn-preview-autosep-start" type="button" data-i18n="autosep.previewBtn" onclick="document.getElementById('btn-preview-autosep').click()">Preview Results</button>
+                                    </div>
                                 </div>
                             </div>
                         </section>
@@ -3483,6 +3487,8 @@
                                 </button>
                                 <button class="btn btn-ghost btn-small" id="btn-reverse-cancel" type="button" hidden data-i18n="reverse.cancel">Cancel</button>
                             </div>
+                            <!-- Why the button is off (render.js hides this once a picture is in). -->
+                            <p class="reverse-run-hint helper-text" id="reverse-run-hint" data-i18n="reverse.runNeedsImage">Drop a picture above first.</p>
                             <p class="reverse-no-record helper-text" id="reverse-no-record" hidden></p>
                             <p class="reverse-status" id="reverse-status" role="status" aria-live="polite" hidden></p>
                             <p class="reverse-stored-note" data-i18n="reverse.storedNote">Nothing on this page is written to your library.</p>
@@ -4759,7 +4765,7 @@
                                             aria-label="Remove and blacklist one confirmed old trigger"
                                             data-i18n-title="dataset.cleanupTriggerTooltip"
                                             data-i18n-aria="dataset.cleanupTriggerTooltip">
-                                        <span aria-hidden="true">⌫</span>
+                                        <svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg>
                                     </button>
                                     <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-anime-defaults"
                                             title="Fill a simple starter setup: common quality tags, underscore handling, and sequential filenames" data-i18n-title="tip.fillASimpleStarterSetupCommon"

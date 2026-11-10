@@ -316,8 +316,20 @@ function renderAutoSepPreviewList(images = [], totalCount = 0, reason = null) {
             empty.appendChild(title);
             empty.appendChild(hint);
         } else {
-            empty.textContent = window.I18n?.t?.('autosep.previewEmptyInitial')
+            const text = document.createElement('span');
+            text.className = 'autosep-preview-empty-text';
+            text.textContent = window.I18n?.t?.('autosep.previewEmptyInitial')
                 || 'No preview yet. Click "Preview Results" to inspect matching images.';
+            // The page's first step, where the eye lands (the same action as
+            // the small button in this pane's header).
+            const start = document.createElement('button');
+            start.type = 'button';
+            start.id = 'btn-preview-autosep-start';
+            start.className = 'btn btn-secondary autosep-preview-start';
+            const startLabel = window.I18n?.t?.('autosep.previewBtn');
+            start.textContent = startLabel && startLabel !== 'autosep.previewBtn' ? startLabel : 'Preview Results';
+            start.addEventListener('click', () => document.getElementById('btn-preview-autosep')?.click());
+            empty.append(text, start);
         }
         container.appendChild(empty);
         return;
