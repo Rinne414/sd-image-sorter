@@ -900,3 +900,22 @@ def test_an_ollama_server_is_asked_in_its_own_format_with_a_bounded_context():
         }
     ]
     assert reply.finish_reason == "stop"
+
+
+def test_a_description_the_text_model_cannot_read_is_not_handed_over_as_a_result(monkeypatch):
+    from assistant import tools
+
+    def fake_request(method, path, **kwargs):
+        assert path == "/api/similarity/search-text"
+        return {
+            "results": [{"id": 7, "filename": "unrelated.png", "similarity": 0.2}],
+            "total": 1,
+            "needs_multilingual": True,
+        }
+
+    monkeypatch.setattr(tools, "_request", fake_request)
+
+    answer = tools._describe("树下看书的女孩")
+
+    assert answer["results"] == [] and answer["total"] == 0
+    assert "in English" in answer["note"]

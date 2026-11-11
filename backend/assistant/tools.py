@@ -276,6 +276,18 @@ def _describe(query: str, limit: int = 20) -> Dict[str, Any]:
         "/api/similarity/search-text",
         json={"query": str(query), "limit": limit},
     )
+    if body.get("needs_multilingual"):
+        # The English-only text model cannot read these words: its ranking would
+        # not be about the description. Say so instead of handing over a result.
+        return {
+            "results": [],
+            "total": 0,
+            "note": (
+                "The installed text model reads English only, so it cannot search for this "
+                "description as written. Search again with the description in English, or tell "
+                "the user the multilingual model can be downloaded on the Similar page."
+            ),
+        }
     return {
         "results": [
             {**_slim(row), "similarity": row.get("similarity")}
