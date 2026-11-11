@@ -61,7 +61,10 @@
     function showInGallery(args) {
         if (typeof global.setAppFilters !== 'function' || typeof global.createDefaultFilterState !== 'function') return;
         const next = global.createDefaultFilterState();
-        Object.entries(args || {}).forEach(([name, value]) => {
+        // The filters arrive inside `filters` (or, from older turns, at the top).
+        const given = { ...(args?.filters || {}), ...(args || {}) };
+        delete given.filters;
+        Object.entries(given).forEach(([name, value]) => {
             const key = FILTER_KEYS[name];
             if (key && value !== null && value !== undefined && value !== '') next[key] = value;
         });

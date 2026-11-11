@@ -14291,3 +14291,37 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .modal-note-status[data-tone="error"] {
     color: var(--danger, #DE6B66);
 }
+
+/* The "what next" line with four or more actions: the sentence gets the first
+   row to itself (a long folder path wraps there), the actions share one row
+   under it. Before, a long sentence squeezed the actions into two or three rows. */
+.pipeline-next-step:has(.pns-actions > .btn:nth-child(4)) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+        "icon title dismiss"
+        "actions actions actions";
+    row-gap: 10px;
+    align-items: start;
+    width: min(920px, calc(100vw - 48px));
+}
+
+.pipeline-next-step:has(.pns-actions > .btn:nth-child(4)) .pns-icon {
+    grid-area: icon;
+}
+
+.pipeline-next-step:has(.pns-actions > .btn:nth-child(4)) .pns-title {
+    grid-area: title;
+    overflow-wrap: anywhere;
+}
+
+.pipeline-next-step:has(.pns-actions > .btn:nth-child(4)) .pns-dismiss {
+    grid-area: dismiss;
+}
+
+.pipeline-next-step:has(.pns-actions > .btn:nth-child(4)) .pns-actions {
+    grid-area: actions;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+}

@@ -389,6 +389,12 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                                 { icon: '#i-grid', label: _formatAutoSepI18n('nav.censor', 'Censor Edit'), action: 'view:censor' },
                                 { icon: '#i-package', label: _formatAutoSepI18n('nav.dataset', 'Dataset'), action: 'view:dataset' },
                                 { icon: '#i-image', label: _formatAutoSepI18n('nav.gallery', 'Gallery'), action: 'view:gallery' },
+                                // What the rule did not catch is sorted by hand, one key per picture.
+                                {
+                                    icon: '#i-keyboard',
+                                    label: _formatAutoSepI18n('autosep.sortRestByHand', 'Sort the rest by hand'),
+                                    action: () => window._switchSortingSub?.('manual'),
+                                },
                                 // The way back: every file returns to where it was (copies are removed).
                                 ...(progress.run_token && typeof undoGalleryMove === 'function' ? [{
                                     icon: '#i-undo',

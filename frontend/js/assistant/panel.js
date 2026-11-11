@@ -45,6 +45,10 @@
         remove_tags: ['assistant.tool.removeTags', 'Remove tags'],
         set_rating: ['assistant.tool.rate', 'Set stars'],
         add_to_collection: ['assistant.tool.collect', 'Add to a collection'],
+        what_changed: ['assistant.tool.whatChanged', 'Compare two pictures'],
+        list_pose_and_view_tags: ['assistant.tool.poseView', 'Look up pose and angle tags'],
+        pick_most_different: ['assistant.tool.pickVaried', 'Pick the most different pictures'],
+        set_note: ['assistant.tool.note', 'Write a note'],
     };
 
     // -- storage ---------------------------------------------------------
@@ -110,6 +114,11 @@
             return Number(summary.stars) > 0
                 ? t('assistant.confirm.rate', 'Give {n} pictures {stars} of 5 stars', { n, stars: summary.stars })
                 : t('assistant.confirm.clearRating', 'Clear the stars of {n} pictures', { n });
+        }
+        if (summary.action === 'set_note') {
+            return summary.note
+                ? t('assistant.confirm.note', 'Write this note on the picture: {note}', { note: summary.note })
+                : t('assistant.confirm.clearNote', 'Remove the note of this picture');
         }
         if (summary.action === 'add_to_collection') {
             return summary.new
@@ -183,7 +192,7 @@
             ? t('assistant.welcome.readOnly', 'I can find pictures and show them in the Gallery. I am set to change nothing, and I never move or delete files.')
             : access === 'auto'
                 ? t('assistant.welcome.auto', 'I can find pictures, show them in the Gallery, tag and rate them, and put them into collections. I am set to do that without asking first. I never move or delete files.')
-                : t('assistant.welcome.text', 'I can find pictures, show them in the Gallery, tag and rate them, and put them into collections. I ask before I change anything, and I never move or delete files.');
+                : t('assistant.welcome.text', 'I can find pictures (by words, tags, pose, sampler or description), show them in the Gallery, compare two tries, pick a varied set, tag and rate them, and put them into collections. I ask before I change anything, and I never move or delete files.');
         box.appendChild(el('p', 'assistant-welcome-text', welcome));
         const examples = [
             ['assistant.example.untagged', 'Show me the pictures that have no tags yet'],

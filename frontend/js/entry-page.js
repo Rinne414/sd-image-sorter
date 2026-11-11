@@ -886,6 +886,9 @@
                     censorButton.click();
                     return;
                 }
+                // Ready to pick: select mode is on, so the first click on a picture selects it
+                // (the bar at the bottom then leads with Censor Edit for this mission).
+                window.App?.setSelectionMode?.(true);
                 window.showToast?.(t('pub.entryPickThenCensor', null,
                     'Select the images for this set in the Gallery first, then click Censor Edit in the bar at the bottom.'), 'info');
             },

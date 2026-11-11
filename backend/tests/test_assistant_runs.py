@@ -89,9 +89,13 @@ def test_every_tool_has_a_class_and_read_only_hides_the_change_tools():
     kinds = {tool.name: tool.kind for tool in tools.offered(read_only=False)}
     assert set(kinds.values()) == {tools.READ, tools.SHOW, tools.CHANGE}
     hidden = {tool.name for tool in tools.offered(read_only=True)}
-    assert {"add_tags", "remove_tags", "set_rating", "add_to_collection"}.isdisjoint(
-        hidden
-    )
+    assert {
+        "add_tags",
+        "remove_tags",
+        "set_rating",
+        "add_to_collection",
+        "set_note",
+    }.isdisjoint(hidden)
     with pytest.raises(RuntimeError):
         tools._register("no_class", "whatever", "", {}, lambda: None)
     # No tool moves, deletes, renames or exports a file.
@@ -708,3 +712,191 @@ def test_the_endpoints_never_return_the_key_and_refuse_a_run_with_nothing_set_up
     assert "secret" not in test_client.get("/api/assistant/settings").text
     tested = test_client.post("/api/assistant/test")
     assert tested.status_code == 502 and "http" in tested.text
+
+
+def test_the_newer_tools_call_their_endpoints_and_a_note_waits_for_a_yes(monkeypatch):
+    asked = []
+
+    def fake(method, path, params=None, json=None):
+        asked.append((method, path, params, json))
+        if path == "/api/tags/pose-view":
+            return {
+                "view": [{"tag": "from_above", "count": 9, "name": None}],
+                "pose": [],
+                "untagged": 4,
+            }
+        if path == "/api/similarity/pick-varied":
+            return {"picked": [3, 1], "considered": 3, "not_indexed": 0}
+        if path.endswith("/note"):
+            return {"image_id": 5, "note": json["note"]}
+        return {"same": True}
+
+    monkeypatch.setattr(tools, "_request", fake)
+
+    assert tools.get("what_changed").run(image_id=5) == {"same": True}
+    assert tools.get("list_pose_and_view_tags").run() == {
+        "view": [{"tag": "from_above", "pictures": 9}],
+        "pose": [],
+        "untagged_pictures": 4,
+    }
+    assert tools.get("pick_most_different").run(image_ids=[1, 2, 3], count=2) == {
+        "picked_image_ids": [3, 1],
+        "from_pictures": 3,
+        "not_in_similarity_index": 0,
+    }
+    assert (
+        tools.get("what_changed").kind == tools.READ
+        and tools.get("pick_most_different").kind == tools.READ
+    )
+
+    before = len(asked)
+    plan = tools.get("set_note").run(image_id=5, note="  cover candidate  ")
+    assert tools.get("set_note").kind == tools.CHANGE
+    assert plan.summary == {
+        "action": "set_note",
+        "pictures": 1,
+        "note": "cover candidate",
+        "sample": [5],
+    }
+    assert len(asked) == before  # nothing is written while the plan waits
+    assert plan.apply() == {
+        "pictures_done": 1,
+        "pictures_asked": 1,
+        "note": "cover candidate",
+    }
+    assert asked[-1] == (
+        "PATCH",
+        "/api/images/5/note",
+        None,
+        {"note": "cover candidate"},
+    )
+
+
+def test_filters_are_spelled_out_once_and_accepted_nested_or_flat(monkeypatch):
+    import json as json_module
+
+    asked = []
+    monkeypatch.setattr(
+        tools,
+        "_request",
+        lambda method, path, params=None, json=None: (
+            asked.append((path, params)) or {"total": 3}
+        ),
+    )
+
+    assert tools.get("count_images").run(
+        filters={"tags": ["cat"], "untagged": True}
+    ) == {"total": 3}
+    assert tools.get("count_images").run(tags=["dog"]) == {"total": 3}
+    assert asked == [
+        ("/api/images/count", {"tags": "cat", "untagged": True}),
+        ("/api/images/count", {"tags": "dog"}),
+    ]
+
+    # What every request carries stays small: the thirty filter fields appear in one tool only.
+    sent = json_module.dumps(tools.schemas(False))
+    assert sent.count('"aspect_ratio"') == 1
+    assert len(sent) < 12000
+
+
+def test_an_ollama_server_is_asked_in_its_own_format_with_a_bounded_context():
+    import asyncio
+
+    import httpx
+
+    sent = {}
+
+    def handler(request):
+        sent["url"] = str(request.url)
+        sent["body"] = json.loads(request.content)
+        lines = [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "thinking": "private reasoning",
+                },
+                "done": False,
+            },
+            {"message": {"role": "assistant", "content": "Count"}, "done": False},
+            {"message": {"role": "assistant", "content": "ing."}, "done": False},
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_x",
+                            "function": {
+                                "index": 0,
+                                "name": "count_images",
+                                "arguments": {"filters": {"tags": ["sitting"]}},
+                            },
+                        }
+                    ],
+                },
+                "done": False,
+            },
+            {
+                "message": {"role": "assistant", "content": ""},
+                "done": True,
+                "done_reason": "stop",
+            },
+        ]
+        return httpx.Response(200, text="\n".join(json.dumps(line) for line in lines))
+
+    connection = settings.Connection(
+        "http://127.0.0.1:11434/v1", "", "local-model", "own"
+    )
+    history = [
+        {"role": "system", "content": "rules"},
+        {"role": "user", "content": "how many sit?"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [_call("count_images", {"tags": ["a"]}, "c9")],
+        },
+        {"role": "tool", "tool_call_id": "c9", "content": '{"total": 1}'},
+    ]
+    pieces = []
+
+    async def go():
+        async def on_text(piece):
+            pieces.append(piece)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await llm._stream_ollama(
+                connection,
+                connection.as_config(),
+                history,
+                [{"type": "function"}],
+                on_text,
+                client,
+            )
+
+    reply = asyncio.run(go())
+
+    assert sent["url"] == "http://127.0.0.1:11434/api/chat"
+    assert sent["body"]["options"] == {"num_ctx": llm.OLLAMA_CONTEXT_TOKENS}
+    # Arguments travel as objects and a tool result names its tool.
+    assert sent["body"]["messages"][2]["tool_calls"] == [
+        {"function": {"name": "count_images", "arguments": {"tags": ["a"]}}}
+    ]
+    assert sent["body"]["messages"][3] == {
+        "role": "tool",
+        "content": '{"total": 1}',
+        "tool_name": "count_images",
+    }
+    # The reasoning is not shown; the text and the call come back in the program's own shape.
+    assert pieces == ["Count", "ing."] and reply.text == "Counting."
+    assert reply.tool_calls == [
+        {
+            "id": "call_x",
+            "type": "function",
+            "function": {
+                "name": "count_images",
+                "arguments": '{"filters": {"tags": ["sitting"]}}',
+            },
+        }
+    ]
+    assert reply.finish_reason == "stop"

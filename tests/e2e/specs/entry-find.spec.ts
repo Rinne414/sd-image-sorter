@@ -66,3 +66,21 @@ for (const [width, height] of [[1280, 720], [1366, 768], [1920, 1080], [2560, 14
     expect(fits).toEqual({ top: true, bottom: true, oneRow: true, noSideScroll: true })
   })
 }
+
+test('the Pixiv mission opens the Gallery ready to pick', async ({ page }) => {
+  await mockGallery(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.goto('/')
+  await page.locator('#entry-mission-pixiv').click()
+
+  await expect(page.locator('#view-gallery.active')).toBeVisible()
+  // Select mode is on: the first click on a picture selects it instead of opening it.
+  await expect.poll(() => page.evaluate(() => Boolean((window as any).App.AppState.selectionMode))).toBe(true)
+  // The mission's steps are shown once over the page; a click anywhere puts them away.
+  await page.mouse.click(4, 760)
+  await expect(page.locator('#nav-mission-steps')).toBeHidden()
+  await page.locator('#gallery-grid .gallery-item').first().click()
+  await expect.poll(() => page.evaluate(() => (window as any).App.getSelectedGalleryCount())).toBe(1)
+  await expect(page.locator('#image-modal')).not.toHaveClass(/visible/)
+})
+

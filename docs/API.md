@@ -3141,7 +3141,7 @@ Ask the configured service for its model names: `{models: [...]}`. Needs an addr
 One short question to the model: `{ok, model, reply}`. 400 when nothing is set up, 502 with the reason when it fails.
 
 #### POST /api/assistant/runs
-Body: `{messages, view}`. `messages` is the conversation so far (roles `user`, `assistant`, `tool`), ending with the user's message; `view` is what the user is looking at (page, filters, selected ids, language). Starts a run and returns `{run_id}`. 409 when no model service is set up.
+Body: `{messages, view}`. `messages` is the conversation so far (roles `user`, `assistant`, `tool`), ending with the user's message; `view` is what the user is looking at (page, filters, selected ids, language). Starts a run and returns `{run_id}`. 409 when no model service is set up. The model is asked in the OpenAI chat format; a server that answers `/api/version` as Ollama does is asked through Ollama's own `/api/chat` with `num_ctx` 16384 instead, because its OpenAI-style endpoint cannot bound the context it loads.
 
 #### GET /api/assistant/runs/{run_id}/events
 Query: `after` (index of the first event wanted). Waits up to 20 seconds for something new and returns `{events, next, finished}`. Event types: `text` (`delta`), `text_end`, `tool` / `tool_end` (`name`, `id`, `ok`), `show` (`action`, `args`: the panel applies it), `confirm` (`id`, `summary`), `confirm_closed`, `applying`, `changed` (`summary`, `result` with `pictures_done`, `pictures_asked` and `stopped_early` when it did not finish), `empty` (`reason`), `limit`, and one last `done`, `stopped` or `error`, each with `messages`: the assistant and tool messages to append to the conversation.

@@ -99,6 +99,10 @@ test('a finished move offers Undo beside the next steps, and Undo names that run
   await expect(undo).toBeVisible()
   // The next steps stay first: Undo is the last, quiet button.
   await expect(banner.locator('.pns-actions button').last()).toHaveText(/Undo this move/)
+  // What the rule did not catch goes to Manual Sort, and the actions share one row.
+  await expect(banner.getByRole('button', { name: 'Sort the rest by hand' })).toBeVisible()
+  const rows = await banner.locator('.pns-actions button').evaluateAll((buttons) => new Set(buttons.map((button) => Math.round(button.getBoundingClientRect().top))).size)
+  expect(rows).toBe(1)
 
   await undo.click()
   await expect.poll(() => undone).toEqual([{ run_token: 'run-abc' }])

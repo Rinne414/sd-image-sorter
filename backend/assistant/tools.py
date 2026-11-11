@@ -146,9 +146,17 @@ _SCOPE_PROPERTIES: Dict[str, Any] = {
     },
     "filters": {
         "type": "object",
-        "properties": _FILTER_PROPERTIES,
-        "description": "Every picture matching these filters (same fields as search_images).",
+        "description": "Every picture matching these filters: the same fields as search_images.",
     },
+}
+
+# The filter fields are spelled out once, in search_images. Every other tool
+# takes them as one "filters" object: repeating thirty fields in eight tools
+# made each request four times longer, which a model on this computer pays for
+# in minutes and an online one in money.
+_FILTERS_REF: Dict[str, Any] = {
+    "type": "object",
+    "description": "Filters, with the same fields as search_images (tags, untagged, checkpoints, min_user_rating, ...).",
 }
 
 
@@ -197,8 +205,13 @@ def _request(
 
 
 def _filters(args: Dict[str, Any]) -> Dict[str, Any]:
+    """The filter fields of a call, whether given at the top or inside ``filters``."""
+    nested = args.get("filters")
+    merged = {**nested, **args} if isinstance(nested, dict) else args
     return {
-        key: args[key] for key in _FILTER_KEYS if args.get(key) not in (None, "", [])
+        key: merged[key]
+        for key in _FILTER_KEYS
+        if merged.get(key) not in (None, "", [])
     }
 
 
@@ -475,6 +488,54 @@ def _plan_collection(args: Dict[str, Any]) -> Plan:
     return Plan("add_to_collection", summary, apply)
 
 
+def _what_changed(image_id: int, against: Optional[int] = None) -> Dict[str, Any]:
+    params = {"against": int(against)} if against else None
+    return _request("GET", f"/api/images/{int(image_id)}/changes", params=params)
+
+
+def _pose_and_view_tags() -> Dict[str, Any]:
+    body = _request("GET", "/api/tags/pose-view")
+    top = lambda rows: [
+        {"tag": row["tag"], "pictures": row["count"]} for row in (rows or [])[:40]
+    ]  # noqa: E731
+    return {
+        "view": top(body.get("view")),
+        "pose": top(body.get("pose")),
+        "untagged_pictures": body.get("untagged"),
+    }
+
+
+def _pick_most_different(count: int, **scope: Any) -> Dict[str, Any]:
+    ids = resolve_ids(scope)
+    body = _request(
+        "POST",
+        "/api/similarity/pick-varied",
+        json={"image_ids": ids, "count": max(1, int(count))},
+    )
+    return {
+        "picked_image_ids": body.get("picked", []),
+        "from_pictures": len(ids),
+        "not_in_similarity_index": body.get("not_indexed", 0),
+    }
+
+
+def _plan_note(args: Dict[str, Any]) -> Plan:
+    image_id = int(args.get("image_id") or 0)
+    if image_id <= 0:
+        raise RuntimeError("image_id is required")
+    note = str(args.get("note") or "").strip()
+
+    def apply() -> Dict[str, Any]:
+        body = _request("PATCH", f"/api/images/{image_id}/note", json={"note": note})
+        return _outcome(1, 1, None, note=body.get("note", note))
+
+    return Plan(
+        "set_note",
+        {"action": "set_note", "pictures": 1, "note": note[:200], "sample": [image_id]},
+        apply,
+    )
+
+
 _TABLE: Dict[str, Tool] = {}
 
 
@@ -510,7 +571,7 @@ _register(
     "count_images",
     READ,
     "How many pictures match the filters.",
-    _object(_FILTER_PROPERTIES),
+    _object({"filters": _FILTERS_REF}),
     _count,
 )
 _register(
@@ -556,6 +617,29 @@ _register(
     _collections,
 )
 _register(
+    "what_changed",
+    READ,
+    "What differs between a picture and the one made just before it: prompt words, settings, LoRAs, seed. Leave against out for that (the program finds the earlier picture by time; it is not the id minus one). Give against only to compare two pictures the user named.",
+    _object(
+        {"image_id": {"type": "integer"}, "against": {"type": "integer"}}, ["image_id"]
+    ),
+    _what_changed,
+)
+_register(
+    "list_pose_and_view_tags",
+    READ,
+    "The pose tags and camera-angle tags this library has, most used first. Use one as a tag filter to find pictures by pose or angle.",
+    _object({}),
+    _pose_and_view_tags,
+)
+_register(
+    "pick_most_different",
+    READ,
+    "From a set of pictures (image_ids or filters), choose count pictures that differ most from one another: for a varied training set. Returns ids; show them with select_images.",
+    _object({**_SCOPE_PROPERTIES, "count": {"type": "integer"}}, ["count"]),
+    _pick_most_different,
+)
+_register(
     "get_current_view",
     READ,
     "What the user is looking at now: page, filters in force, how many pictures are selected and their ids.",
@@ -566,7 +650,7 @@ _register(
     "show_in_gallery",
     SHOW,
     "Show the pictures matching these filters in the Gallery (replaces the filters on screen). Use it to hand a result to the user.",
-    _object({**_FILTER_PROPERTIES, "sort_by": _PAGING["sort_by"]}),
+    _object({"filters": _FILTERS_REF, "sort_by": _PAGING["sort_by"]}),
     _count,
 )
 _register(
@@ -631,6 +715,18 @@ _register(
         }
     ),
     lambda **args: _plan_collection(args),
+)
+
+
+_register(
+    "set_note",
+    CHANGE,
+    "Write the user's note on one picture (empty text removes it).",
+    _object(
+        {"image_id": {"type": "integer"}, "note": {"type": "string"}},
+        ["image_id", "note"],
+    ),
+    lambda **args: _plan_note(args),
 )
 
 
