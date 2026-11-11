@@ -260,6 +260,8 @@ test('Models: with no model loaded the line says so and Unload now is off; Chine
   await openAt(page, '#/settings/models', 'zh-CN')
   await expect(page.getByTestId('background-status')).toHaveText('当前没有加载任何 AI 模型。')
   await expect(page.getByTestId('background-note')).toContainText('显卡正忙')
+  // The time follows the interface language, not the browser's (en-US gave "PM" on a Chinese page).
+  await expect(page.getByTestId('background-note')).not.toContainText(/[AP]M/)
   await expect(page.getByTestId('background-unload')).toBeDisabled()
   await expect(page.getByTestId('background-unload')).toHaveText('立即释放')
   for (const vp of VIEWPORTS) {

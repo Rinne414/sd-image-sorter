@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Batch, BatchProjectView } from '../../../api/types'
-import { useT, type MessageKey } from '../../../i18n'
+import { useLang, useT, type MessageKey } from '../../../i18n'
 import { useLayer } from '../../../ui/layers'
 import { Icon } from '../../../ui/Icon'
 import { composeCaption } from './captionContent'
@@ -24,9 +24,9 @@ const TYPE: Record<string, MessageKey> = {
   nl: 'dataset.edit.typeNl',
 }
 
-function when(iso: string): string {
+function when(iso: string, lang: string): string {
   const date = new Date(iso.includes('T') || iso.endsWith('Z') ? iso : `${iso.replace(' ', 'T')}Z`)
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString()
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString(lang)
 }
 
 interface Props {
@@ -82,6 +82,7 @@ export function HistoryPanel({ batch, view, subjectId, generation, activeId, bus
 
 function RevisionRow({ revision, active, busy, onRestore }: { revision: Revision; active: boolean; busy: boolean; onRestore: (id: number) => Promise<boolean> }) {
   const t = useT()
+  const lang = useLang((state) => state.lang)
   const [restoring, setRestoring] = useState(false)
   const text = composeCaption(revision.content)
   const source = t(SOURCE[revision.source] ?? 'dataset.history.other')
@@ -89,7 +90,7 @@ function RevisionRow({ revision, active, busy, onRestore }: { revision: Revision
   return (
     <li className={styles.revision} data-active={active || undefined} data-testid="edit-revision" data-revision-id={revision.id}>
       <div className={styles.revisionHead}>
-        <span className="mono">{when(revision.created_at)}</span>
+        <span className="mono">{when(revision.created_at, lang)}</span>
         <span>{who}</span>
         <span className={styles.muted}>{t(TYPE[revision.content.caption_type] ?? 'dataset.edit.typeBooru')}</span>
         {active && <span className={styles.current}>{t('dataset.history.current')}</span>}

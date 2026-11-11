@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useT } from '../../../i18n'
+import { useLang, useT } from '../../../i18n'
 import { useToasts } from '../../../ui/toasts'
 import { Section } from '../about/Section'
 import { SettingRow } from '../SettingRow'
@@ -8,11 +8,12 @@ import { describeLoaded, describeNote, idleOptions, unloadMessages } from './bac
 import styles from './Background.module.css'
 import { saveIdleMinutes, unloadModelsNow, useBackgroundModels } from './backgroundApi'
 
-const clock = (epochSeconds: number) => new Date(epochSeconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-
 /** Settings › Models › Background: which AI models are loaded, when an unused one is freed, and Unload now. */
 export function BackgroundSection() {
   const t = useT()
+  // The interface language, not the browser's: a Chinese page must not say "03:05 PM".
+  const lang = useLang((s) => s.lang)
+  const clock = (epochSeconds: number) => new Date(epochSeconds * 1000).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })
   const query = useBackgroundModels()
   const [saved, mark] = useSaved<'idle'>()
   const [busy, setBusy] = useState(false)
