@@ -20,6 +20,7 @@
         similar: ['galleryPin.titleSimilar', '{n} from Find Similar'],
         assistant: ['galleryPin.titleAssistant', '{n} picked by the assistant'],
         varied: ['galleryPin.titleVaried', '{n} picked for variety'],
+        rejected: ['galleryPin.titleRejected', '{n} you rejected'],
     };
 
     const app = () => global.App || null;

@@ -611,3 +611,60 @@ test('cull decisions that could not be saved keep a Retry until they are saved',
   // Only the one that failed is written again.
   expect(posted).toEqual([901, 902, 902])
 })
+
+// ---------------------------------------------------------------------------
+// A Keep/Reject session touched no file: when it ends, the finish line offers
+// the file actions for exactly the pictures judged, whatever the destinations.
+// ---------------------------------------------------------------------------
+
+test('a finished cull offers to move the kept, look at the rejected, or send the rejected to the recycle bin', async ({ page }) => {
+  await gotoManualSetup(page)
+  await page.locator('.sort-mode-btn[data-sort-mode="cull"]').click()
+  await page.route('**/api/collections/favorites', (route) => route.fulfill({ json: { favorited: true } }))
+  await page.route('**/api/sort/session', (route) => route.fulfill({ json: { status: 'ok' } }))
+  const pinned: Array<Record<string, unknown>> = []
+  await page.route('**/api/collections/pinned', async (route) => {
+    pinned.push(route.request().postDataJSON())
+    await route.fulfill({ json: { collection_id: 9300, count: 2 } })
+  })
+  const finish = () => page.evaluate(async () => {
+    const w = window as any
+    w.ManualSortState.cullDecisions = new Map([[901, 'keep'], [902, 'reject'], [903, 'reject'], [904, 'skip']])
+    await w.finishCullSorting()
+  })
+
+  await finish()
+  const banner = page.locator('#pipeline-next-step')
+  await expect(banner).toBeVisible()
+  await expect(banner.locator('.pns-title')).toHaveText('Kept 1, rejected 2. No file was touched yet.')
+  await expect(banner.locator('.pns-actions button')).toHaveText([
+    /Move the kept to a folder/, /Look at the rejected/, /Rejected to the recycle bin/,
+  ])
+
+  // Trashing asks first and names the count; Cancel leaves everything as it is.
+  await banner.getByRole('button', { name: /recycle bin/ }).click()
+  const confirm = page.locator('#confirm-modal')
+  await expect(confirm).toHaveClass(/visible/)
+  await expect(confirm).toContainText('2')
+  await page.locator('#btn-confirm-cancel').click()
+  await expect(confirm).not.toHaveClass(/visible/)
+
+  // Looking first opens exactly the rejected pictures in the Gallery.
+  await finish()
+  await banner.getByRole('button', { name: /Look at the rejected/ }).click()
+  await expect.poll(() => pinned).toEqual([{ image_ids: [902, 903] }])
+  await expect(page.locator('#gallery-pin-banner-title')).toHaveText('2 you rejected')
+})
+
+test('a cull where nothing was kept or rejected offers no file action', async ({ page }) => {
+  await gotoManualSetup(page)
+  await page.locator('.sort-mode-btn[data-sort-mode="cull"]').click()
+  await page.route('**/api/sort/session', (route) => route.fulfill({ json: { status: 'ok' } }))
+  await page.evaluate(async () => {
+    const w = window as any
+    w.ManualSortState.cullDecisions = new Map([[904, 'skip']])
+    await w.finishCullSorting()
+  })
+  await expect(page.locator('#toast-container .toast').filter({ hasText: 'Cull complete: kept 0, rejected 0.' })).toBeVisible()
+  await expect(page.locator('#pipeline-next-step')).toBeHidden()
+})

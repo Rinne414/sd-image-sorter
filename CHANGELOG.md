@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added / 新增
 
+- **Keep / Reject finishes the job**: a Keep / Reject session marked pictures and touched no file, so getting the rejects off the disk took about ten more clicks somewhere else. When a session ends, the line "Kept 31, rejected 58. No file was touched yet." now offers: move the kept to a folder (with Undo), look at the rejected in the Gallery, or send the rejected to the recycle bin (asked first, with the count). This works whatever the reject destination was, also with "Don't save".
+  - **“保留 / 剔除”可以一步收尾**：以前“保留 / 剔除”只是给图片做记号，文件一个都没动，想把剔除的图从硬盘上清掉还要到别处再点十来下。现在一轮结束时会出现一行“保留 31 张，剔除 58 张，文件都还没动。”，可以：把保留的移到文件夹（可撤销）、在图库里查看剔除的图，或把剔除的移到回收站（会先确认并写明数量）。不管剔除的去向选的是什么（包括“不保存”）都可以用。
 - **A note on a picture**: the picture viewer has a Note field: why you kept it, what to fix, whom it is for. It is saved when you leave the field (or with Ctrl+Enter), and the Gallery's search finds its words, like a caption's.
   - **给图片写备注**：图片查看器里多了“备注”一栏：为什么留下它、要修哪里、给谁用。离开输入框时自动保存（也可以按 Ctrl+Enter），图库搜索也能搜到备注里的字，和标注一样。
 - **Pick the most different pictures from a selection**: cutting a pile of candidates down to a training set by eye is slow and keeps near-duplicates. Select the pile, open More in the selection bar and choose "Pick the most different…": say how many, and the Gallery shows exactly those, all selected, ready for the Dataset Maker or a collection. The pick starts from the most typical picture and keeps adding the one least like anything picked so far; a picture that resembles nothing else in the pile (a screenshot, a broken render) waits until the others are used. It uses the similarity index: pictures not in it cannot take part, and the result says how many that was.

@@ -329,6 +329,50 @@ function reportCullRouting(routeStats, counts, dests) {
     );
 }
 
+// A Keep / Reject session marked pictures and touched no file, so the job
+// ("the rejects are gone, the keepers are filed") ended somewhere else, about
+// ten clicks away. The finish line offers the file actions for exactly the
+// pictures just judged: rejects to the recycle bin (asked first, by the
+// existing dialog), keepers to a folder (with the move's own Undo), or a look
+// at the rejects in the Gallery before deciding.
+function offerCullFileActions(keptIds, rejectedIds) {
+    const app = window.App;
+    if (!app?.showPipelineNextStep || (!keptIds.length && !rejectedIds.length)) return;
+    // Constructive first, the recycle bin last and apart: it asks before it acts,
+    // but it does not sit under the first press.
+    const actions = [];
+    if (keptIds.length) {
+        actions.push({
+            icon: '#i-folder',
+            label: formatManualSortI18n('manual.cullMoveKept', 'Move the kept to a folder...'),
+            action: () => window.moveOrCopyGalleryImages?.(keptIds, 'move'),
+        });
+    }
+    if (rejectedIds.length && window.GalleryPin) {
+        actions.push({
+            icon: '#i-images',
+            label: formatManualSortI18n('manual.cullShowRejected', 'Look at the rejected'),
+            action: () => window.GalleryPin.open(rejectedIds, { source: 'rejected' }),
+        });
+    }
+    if (rejectedIds.length) {
+        actions.push({
+            icon: '#i-trash',
+            label: formatManualSortI18n('manual.cullTrashRejected', 'Rejected to the recycle bin'),
+            action: () => app.deleteGalleryImagesByIds?.(rejectedIds),
+        });
+    }
+    app.showPipelineNextStep({
+        icon: 'i-check',
+        title: formatManualSortI18n(
+            'manual.cullNextTitle',
+            'Kept {kept}, rejected {rejected}. No file was touched yet.',
+            { kept: keptIds.length, rejected: rejectedIds.length }
+        ),
+        actions,
+    });
+}
+
 async function finishCullSorting(result) {
     ManualSortState.active = false;
     ManualSortState.undoAvailable = false;
@@ -351,6 +395,12 @@ async function finishCullSorting(result) {
     const dests = { keep: getCullDest('keep'), reject: getCullDest('reject') };
     const routeStats = await collectCullDecisions(map, dests);
     reportCullRouting(routeStats, { kept: keptCount, rejected: rejectedCount }, dests);
+    // The decisions are remembered for the file actions offered next, whatever
+    // the destinations were (a reject sent to "Don't save" can still be trashed).
+    offerCullFileActions(
+        [...map.entries()].filter(([, decision]) => decision === 'keep').map(([id]) => Number(id)),
+        [...map.entries()].filter(([, decision]) => decision === 'reject').map(([id]) => Number(id)),
+    );
 
     window.App.API.delete('/api/sort/session').catch(e => {
         if (window.Logger) Logger.warn('Failed to clean up cull session:', e);
