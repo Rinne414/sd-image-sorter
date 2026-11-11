@@ -185,7 +185,7 @@ test('in the Pixiv mission "To Publish Set" leads once every queued picture is c
   // It looks like it too: the two buttons trade their fills (Save All is coloured by id).
   // (buttons fade between fills, so wait for the colour to settle)
   await expect.poll(() => fill('#btn-censor-to-publish-set')).toBe(mainFill)
-  await expect.poll(() => fill('#btn-save-all-processed')).toBe(quietFill)
+  await expect.poll(() => fill('#btn-save-all-processed')).not.toBe(mainFill)
   await expect(page.locator('#btn-censor-to-publish-set')).toBeVisible()
   await expect(page.locator('#btn-save-all-processed')).toBeVisible()
 

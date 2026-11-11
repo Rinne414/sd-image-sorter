@@ -124,7 +124,6 @@ test('the Gallery right-click menu offers it too', async ({ page }) => {
 })
 
 test('the window says so when it has no picture, or the picture cannot be shown', async ({ page }) => {
-  await page.setViewportSize({ width: 420, height: 560 })
   await page.goto('/static/reference.html')
   await expect(page.locator('.reference-problem')).toHaveText('No picture was chosen for this window.')
 

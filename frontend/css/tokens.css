@@ -3011,11 +3011,11 @@ li > .icon {
 
 #view-censor .censor-save-actions[data-lead="publish"] #btn-save-all-processed,
 #view-censor .censor-save-actions[data-lead="publish"] #btn-save-all-processed:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--surface-2);
     color: var(--text);
     border-color: var(--border);
 }
 
 #view-censor .censor-save-actions[data-lead="publish"] #btn-save-all-processed:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.07);
+    background: var(--surface-hover);
 }
