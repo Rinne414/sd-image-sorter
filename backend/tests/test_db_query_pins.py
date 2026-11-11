@@ -305,8 +305,10 @@ class TestSqlConstants:
             "i." + c for c in _IMAGE_COLUMNS_BARE.split(", ")
         )
 
-    def test_valid_sort_options_is_the_frozen_31_key_set(self):
+    def test_valid_sort_options_is_the_frozen_32_key_set(self):
+        # 32 since 2026-11-11: set_order (a set in the order it was made).
         assert VALID_SORT_OPTIONS == {
+            "set_order",
             "newest",
             "oldest",
             "name_asc",
@@ -447,8 +449,20 @@ class TestOrderClauseAndCursorSupport:
         for sort_by in VALID_SORT_OPTIONS:
             clause = _get_order_clause(sort_by)
             assert clause
-            if sort_by != "newest":
+            # set_order is newest-first until a request names its set (set_order.py).
+            if sort_by not in ("newest", "set_order"):
                 assert clause != _DEFAULT_ORDER_CLAUSE, sort_by
+
+    def test_set_order_follows_the_set_once_a_request_names_it(self):
+        import set_order
+
+        set_order.use_collection(41)
+        try:
+            clause = _get_order_clause("set_order")
+        finally:
+            set_order.use_collection(None)
+        assert "ci.collection_id = 41" in clause and clause.endswith("ASC, i.id ASC")
+        assert _get_order_clause("set_order") == _DEFAULT_ORDER_CLAUSE
 
     def test_cursor_support_is_limited_to_newest_and_oldest(self):
         assert _supports_cursor_sort("newest") is True

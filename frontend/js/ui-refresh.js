@@ -190,7 +190,8 @@
                 brightness: 'sort.brightness',
                 saturation: 'sort.saturation',
                 brightness_skew: 'sort.brightnessSkew',
-                random: 'sort.random'
+                random: 'sort.random',
+                set_order: 'sort.setOrder'
             });
 
             // v3.2.2: ``_applyGalleryEmptyStateVariant`` (in app.js) flips the

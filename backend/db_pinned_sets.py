@@ -46,11 +46,16 @@ def create_pinned_set(image_ids: List[int], purpose: str = "view") -> Dict[str, 
         set_id = int(cursor.lastrowid)
         for start in range(0, len(ids), _CHUNK):
             chunk = ids[start : start + _CHUNK]
-            marks = ",".join("?" * len(chunk))
+            # The rows go in the order the ids were given, so the set keeps it
+            # (sort_by=set_order shows a described set closest first).
+            marks = ",".join(["(?, ?)"] * len(chunk))
+            wanted = [value for position, image_id in enumerate(chunk) for value in (position, image_id)]
             cursor.execute(
+                f"WITH wanted(position, image_id) AS (VALUES {marks}) "
                 "INSERT OR IGNORE INTO collection_items (collection_id, source_image_id, copied_path) "
-                f"SELECT ?, id, path FROM images WHERE id IN ({marks}) AND {img_sql}",
-                [set_id, *chunk, *img_params],
+                "SELECT ?, images.id, images.path FROM wanted JOIN images ON images.id = wanted.image_id "
+                f"WHERE {img_sql} ORDER BY wanted.position",
+                [*wanted, set_id, *img_params],
             )
         cursor.execute(
             "SELECT COUNT(*) FROM collection_items WHERE collection_id = ?", (set_id,)

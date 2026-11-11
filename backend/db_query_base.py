@@ -11,6 +11,7 @@ Imports only from db_query_columns / stdlib to avoid an import cycle with
 the ``database`` facade.
 """
 import random_order
+import set_order
 from db_query_columns import (
     VALID_SORT_OPTIONS,
     _LIBRARY_ORDER_SQL,
@@ -113,6 +114,8 @@ def _get_order_clause(sort_by: str) -> str:
         "character_count_asc": "char_count ASC, i.id ASC",
         # The shuffle the request asked for (random_order.use_seed); no seed = the historical one.
         "random": f"{random_order.order_sql()} ASC, i.id ASC",
+        # A set in the order it was made (set_order.use_collection); no set = newest first.
+        "set_order": set_order.order_clause(),
         "file_size": "i.file_size DESC, i.id DESC",
         "file_size_asc": "i.file_size ASC, i.id ASC",
         "aesthetic": "COALESCE(i.aesthetic_score, 0) DESC, i.id DESC",

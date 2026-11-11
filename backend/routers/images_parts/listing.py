@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi import Depends, Query
 
 import random_order
+import set_order
 
 from routers.images import PROMPT_MATCH_MODE_EXACT, get_image_service, router
 from services.image_service import ImageService
@@ -416,6 +417,8 @@ def get_images(
     loras = _merge(loras, lora)
 
     random_order.use_seed(random_seed)
+    # sort_by=set_order: the pictures of the set in the order the set was made.
+    set_order.use_collection(collection_id if sort_by == "set_order" else None)
     return service.get_images(
         generators=generators,
         tags=tags,

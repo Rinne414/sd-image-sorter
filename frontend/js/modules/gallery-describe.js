@@ -55,11 +55,40 @@
         }
         // The words found nothing as text, so left in the box they would hide the set too.
         global.GalleryToolbar?.search?.('');
+        useClosestFirst(api);
         const shown = await global.GalleryPin?.open?.(ids, { source: 'described' });
+        if (!shown) restoreSort(api);
         if (shown) {
-            api.showToast?.(tr('describe.shown', 'The {n} pictures closest in meaning to "{words}". They are shown in the Gallery order, not by closeness.', { n: ids.length, words: query }), 'info');
+            api.showToast?.(tr('describe.shown', 'The {n} pictures closest in meaning to "{words}". The closest come first.', { n: ids.length, words: query }), 'info');
         }
         return Boolean(shown);
+    }
+
+    /** The sort the Gallery had before the described set took it over. */
+    let sortBefore = null;
+
+    function offerClosestFirst(on) {
+        const option = document.querySelector('#gallery-sort option[value="set_order"]');
+        if (option) option.hidden = !on;
+    }
+
+    /** The set is kept in the order it was ranked: show it that way (sort_by=set_order). */
+    function useClosestFirst(api) {
+        const current = api.AppState?.filters?.sortBy || 'newest';
+        if (current !== 'set_order') sortBefore = current;
+        offerClosestFirst(true);
+        api.updateFilters?.((filters) => { filters.sortBy = 'set_order'; });
+        api.updateSortReverseButton?.();
+    }
+
+    /** Leaving the set: "closest first" means nothing outside it, so the earlier sort comes back. */
+    function restoreSort(api) {
+        offerClosestFirst(false);
+        if (api.AppState?.filters?.sortBy === 'set_order') {
+            api.updateFilters?.((filters) => { filters.sortBy = sortBefore || 'newest'; });
+        }
+        sortBefore = null;
+        api.updateSortReverseButton?.();
     }
 
     /** Called when the "no matches" card is drawn: offer the button when there are words to describe with. */
@@ -87,6 +116,12 @@
             }
         });
         document.addEventListener('languageChanged', syncEmptyState);
+        // The x on the set's banner: put the sort back before the Gallery reloads without the set.
+        document.getElementById('gallery-pin-banner-clear')?.addEventListener('click', () => {
+            if (app()?.AppState?.filters?.sortBy === 'set_order' || sortBefore !== null) restoreSort(app());
+        }, true);
+        // A page reloaded while the set was open still offers its sort.
+        global.addEventListener('load', () => offerClosestFirst(app()?.AppState?.filters?.sortBy === 'set_order'), { once: true });
     }
 
     global.GalleryDescribe = Object.freeze({ run, syncEmptyState });

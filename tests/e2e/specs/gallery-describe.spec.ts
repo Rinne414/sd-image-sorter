@@ -12,6 +12,7 @@ const library = [61, 62, 63].map((id) => ({ id, filename: `described-${id}.png`,
 async function mockGallery(page: Page, answer: { status?: number; body: Record<string, unknown> }) {
   const asked: Array<Record<string, unknown>> = []
   const pinned: number[][] = []
+  const sorts: string[] = []
   await page.route(/\/api\/image-(thumbnail|file)\/\d+/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
   })
@@ -20,6 +21,7 @@ async function mockGallery(page: Page, answer: { status?: number; body: Record<s
   })
   await page.route('**/api/images?**', async (route) => {
     const url = new URL(route.request().url())
+    sorts.push(`${url.searchParams.get('collection_id') || '-'}:${url.searchParams.get('sort_by') || ''}`)
     // The words are in no prompt: a word search finds nothing; everything else lists the library.
     const images = url.searchParams.get('search') ? [] : library
     await route.fulfill({ json: { images, total: images.length, has_more: false, next_cursor: null } })
@@ -36,7 +38,7 @@ async function mockGallery(page: Page, answer: { status?: number; body: Record<s
   await page.route('**/api/collections/pinned/9400', async (route) => {
     await route.fulfill({ json: { exists: true, count: 2 } })
   })
-  return { asked: () => [...asked], pinned: () => [...pinned] }
+  return { asked: () => [...asked], pinned: () => [...pinned], sorts: () => [...sorts] }
 }
 
 async function searchFor(page: Page, words: string) {
@@ -73,6 +75,17 @@ test('words that match no prompt can be searched by meaning, and the closest pic
   await expect(page.locator('#gallery-search-input')).toHaveValue('')
   await expect(page.locator('.toast').filter({ hasText: 'closest in meaning to "girl reading under a tree"' })).toBeVisible()
   await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(3)
+
+  // The set is asked for in its own order (closest first), and the sort box says so.
+  expect(gallery.sorts()).toContain('9400:set_order')
+  const sort = page.locator('#gallery-sort')
+  await expect(sort).toHaveValue('set_order')
+  await expect(sort.locator('option:checked')).toHaveText('Closest first')
+  // Leaving the set gives the earlier sort back, and "Closest first" is no longer offered.
+  await page.locator('#gallery-pin-banner-clear').click()
+  await expect(sort).toHaveValue('newest')
+  expect(await sort.locator('option[value="set_order"]').evaluate((option) => (option as HTMLOptionElement).hidden)).toBe(true)
+  expect(gallery.sorts().at(-1)).toBe('-:newest')
 })
 
 test('a filter-only miss does not offer it, and a missing model is reported as the server says it', async ({ page }) => {

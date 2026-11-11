@@ -298,6 +298,8 @@ for (const [a, b] of Object.entries(SORT_PAIRS)) {
     SORT_REVERSE_MAP[b] = a;
 }
 SORT_REVERSE_MAP.random = 'random';
+// A set in the order it was made (closest first) has no reverse either.
+SORT_REVERSE_MAP.set_order = 'set_order';
 
 /** Get the base (non-reversed) sort value for dropdown display */
 function getBaseSortValue(sortBy) {
@@ -347,6 +349,7 @@ function syncGallerySortLabels() {
         saturation: ['sort.saturation', 'Most Saturated'],
         brightness_skew: ['sort.brightnessSkew', 'Brightness Spread'],
         random: ['sort.random', 'Random'],
+        set_order: ['sort.setOrder', 'Closest first'],
     };
 
     Object.entries(mappings).forEach(([value, [key, fallback]]) => {

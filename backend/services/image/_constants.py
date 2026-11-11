@@ -54,7 +54,7 @@ VALID_SORT_OPTIONS = [
     "aesthetic_anime", "aesthetic_anime_asc",
     # v3.3.2 user star rating (FF-2)
     "user_rating", "user_rating_asc",
-    "random", "file_size", "file_size_asc",
+    "random", "set_order", "file_size", "file_size_asc",
     # v3.2.1 color sorts
     "brightness", "brightness_asc",
     "saturation", "saturation_asc",
