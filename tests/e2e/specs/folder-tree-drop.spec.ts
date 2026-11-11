@@ -184,3 +184,47 @@ test('a move can still be undone from "Recent moves" after its message is gone',
   await expect(page.locator('#recent-moves-modal')).not.toHaveClass(/visible/)
   expect(await page.locator('#nav-tools-recent-moves').count()).toBe(1)
 })
+
+test('in the desktop program, where a card drag is a drag of the real files, a folder row still takes it', async ({ page }) => {
+  // The desktop program's side of the drag: it starts an OS drag of the files and answers when that ends.
+  await page.addInitScript(() => {
+    ;(window as any).sdDesktop = {
+      startDrag: (ids: number[]) => {
+        ;(window as any).__nativeDrag = ids
+        return new Promise(() => {})
+      },
+    }
+  })
+  await openGallery(page)
+  const row = await folderRow(page, toFolder)
+  const rowSelector = `#folder-tree .folder-row[data-path$="${path.basename(toFolder)}"]`
+  const filesDrag = (type: string) => page.evaluate(([target, eventType]) => {
+    const data = new DataTransfer()
+    data.items.add(new File(['x'], 'dragged.png', { type: 'image/png' }))
+    return document.querySelector(target)!.dispatchEvent(new DragEvent(eventType, { dataTransfer: data, bubbles: true, cancelable: true }))
+  }, [rowSelector, type] as const)
+
+  // Files from somewhere else (Explorer) are not library pictures: the row leaves them to the page's import drop.
+  await filesDrag('dragover')
+  await expect(row).not.toHaveClass(/is-drop-target/)
+
+  // A card is dragged: the desktop program is asked for the real files of that picture.
+  const cardId = await page.evaluate(() => {
+    const card = document.querySelector('#gallery-grid .gallery-item[data-id]') as HTMLElement
+    card.dispatchEvent(new DragEvent('dragstart', { dataTransfer: new DataTransfer(), bubbles: true, cancelable: true }))
+    return Number(card.dataset.id)
+  })
+  await expect.poll(() => page.evaluate(() => (window as any).__nativeDrag)).toEqual([cardId])
+
+  await expect(async () => {
+    expect(await filesDrag('dragover')).toBe(false) // default prevented: a drop is allowed
+    await expect(row).toHaveClass(/is-drop-target/, { timeout: 500 })
+  }).toPass({ timeout: 10_000 })
+  await filesDrag('drop')
+
+  // The usual question, for that one picture; the import dialog did not open as well.
+  const confirm = page.locator('#confirm-modal.visible')
+  await expect(confirm.locator('#confirm-message')).toContainText('folder-drop-to')
+  await expect(page.locator('#scan-modal.visible')).toHaveCount(0)
+  await confirm.locator('#btn-confirm-cancel').click()
+})

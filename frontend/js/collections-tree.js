@@ -19,6 +19,7 @@
     const FAVORITES_SLUG = 'favorites';
     const FOLD_KEY = 'sd-sorter:collection-folds';
     const IMAGE_DRAG = 'application/x-sd-sorter-images';
+    let lastImagePayload = null;
     const COLLECTION_DRAG = 'application/x-sd-sorter-collection';
 
     let draggingCollectionId = null;
@@ -199,17 +200,44 @@
 
     /** Called from the gallery card's dragstart: adds what the sidebar needs, leaves the file drag as it is. */
     function markImageDrag(event, image, card) {
+        const payload = imagePayload(image, card);
+        // The desktop program turns this drag into a drag of the real files, which
+        // carries no custom type: the sidebar reads what it stands for from here.
+        lastImagePayload = payload;
         try {
-            event.dataTransfer.setData(IMAGE_DRAG, JSON.stringify(imagePayload(image, card)));
+            event.dataTransfer.setData(IMAGE_DRAG, JSON.stringify(payload));
         } catch (_error) {
             // A browser that refuses custom types still drags the file out as before.
         }
     }
 
+    /** True for a drag of files that the desktop program started from a gallery card. */
+    function isOwnFileDrag(event) {
+        return Boolean(lastImagePayload)
+            && Boolean(window.DesktopBridge?.isOwnDragActive?.())
+            && Array.from(event.dataTransfer?.types || []).includes('Files');
+    }
+
+    /** Whether this drag carries pictures of the library (a card drag, in the browser or the desktop program). */
+    function carriesImages(event) {
+        return Array.from(event.dataTransfer?.types || []).includes(IMAGE_DRAG) || isOwnFileDrag(event);
+    }
+
+    /** The pictures a drop stands for: { ids, token }, or null when it is not a card drag. */
+    function droppedImages(event) {
+        try {
+            const sent = JSON.parse(event.dataTransfer.getData(IMAGE_DRAG) || 'null');
+            if (sent) return sent;
+        } catch (_error) {
+            // Fall through to the desktop program's drag.
+        }
+        return isOwnFileDrag(event) ? lastImagePayload : null;
+    }
+
     function dragKind(event) {
         const types = Array.from(event.dataTransfer?.types || []);
         if (types.includes(COLLECTION_DRAG) && draggingCollectionId != null) return 'collection';
-        if (types.includes(IMAGE_DRAG)) return 'images';
+        if (carriesImages(event)) return 'images';
         return null;
     }
 
@@ -237,12 +265,7 @@
     }
 
     async function dropImages(event, row) {
-        let payload = null;
-        try {
-            payload = JSON.parse(event.dataTransfer.getData(IMAGE_DRAG) || 'null');
-        } catch (_error) {
-            payload = null;
-        }
+        const payload = droppedImages(event);
         if (!payload) return;
         const id = Number(row.dataset.id);
         const collection = (ui()?._collections || []).find((c) => Number(c.id) === id);
@@ -340,6 +363,8 @@
         openMovePicker,
         move,
         markImageDrag,
+        carriesImages,
+        droppedImages,
         imagePayload,
         bind,
         IMAGE_DRAG,

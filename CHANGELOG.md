@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Desktop program: dragging pictures onto a folder or a collection in the sidebar (not yet tried in the packaged program)**: in the desktop program a card drag is a drag of the real files, which the sidebar did not recognise, so dropping on a folder or collection did nothing. The sidebar now knows which pictures such a drag stands for. Checked in a browser with the desktop program's side imitated; a real drag in the packaged program has not been run.
+  - **桌面程序：把图片拖到侧栏的文件夹或合集上（尚未在打包后的桌面程序里试过）**：在桌面程序里，拖动卡片拖的是真实文件，侧栏认不出来，所以拖到文件夹或合集上没有反应。现在侧栏知道这样的拖动代表哪些图片。已在浏览器里模拟桌面程序一侧验证；还没有在打包后的桌面程序里真正拖过。
 - **Moving a picture back to where an old record still pointed**: when a picture had been moved out of a folder outside the program, the library kept a record of the missing file. Moving a picture to that same place and name then failed and the file was put back. The old record now gives way to the picture that is really there.
   - **把图片移回旧记录还指着的位置**：如果图片是在程序外被移出文件夹的，图库里会留下一条“文件丢失”的记录；之后再把图片移到同一个位置、同一个名字，移动会失败，文件被放回原处。现在旧记录会让位给真正在那里的图片。
 

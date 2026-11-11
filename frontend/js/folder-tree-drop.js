@@ -15,7 +15,12 @@
     const IMAGE_DRAG = 'application/x-sd-sorter-images';
     const TARGET_CLASS = 'is-drop-target';
 
-    const carriesPictures = (event) => Array.from(event.dataTransfer?.types || []).includes(IMAGE_DRAG);
+    // The desktop program drags the real files, with no custom type: collections-tree.js knows what such a drag stands for.
+    const carriesPictures = (event) => (
+        global.CollectionsTree?.carriesImages
+            ? global.CollectionsTree.carriesImages(event)
+            : Array.from(event.dataTransfer?.types || []).includes(IMAGE_DRAG)
+    );
     const rowUnder = (event) => event.target?.closest?.('.folder-row[data-path]') || null;
 
     function clearTarget(tree) {
@@ -24,7 +29,9 @@
 
     function readPayload(event) {
         try {
-            const payload = JSON.parse(event.dataTransfer.getData(IMAGE_DRAG) || 'null');
+            const payload = global.CollectionsTree?.droppedImages
+                ? global.CollectionsTree.droppedImages(event)
+                : JSON.parse(event.dataTransfer.getData(IMAGE_DRAG) || 'null');
             if (!payload) return null;
             const ids = (payload.ids || []).map(Number).filter((id) => Number.isFinite(id) && id > 0);
             return { ids, token: payload.token || null };
