@@ -233,6 +233,20 @@ def read_words_as_tags(
     return {"words": tag_word_lookup.lookup(q)}
 
 
+@router.get("/tags/pose-view", summary="The library's pose and camera-angle tags")
+def list_pose_and_view_tags():
+    """The tags of this library that say a pose or a camera angle, most used first.
+
+    Returns ``{"view": [...], "pose": [...], "untagged": n}``; each tag is
+    ``{tag, count, name}`` (``name``: its Chinese name when the bundled table
+    has one). ``untagged`` pictures have no tags yet, so this list cannot
+    know them.
+    """
+    from services import pose_view_tags
+
+    return pose_view_tags.library_pose_and_view()
+
+
 @router.post("/tags/consistency/report")
 def consistency_report(request: ConsistencyReportRequest):
     """Pre-training dataset health check (BE-5'): trigger hygiene, composition

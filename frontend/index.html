@@ -928,6 +928,12 @@
                                 <span data-i18n="filter.addFilter">Add a filter</span>
                             </button>
 
+                            <!-- Opens the pose / camera-angle chooser (js/modules/pose-view-chooser.js); lit while one of its tags filters the Gallery. -->
+                            <button type="button" class="sidebar-pose-view" id="btn-pose-view" aria-haspopup="dialog" aria-pressed="false">
+                                <svg class="icon" aria-hidden="true"><use href="#i-person"/></svg>
+                                <span data-i18n="poseView.open">Find by pose or camera angle…</span>
+                            </button>
+
                             <button id="btn-clear-filters" class="btn btn-ghost full-width" aria-label="Clear all active filters" data-i18n-aria="a11y.clearAllActiveFilters" data-i18n="filter.clearAll">Clear All Filters</button>
                         </div>
                     </div>
@@ -9252,6 +9258,7 @@
     <script src="/static/js/assistant/panel.js"></script>
     <script src="/static/js/modules/gallery-search-partial.js"></script>
     <script src="/static/js/modules/gallery-search-words.js"></script>
+    <script src="/static/js/modules/pose-view-chooser.js"></script>
     <script src="/static/js/modules/gallery-toolbar.js"></script>
     <script src="/static/js/modules/repair-review.js"></script>
     <script src="/static/js/modules/settings-tabs.js"></script>

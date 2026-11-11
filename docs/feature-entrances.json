@@ -4311,6 +4311,21 @@
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
       }
+    },
+    {
+      "id": "gallery.pose_view",
+      "area": "gallery",
+      "en": "Find by pose or camera angle (the library's own tags of those kinds)",
+      "zh": "按姿势或视角找图（图库里这两类标签的列表）",
+      "classic": [
+        "#btn-pose-view"
+      ],
+      "vopus": {
+        "missing": "Built for the classic interface first (2026-11-11); V Opus filters by tag but has no pose / angle list"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [

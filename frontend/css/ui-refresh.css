@@ -14104,3 +14104,148 @@ html:not([data-look-variant="b"]) #pro-library-views {
     color: var(--text, #E8E8EA);
     font-weight: 600;
 }
+
+/* Find by pose or camera angle: a dialog of the library's own tags of those two
+   kinds. Each tag is a button: its Chinese name (when known), the tag, the count. */
+.pose-view-content {
+    width: min(880px, calc(100vw - 48px));
+    max-height: min(760px, calc(100vh - 48px));
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pose-view-intro,
+.pose-view-note,
+.pose-view-empty {
+    margin: 0;
+    color: var(--muted, #8A8A90);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.pose-view-empty {
+    padding: 24px 0;
+    color: var(--text, #E8E8EA);
+}
+
+.pose-view-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.pose-view-group-title {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.pose-view-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pose-view-tag {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--border, #2B2B2E);
+    border-radius: var(--r-ctl, 10px);
+    background: var(--surface-2, #1C1C1E);
+    color: var(--text, #E8E8EA);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.pose-view-tag:hover {
+    border-color: var(--border-strong, #3A3A3E);
+    background: var(--surface-3, #232326);
+}
+
+.pose-view-tag:focus-visible {
+    outline: 2px solid var(--accent-line, rgba(214, 216, 220, 0.45));
+    outline-offset: 1px;
+}
+
+.pose-view-tag[aria-pressed="true"] {
+    border-color: var(--accent, #D6D8DC);
+    background: var(--accent-soft, rgba(214, 216, 220, 0.12));
+}
+
+.pose-view-tag-id {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 12px;
+}
+
+.pose-view-tag-name + .pose-view-tag-id,
+.pose-view-tag-count {
+    color: var(--muted, #8A8A90);
+}
+
+.pose-view-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text, #E8E8EA);
+    font: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.pose-view-actions {
+    align-items: center;
+}
+
+.pose-view-status {
+    flex: 1;
+    min-width: 0;
+    color: var(--text, #E8E8EA);
+    font-size: 13px;
+}
+
+/* The sidebar row that opens the pose / camera-angle chooser: a quiet row like
+   the other filter rows, lit while one of its tags is filtering. */
+.sidebar-pose-view {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin: 6px 0;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--r-ctl, 10px);
+    background: transparent;
+    color: var(--text, #E8E8EA);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sidebar-pose-view:hover {
+    background: var(--surface-3, #232326);
+}
+
+.sidebar-pose-view:focus-visible {
+    outline: 2px solid var(--accent-line, rgba(214, 216, 220, 0.45));
+    outline-offset: 1px;
+}
+
+.sidebar-pose-view[aria-pressed="true"] {
+    border-color: var(--accent-line, rgba(214, 216, 220, 0.45));
+    background: var(--accent-soft, rgba(214, 216, 220, 0.12));
+}
+
+.sidebar-pose-view .icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+}
