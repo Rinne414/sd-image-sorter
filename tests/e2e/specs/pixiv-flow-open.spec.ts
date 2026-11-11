@@ -150,7 +150,7 @@ test('images that load after a rename never reuse a name, even after one was rem
   expect(new Set(names.map((name: string) => name.toLowerCase())).size).toBe(names.length)
 })
 
-test('in the Pixiv mission "To Publish Set" leads once every queued picture is censored', async ({ page }) => {
+test('in the Pixiv mission "To Publish Set" leads once a queued picture is censored', async ({ page }) => {
   await page.goto('/')
   const lead = () => page.evaluate(() => ({
     publish: document.getElementById('btn-censor-to-publish-set')!.classList.contains('btn-primary'),
@@ -176,11 +176,11 @@ test('in the Pixiv mission "To Publish Set" leads once every queued picture is c
 
   await page.evaluate(() => (window as any).NavMissions.enter('pixiv'))
   await page.evaluate(() => (window as any).App.switchView('censor'))
-  // One picture still untouched: not yet.
-  await setQueue([true, false])
+  // Nothing censored yet: not yet.
+  await setQueue([false, false])
   expect(await lead()).toEqual({ publish: false, saveAll: true })
-  // All censored: the mission's last step is the page's main button, and still visible.
-  await setQueue([true, true])
+  // Censoring has begun (a set may hold pictures that need none): the mission's last step leads, and both stay visible.
+  await setQueue([true, false])
   expect(await lead()).toEqual({ publish: true, saveAll: false })
   // It looks like it too: the two buttons trade their fills (Save All is coloured by id).
   // (buttons fade between fills, so wait for the colour to settle)

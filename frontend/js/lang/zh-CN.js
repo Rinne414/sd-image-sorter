@@ -5806,6 +5806,8 @@ window.I18nLang_zhCN = {
     'tip.expandSidebar': '展开侧栏',
     'tip.reverseSortOrder': '反转排序',
     'tip.shuffleAgain': '重新洗牌',
+    'manual.cullNextMore': '留下 {kept} 张，淘汰 {rejected} 张。还要对它们做什么吗？',
+    'describe.needsMultilingual': '现在装的文字模型只读得懂英文，没法搜索“{words}”。请用英文描述，或者到“相似”页获取多语言模型。',
     'sort.setOrder': '最接近的在前',
     'eagle.rowHint': '从 Eagle 过来？不用复制就能把资源库带进来：星级、备注、标签和文件夹都会跟着来。',
     'eagle.rowButton': '从 Eagle 资源库…',

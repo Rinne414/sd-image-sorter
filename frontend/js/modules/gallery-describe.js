@@ -48,6 +48,19 @@
             api.showToast?.(error?.message || String(error), 'error');
             return false;
         }
+        // The English-only text model cannot read Chinese (or other non-Latin) words:
+        // its answer would not be about the description. Offer the multilingual
+        // model, as Find Similar does, and search again once it is there.
+        if (result?.needs_multilingual) {
+            const megabytes = Number(result.multilingual_download_mb || 0);
+            const outcome = await global.ensureFeatureModel?.('clip-multilingual', {
+                label: tr('similar.languageModelName', 'Multilingual text search'),
+                sizeHint: `${megabytes} MB`,
+            });
+            if (outcome?.ok) return run(query);
+            api.showToast?.(tr('describe.needsMultilingual', 'The installed text model reads English only, so it cannot search for "{words}". Describe it in English, or get the multilingual model on the Similar page.', { words: query }), 'info');
+            return false;
+        }
         const ids = (Array.isArray(result?.results) ? result.results : []).map((row) => Number(row.id)).filter(Boolean);
         if (!ids.length) {
             api.showToast?.(tr('describe.none', 'The similarity index has no picture to compare with "{words}". Build it on the Similar page first.', { words: query }), 'info');

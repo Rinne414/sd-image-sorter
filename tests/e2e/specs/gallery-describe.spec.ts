@@ -103,3 +103,43 @@ test('a filter-only miss does not offer it, and a missing model is reported as t
   await expect(page.locator('#gallery-empty-state')).toBeVisible()
   await expect(page.locator('#empty-state-describe-btn')).toBeHidden()
 })
+
+test('a Chinese description is not answered by the English-only model: the multilingual model is offered first', async ({ page }) => {
+  let multilingual = false
+  const gallery = await mockGallery(page, { body: {} })
+  await page.unroute('**/api/similarity/search-text')
+  await page.route('**/api/similarity/search-text', async (route) => {
+    if (!multilingual) {
+      await route.fulfill({ json: { query: '树下看书的女孩', results: [{ id: 61, filename: 'described-61.png', similarity: 0.2 }], needs_multilingual: true, multilingual_download_mb: 490 } })
+    } else {
+      await route.fulfill({ json: { query: '树下看书的女孩', results: [{ id: 63, filename: 'described-63.png', similarity: 0.33 }], count: 1, total: 1 } })
+    }
+  })
+  await searchFor(page, '树下看书的女孩')
+  // Declined: nothing is shown as if it were a result, and the reason is said.
+  await page.evaluate(() => { (window as any).ensureFeatureModel = async () => ({ ok: false }) })
+  await page.locator('#empty-state-describe-btn').click()
+  await expect(page.locator('.toast').filter({ hasText: 'reads English only' })).toBeVisible()
+  expect(gallery.pinned()).toEqual([])
+  await expect(page.locator('#gallery-pin-banner')).toBeHidden()
+
+  // Accepted: the search runs again with the model that reads it.
+  await page.evaluate(() => {
+    ;(window as any).ensureFeatureModel = async (id: string, spec: { sizeHint: string }) => {
+      ;(window as any).__asked = [id, spec.sizeHint]
+      return { ok: true }
+    }
+  })
+  multilingual = true
+  // (the stand-in flips before the click, as the download would before the second search)
+  multilingual = false
+  await page.route('**/api/similarity/search-text', async (route) => {
+    const again = (await page.evaluate(() => Boolean((window as any).__asked)))
+    await route.fulfill({ json: again
+      ? { query: 'x', results: [{ id: 63, filename: 'described-63.png', similarity: 0.33 }], count: 1, total: 1 }
+      : { query: 'x', results: [], needs_multilingual: true, multilingual_download_mb: 490 } })
+  })
+  await page.locator('#empty-state-describe-btn').click()
+  await expect.poll(() => gallery.pinned()).toEqual([[63]])
+  expect(await page.evaluate(() => (window as any).__asked)).toEqual(['clip-multilingual', '490 MB'])
+})

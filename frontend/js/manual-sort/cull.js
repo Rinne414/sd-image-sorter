@@ -335,9 +335,17 @@ function reportCullRouting(routeStats, counts, dests) {
 // pictures just judged: rejects to the recycle bin (asked first, by the
 // existing dialog), keepers to a folder (with the move's own Undo), or a look
 // at the rejects in the Gallery before deciding.
-function offerCullFileActions(keptIds, rejectedIds) {
+// Pressing one action closes the line, so the others are offered again right
+// after it (without the one just used): trashing the rejects must not cost
+// the chance to file the keepers, and the list of rejects is not kept anywhere else.
+function offerCullFileActions(keptIds, rejectedIds, used = new Set()) {
     const app = window.App;
     if (!app?.showPipelineNextStep || (!keptIds.length && !rejectedIds.length)) return;
+    const then = (key, run) => async () => {
+        await run();
+        // After the action's own page change or dialog has settled.
+        setTimeout(() => offerCullFileActions(keptIds, rejectedIds, new Set([...used, key])), 400);
+    };
     // Constructive first, the recycle bin last and apart: it asks before it acts,
     // but it does not sit under the first press.
     const actions = [];
@@ -345,31 +353,42 @@ function offerCullFileActions(keptIds, rejectedIds) {
         actions.push({
             icon: '#i-folder',
             label: formatManualSortI18n('manual.cullMoveKept', 'Move the kept to a folder...'),
-            action: () => window.moveOrCopyGalleryImages?.(keptIds, 'move'),
+            key: 'move-kept',
+            action: then('move-kept', () => window.moveOrCopyGalleryImages?.(keptIds, 'move')),
         });
     }
     if (rejectedIds.length && window.GalleryPin) {
         actions.push({
             icon: '#i-images',
             label: formatManualSortI18n('manual.cullShowRejected', 'Look at the rejected'),
-            action: () => window.GalleryPin.open(rejectedIds, { source: 'rejected' }),
+            key: 'show-rejected',
+            action: then('show-rejected', () => window.GalleryPin.open(rejectedIds, { source: 'rejected' })),
         });
     }
     if (rejectedIds.length) {
         actions.push({
             icon: '#i-trash',
             label: formatManualSortI18n('manual.cullTrashRejected', 'Rejected to the recycle bin'),
-            action: () => app.deleteGalleryImagesByIds?.(rejectedIds),
+            key: 'trash-rejected',
+            action: then('trash-rejected', () => app.deleteGalleryImagesByIds?.(rejectedIds)),
         });
     }
+    const left = actions.filter((action) => !used.has(action.key));
+    if (!left.length) return;
     app.showPipelineNextStep({
         icon: 'i-check',
-        title: formatManualSortI18n(
-            'manual.cullNextTitle',
-            'Kept {kept}, rejected {rejected}. No file was touched yet.',
-            { kept: keptIds.length, rejected: rejectedIds.length }
-        ),
-        actions,
+        title: used.size
+            ? formatManualSortI18n(
+                'manual.cullNextMore',
+                'Kept {kept}, rejected {rejected}. Anything else for them?',
+                { kept: keptIds.length, rejected: rejectedIds.length }
+            )
+            : formatManualSortI18n(
+                'manual.cullNextTitle',
+                'Kept {kept}, rejected {rejected}. No file was touched yet.',
+                { kept: keptIds.length, rejected: rejectedIds.length }
+            ),
+        actions: left,
     });
 }
 

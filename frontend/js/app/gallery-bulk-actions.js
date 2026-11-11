@@ -64,8 +64,13 @@ function getSelectedGalleryIds() {
         .filter((id) => Number.isFinite(id) && id > 0);
 }
 
-async function deleteGalleryImagesByIds(imageIds) {
-    const selectionToken = getActiveSelectionTokenForActions();
+// The "all matching" selection stands in for the ids only when the caller is the
+// selection itself (options.source === 'selection'). A caller that names its
+// pictures (the cull's "Rejected to the recycle bin", a single row's remove) acts
+// on those pictures: taking the selection instead trashed a whole opened set,
+// kept pictures included, because a set arrives in the Gallery fully selected.
+async function deleteGalleryImagesByIds(imageIds, options = {}) {
+    const selectionToken = options.source === 'selection' ? getActiveSelectionTokenForActions() : null;
     const ids = normalizeSelectionImageIds(imageIds);
     const count = selectionToken ? getSelectedGalleryCount() : ids.length;
 
@@ -180,11 +185,12 @@ async function deleteGalleryImagesByIds(imageIds) {
 }
 
 function deleteSelectedGalleryImages() {
-    return deleteGalleryImagesByIds(getSelectedGalleryIds());
+    return deleteGalleryImagesByIds(getSelectedGalleryIds(), { source: 'selection' });
 }
 
-async function removeGalleryImagesByIds(imageIds) {
-    const selectionToken = getActiveSelectionTokenForActions();
+async function removeGalleryImagesByIds(imageIds, options = {}) {
+    // See deleteGalleryImagesByIds: the selection only when the caller is the selection.
+    const selectionToken = options.source === 'selection' ? getActiveSelectionTokenForActions() : null;
     const ids = normalizeSelectionImageIds(imageIds);
     const count = selectionToken ? getSelectedGalleryCount() : ids.length;
 
@@ -297,7 +303,7 @@ async function removeGalleryImagesByIds(imageIds) {
 }
 
 function removeSelectedGalleryImages() {
-    return removeGalleryImagesByIds(getSelectedGalleryIds());
+    return removeGalleryImagesByIds(getSelectedGalleryIds(), { source: 'selection' });
 }
 
 // Move/copy destinations the user chose, newest first. Kept apart from the

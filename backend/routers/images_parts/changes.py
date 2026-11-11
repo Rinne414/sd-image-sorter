@@ -27,6 +27,7 @@ def _picture_before(image_id: int) -> Optional[Dict[str, Any]]:
             f"""
             SELECT i.id FROM images i
             WHERE COALESCE(i.prompt, '') != ''
+              AND i.library_id = (SELECT library_id FROM images WHERE id = :id)
               AND ({when} < {own_time} OR ({when} = {own_time} AND i.id < :id))
             ORDER BY {when} DESC, i.id DESC
             LIMIT 1

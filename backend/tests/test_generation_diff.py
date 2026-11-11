@@ -156,3 +156,29 @@ def test_the_endpoint_compares_with_the_picture_made_just_before(
         ).status_code
         == 404
     )
+
+
+def test_the_picture_before_is_one_of_the_same_library(test_client, test_db, tmp_path):
+    """Two libraries filling up side by side: another library's picture is not "the one before"."""
+    from PIL import Image
+
+    def picture(name, prompt):
+        path = tmp_path / name
+        Image.new("RGB", (8, 8)).save(path)
+        return test_db.add_image(
+            path=str(path), filename=name, prompt=prompt, metadata_json="{}"
+        )
+
+    mine_first = picture("mine-1.png", "1girl, rain")
+    theirs = picture("theirs.png", "landscape, mountains")
+    mine_second = picture("mine-2.png", "1girl, rain, umbrella")
+    conn = test_db.get_connection()
+    try:
+        conn.execute("UPDATE images SET library_id = 'other' WHERE id = ?", (theirs,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    body = test_client.get(f"/api/images/{mine_second}/changes").json()
+
+    assert body["before"]["id"] == mine_first

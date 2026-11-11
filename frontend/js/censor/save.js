@@ -101,14 +101,17 @@ function isPixivMission() {
     return window.NavMissions?.activeMission?.() === 'pixiv';
 }
 
-// The Pixiv mission ends in Publish Set, so once every picture in the queue
-// has been censored that button leads and Save All steps back. Outside the
-// mission, or while pictures are still untouched, Save All leads as before.
+// The Pixiv mission ends in Publish Set, so once a picture in the queue has
+// been censored that button leads and Save All steps back. Outside the
+// mission, or before any censoring, Save All leads as before.
 function syncPublishLead() {
     const publish = document.getElementById('btn-censor-to-publish-set');
     const saveAll = document.getElementById('btn-save-all-processed');
     if (!publish || !saveAll) return;
-    const lead = isPixivMission() && getCensorQueueWorkCount() > 0 && countUneditedQueueItems() === 0;
+    // "Every picture censored" never came true for a set with pictures that need no
+    // censoring; one censored picture shows the work has begun. The pictures left
+    // untouched are named by Publish Set itself before anything is written.
+    const lead = isPixivMission() && CensorState.queue.some(itemHasCensorContent);
     const emphasise = (button, on, quietClass) => {
         button.classList.toggle('btn-primary', on);
         button.classList.toggle('censor-save-primary', on);

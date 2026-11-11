@@ -5809,6 +5809,8 @@ window.I18nLang_en = {
     'tip.expandSidebar': 'Expand Sidebar',
     'tip.reverseSortOrder': 'Reverse sort order',
     'tip.shuffleAgain': 'Shuffle again',
+    'manual.cullNextMore': 'Kept {kept}, rejected {rejected}. Anything else for them?',
+    'describe.needsMultilingual': 'The installed text model reads English only, so it cannot search for "{words}". Describe it in English, or get the multilingual model on the Similar page.',
     'sort.setOrder': 'Closest first',
     'eagle.rowHint': 'Coming from Eagle? Bring a library in without copying it: stars, notes, tags and folders come along.',
     'eagle.rowButton': 'From an Eagle library…',
