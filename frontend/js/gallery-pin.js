@@ -19,6 +19,7 @@
         stylemap: ['galleryPin.title', '{n} from the Style Map'],
         similar: ['galleryPin.titleSimilar', '{n} from Find Similar'],
         assistant: ['galleryPin.titleAssistant', '{n} picked by the assistant'],
+        varied: ['galleryPin.titleVaried', '{n} picked for variety'],
     };
 
     const app = () => global.App || null;

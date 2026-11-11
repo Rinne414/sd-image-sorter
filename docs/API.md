@@ -1734,6 +1734,9 @@ Get embedding statistics.
 #### GET /api/similarity/model-status
 Get local CLIP runtime readiness and the preferred local model path. Includes `message_key` (an i18n key such as `models.clip.missingModel`) alongside the English `message` so the frontend can localize the status detail.
 
+#### POST /api/similarity/pick-varied
+Body: `{image_ids, count}`. From the given pictures, choose `count` that differ most from one another by their stored CLIP vectors: farthest-point sampling that starts at the most typical picture; a picture with no near neighbour in the pile waits until the others are used (that check is skipped above 20,000 pictures). Returns `{picked, considered, not_indexed}`; `picked` is in the order chosen, and pictures without a vector are only counted in `not_indexed`.
+
 #### GET /api/similarity/compare
 Compute the CLIP cosine similarity (0.0-1.0) between two stored, embedded images (query params `id_a`, `id_b`).
 

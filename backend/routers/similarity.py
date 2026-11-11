@@ -38,6 +38,11 @@ class TextSearchRequest(BaseModel):
     scope: Optional[str] = Field(default=None, pattern="^(current_session|library)$")
 
 
+class PickVariedRequest(BaseModel):
+    image_ids: List[int] = Field(..., min_length=1, description="The pictures to pick from")
+    count: int = Field(..., ge=1, description="How many to pick")
+
+
 class EmbedRequest(BaseModel):
     """Body schema for POST /api/similarity/embed.
 
@@ -335,3 +340,27 @@ async def embedding_model_status(
 ):
     """Get local CLIP model readiness details for the frontend."""
     return service.get_model_status()
+
+
+@router.post(
+    "/pick-varied",
+    summary="Pick the pictures that differ most",
+    description=(
+        "From the given pictures, choose `count` that differ most from one another by their stored "
+        "CLIP vectors (farthest-point sampling from the most typical picture; pictures that resemble "
+        "nothing else in the pile wait until the others are used)."
+    ),
+)
+def pick_varied_pictures(request: PickVariedRequest):
+    """Returns ``{picked, considered, not_indexed}``; ``picked`` is in the order chosen.
+
+    Pictures without a vector cannot take part and are counted in
+    ``not_indexed``. Nothing is computed for them here: building the index
+    stays the Similar page's job. A plain ``def`` (threadpool): it reads the
+    vectors of every given picture.
+    """
+    from services import varied_pick
+
+    picked, left_out = varied_pick.pick_varied(request.image_ids, request.count)
+    total = len(dict.fromkeys(request.image_ids))
+    return {"picked": picked, "considered": total - left_out, "not_indexed": left_out}

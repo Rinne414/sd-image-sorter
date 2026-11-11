@@ -4326,6 +4326,21 @@
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
       }
+    },
+    {
+      "id": "gallery.pick_varied",
+      "area": "gallery",
+      "en": "Pick the most different N pictures from a selection (for a varied training set)",
+      "zh": "从选中的图片里挑出差别最大的 N 张（用于做多样的训练集）",
+      "classic": [
+        "#btn-pick-varied"
+      ],
+      "vopus": {
+        "missing": "Built for the classic interface first (2026-11-11)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [
