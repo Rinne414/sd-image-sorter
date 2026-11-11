@@ -53,9 +53,18 @@ test('it follows the dataset from empty to ready, and its button leads to the ri
     const maker = (window as any).DatasetMaker
     maker._booruTextFor = (id: number) => (Number(id) === Number(bare) ? '' : '1girl, solo')
   }, ids[0])
+  await page.evaluate(() => { (window as any).DatasetMaker._nlTextFor = () => '' })
   await redraw(page)
   await expect(text(page)).toHaveText('No caption yet: 1 of 3 pictures.')
   await expect(go(page)).toHaveText('Caption them')
+  // A sentence is a caption too: a picture captioned in natural language only is not "without".
+  await page.evaluate((bare) => {
+    ;(window as any).DatasetMaker._nlTextFor = (id: number) => (Number(id) === Number(bare) ? 'A girl in the rain.' : '')
+  }, ids[0])
+  await redraw(page)
+  await expect(text(page)).not.toContainText('No caption yet')
+  await page.evaluate(() => { (window as any).DatasetMaker._nlTextFor = () => '' })
+  await redraw(page)
   await go(page).click()
   expect(await openTab(page)).toBe('workbench')
   // There already: the sentence stays, the button goes; the line keeps its height.

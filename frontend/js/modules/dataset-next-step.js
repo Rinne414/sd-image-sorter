@@ -32,7 +32,11 @@
         if (logical <= 0) {
             return { tab: 'import', text: tr('datasetNext.none', 'No pictures in this dataset yet.'), go: tr('datasetNext.goImport', 'Add pictures') };
         }
-        const without = ids.filter((id) => !String(maker._booruTextFor?.(id) || '').trim()).length;
+        // A caption is tags, a sentence, or both: a dataset captioned in sentences only is captioned.
+        const captioned = (id) => Boolean(
+            String(maker._booruTextFor?.(id) || '').trim() || String(maker._nlTextFor?.(id) || '').trim()
+        );
+        const without = ids.filter((id) => !captioned(id)).length;
         if (without > 0) {
             return {
                 tab: 'workbench',
