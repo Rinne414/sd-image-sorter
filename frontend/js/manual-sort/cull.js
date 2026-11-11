@@ -418,10 +418,11 @@ async function finishCullSorting(result) {
     window.NewPictures?.noteCullFinished?.();
     // The decisions are remembered for the file actions offered next, whatever
     // the destinations were (a reject sent to "Don't save" can still be trashed).
-    offerCullFileActions(
-        [...map.entries()].filter(([, decision]) => decision === 'keep').map(([id]) => Number(id)),
-        [...map.entries()].filter(([, decision]) => decision === 'reject').map(([id]) => Number(id)),
-    );
+    const keptIds = [...map.entries()].filter(([, decision]) => decision === 'keep').map(([id]) => Number(id));
+    const rejectedIds = [...map.entries()].filter(([, decision]) => decision === 'reject').map(([id]) => Number(id));
+    // Kept after the line below is closed or replaced (modules/last-cull.js).
+    window.LastCull?.remember?.(keptIds, rejectedIds);
+    offerCullFileActions(keptIds, rejectedIds);
 
     window.App.API.delete('/api/sort/session').catch(e => {
         if (window.Logger) Logger.warn('Failed to clean up cull session:', e);

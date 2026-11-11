@@ -12783,6 +12783,16 @@ html.lang-zh #view-censor .queue-action-btn span {
     flex-shrink: 0;
 }
 
+/* The last Keep / Reject result on its setup page (modules/last-cull.js). */
+.sort-cull-last {
+    align-items: center;
+    color: var(--text-secondary);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 8px 0 0;
+}
+
 /* The same words as a description (gallery-toolbar.js addMeaningSearch): a link, after the chips. */
 .gsq-meaning-link {
     background: none;

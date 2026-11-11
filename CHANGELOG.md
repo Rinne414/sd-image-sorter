@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rename a folder, or make a new one, from the sidebar**: each folder in the sidebar has a small menu (the dots at the end of its row, or a right-click). "Rename…" renames the folder on your disk and every picture in it keeps its tags, rating and sets, with an Undo; until now a folder could only be renamed outside the program, after which its pictures counted as missing. "Move the selection to a new folder here…" makes a folder inside it and moves the selected pictures in. Folders inside an Eagle library are left to Eagle.
   - **在侧栏里给文件夹重命名、新建文件夹**：侧栏里每个文件夹都有一个小菜单（行尾的三个点，或右键）。“重命名…”会在磁盘上给文件夹改名，里面图片的标签、评分和集合都保留，并且可以撤销；以前只能在程序外改名，改完图片就变成“文件丢失”。“把选中的图片移到这里的新文件夹…”会在里面新建文件夹并把选中的图片移进去。Eagle 资源库里的文件夹仍由 Eagle 管理。
 
+- **The last Keep / Reject result is remembered**: the line at the end of a cull (move the kept, look at the rejected, rejected to the recycle bin) was the only place its two lists lived; once it was closed or replaced, a reject list that was not saved to a collection was gone. The Keep / Reject setup page now says what the last result was and offers the same actions again; it is in the function catalog too. Kept in this browser, per library.
+  - **记住上一次留 / 汰的结果**：以前整理结束时的那一行（移动保留的、查看剔除的、剔除的送进回收站）是这两份名单唯一存在的地方；关掉或被别的提示顶掉之后，没有存进合集的剔除名单就没了。现在留 / 汰的设置页会写出上一次的结果，并能再次给出同样的操作；功能目录里也有。保存在这个浏览器里，每个图库各记一份。
+
 ### Changed / 变更
 
 - **Search by meaning is offered whenever you search with words**: it used to appear only when the text search found nothing. A link now sits beside the "Understood as" chips; when the similarity index is empty, the message has a button to the Similar page.
