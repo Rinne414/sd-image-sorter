@@ -35,7 +35,10 @@ def _param(*names: str) -> str:
         f"json_extract(i.metadata_json, '$._parsed.generation_params.{name}')"
         for name in names
     )
-    return f"COALESCE({paths})"
+    # Guarded here, not in each condition: damaged metadata reads as "no such
+    # parameter", and the same expression can be indexed (migration 070 builds
+    # its indexes from these very strings, so the planner matches them).
+    return f"CASE WHEN json_valid(i.metadata_json) THEN COALESCE({paths}) END"
 
 
 _SAMPLER_SQL = (
@@ -97,17 +100,28 @@ def extract(search: Optional[str]) -> Tuple[str, List[str], List[Any]]:
             escaped = (
                 needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             )
-            conditions.append(
-                f"(json_valid(i.metadata_json) AND {_SAMPLER_SQL} LIKE ? ESCAPE '\\')"
-            )
+            conditions.append(f"({_SAMPLER_SQL} LIKE ? ESCAPE '\\')")
             params.append(f"%{escaped}%")
             return " "
         built = _numeric_condition(key, operator, value)
         if built is None:
             return match.group(0)
-        conditions.append(f"(json_valid(i.metadata_json) AND {built[0]})")
+        conditions.append(built[0])
         params.extend(built[1])
         return " "
 
     rest = _TERM.sub(take, text)
     return (" ".join(rest.split()) if conditions else text), conditions, params
+
+
+def index_expressions() -> dict:
+    """Index name -> the expression it indexes (without the query's table alias)."""
+
+    def bare(sql: str) -> str:
+        return sql.replace("i.metadata_json", "metadata_json")
+
+    return {
+        "idx_images_gen_steps": bare(_NUMBER_SQL["steps"]),
+        "idx_images_gen_cfg": bare(_NUMBER_SQL["cfg"]),
+        "idx_images_gen_sampler": bare(_SAMPLER_SQL),
+    }
