@@ -11,7 +11,8 @@ import { cleanupImages, seedImages } from '../fixtures/v4-seed'
 test.use({ viewport: { width: 1366, height: 768 } })
 
 // The gallery toolbar folds while the library is empty: bring our own pictures.
-test.beforeAll(() => seedImages({ prefix: 'lookpro-', token: 'lookprotoken', count: 3, dir: 'look-pro' }))
+// Five, not three: one test hovers the fourth tile, and an earlier spec may have emptied the library.
+test.beforeAll(() => seedImages({ prefix: 'lookpro-', token: 'lookprotoken', count: 5, dir: 'look-pro' }))
 test.afterAll(() => cleanupImages('lookpro-', ['look-pro']))
 
 async function open(page: import('@playwright/test').Page, look: 'pro' | 'pro-b' | null, lang = 'en') {

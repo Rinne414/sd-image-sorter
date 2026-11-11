@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
 import { markModelsReady } from '../fixtures/model-status'
+import { seedPictures } from '../fixtures/seed-library'
 
 /**
  * Each tab keeps its own library (V3.5 issue #30).
@@ -14,6 +15,12 @@ import { markModelsReady } from '../fixtures/model-status'
 test.describe.configure({ mode: 'serial' })
 
 const LIBRARY_KEY = 'sd-library-workspace-v1'
+
+// "Enter library" on the Home page opens the import dialog when the library is
+// empty, and an earlier spec may have emptied it.
+test.beforeAll(async ({ request }) => {
+  await seedPictures(request, 'library-tab-isolation')
+})
 
 async function boot(page: Page) {
   await page.addInitScript((key) => {

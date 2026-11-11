@@ -213,7 +213,8 @@ test('the folder image is checked too; "solo" from the common tags moves into th
   // One Undo puts "solo" back where it stood in the common tags and C's caption back as it was.
   await page.getByRole('button', { name: 'Undo' }).last().click()
   await expect.poll(async () => (await project(page)).settings.caption_render.common_tags).toEqual(['solo', 'masterpiece'])
-  expect((await savedCaptions(page))[String(ids[2])]).toBe('1girl, smile')
+  // Undo puts the common tags back first and the captions right after (bulkRun.ts), so wait for the caption.
+  await expect.poll(async () => (await savedCaptions(page))[String(ids[2])]).toBe('1girl, smile')
 })
 
 test('after the move the fix takes the extra count tag off both pictures, the folder image included', async ({ page }) => {

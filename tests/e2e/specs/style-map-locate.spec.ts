@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { expect, test, type Page } from '../fixtures/click-ledger'
 import { StyleMapPage } from '../pages/StyleMapPage'
+import { seedPictures } from '../fixtures/seed-library'
 
 /**
  * Style Map: find one picture (S4f) against mocked /api/*.
@@ -336,6 +337,12 @@ test.describe('Style Map: locate a picture from the Gallery', () => {
 })
 
 test.describe('Style Map: the Locate a picture box', () => {
+  // One test enters from the Home page, where an empty library opens the
+  // import dialog; an earlier spec may have emptied the library.
+  test.beforeAll(async ({ request }) => {
+    await seedPictures(request, 'style-map-locate')
+  })
+
   // The axis meanings (S4e) are not under test here: an empty answer keeps the real backend out of it.
   test.beforeEach(async ({ page }) => {
     await page.route('**/api/style-map/axes**', (route) => route.fulfill({ json: { status: 'empty', space: 'kaloscope', layout: 'pca', axes: {} } }))
