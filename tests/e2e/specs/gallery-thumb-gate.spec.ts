@@ -113,7 +113,7 @@ test('a fling that slows to a reading pace shows its cards while still moving', 
 })
 
 async function mockLargeGallery(page: Page, count: number, thumbnailDelayMs: number) {
-  // The full summary both interfaces read (V Opus needs every field present).
+  // The full summary the gallery reads.
   const images = Array.from({ length: count }, (_, index) => ({
     id: 70001 + index,
     filename: `flick-${index}.png`,
@@ -169,10 +169,21 @@ test('a fast flick asks for few thumbnails, cancels the ones it passed, and fill
 
   const grid = await page.locator('#gallery-grid').boundingBox()
   await page.mouse.move(grid!.x + grid!.width / 2, 540)
-  for (let i = 0; i < 40; i += 1) {
-    await page.mouse.wheel(0, 600)
-    await page.waitForTimeout(16)
-  }
+  // One step at a reading pace first: its cards ask for their pictures (each
+  // takes 400 ms here), and the flick then carries them off the screen.
+  await page.mouse.wheel(0, 900)
+  // The flick is the browser's own scroll gesture, 12 px/ms for two seconds.
+  // Forty wheel steps sent from here took about 110 ms each on a busy machine
+  // (2026-11-12), so the gallery really did stop between them and loaded its
+  // pictures, as it should: that measured this machine, not the gallery.
+  const browser = await page.context().newCDPSession(page)
+  await browser.send('Input.synthesizeScrollGesture', {
+    x: Math.round(grid!.x + grid!.width / 2),
+    y: 540,
+    yDistance: -24000,
+    speed: 12000,
+    gestureSourceType: 'mouse',
+  })
   flinging = false
   const cardsRendered = await page.evaluate(() => (window as any).__rendered)
 
