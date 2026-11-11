@@ -102,6 +102,9 @@
         brightness: 'brightness', bright: 'brightness', 亮度: 'brightness',
         saturation: 'saturation', sat: 'saturation', 饱和度: 'saturation',
         seed: 'seed', 种子: 'seed',
+        sampler: 'sampler', 采样器: 'sampler',
+        steps: 'steps', 步数: 'steps',
+        cfg: 'cfg',
         date: 'date', time: 'date', 日期: 'date', 时间: 'date',
         artist: 'artist', 画师: 'artist',
         folder: 'folder', 文件夹: 'folder',
@@ -155,6 +158,9 @@
         { syntax: 'color:VALUE', example: 'color:warm', descKey: 'searchHelp.color' },
         { syntax: 'brightness / saturation OP N', example: 'brightness>=180 sat<=60', descKey: 'searchHelp.brightness' },
         { syntax: 'seed:N', example: 'seed:314159', descKey: 'searchHelp.seed' },
+        { syntax: 'sampler:VALUE', example: 'sampler:"euler a"', descKey: 'searchHelp.sampler' },
+        { syntax: 'steps:N / steps:A..B', example: 'steps>=28', descKey: 'searchHelp.steps' },
+        { syntax: 'cfg:N / cfg:A..B', example: 'cfg:5..7', descKey: 'searchHelp.cfg' },
         { syntax: 'date:VALUE', example: 'date:2026-05 date:7d', descKey: 'searchHelp.date' },
         { syntax: 'artist:VALUE', example: 'artist:wlop', descKey: 'searchHelp.artist' },
         { syntax: 'folder:VALUE', example: 'folder:keep', descKey: 'searchHelp.folder' },
@@ -177,6 +183,8 @@
             colorHues: [], excludeColorHues: [],
             scalars: {},
             freeText: [],
+            // sampler: / steps: / cfg: terms: sent on inside the search text, shown as their own chips.
+            searchTerms: [],
             parts: [],
             warnings: [],
         };
@@ -206,6 +214,10 @@
     function pushWarning(result, raw, reasonKey, hint) {
         result.warnings.push({ raw, reasonKey, hint: hint || '' });
         result.parts.push({ kind: 'warn', key: null, op: '', value: raw, reasonKey, hint: hint || '' });
+    }
+
+    function pushSearchTerm(result, text) {
+        result.searchTerms.push(text);
     }
 
     function pushFree(result, text) {
@@ -481,6 +493,45 @@
             case 'saturation':
                 handleNumericKey(result, 'saturation', op, value, 'minSaturation', 'maxSaturation', token);
                 return;
+            case 'sampler':
+            case 'steps':
+            case 'cfg': {
+                // These three are read by the server out of the search text itself
+                // (backend/db_generation_search.py), so they reach every place the
+                // search text reaches. Here they are checked, shown as a chip, and
+                // passed on in one spelling.
+                if (key === 'sampler') {
+                    if (!value) {
+                        pushWarning(result, token, 'searchWarn.empty');
+                        return;
+                    }
+                    pushSearchTerm(result, `sampler:${/\s/.test(value) ? `"${value}"` : value}`);
+                    pushFilterPart(result, 'sampler', '', value);
+                    return;
+                }
+                const span = parseRange(value);
+                const number = toNumber(value);
+                if (!span && number == null) {
+                    pushWarning(result, token, 'searchWarn.number');
+                    return;
+                }
+                if (span) {
+                    const low = Math.min(span[0], span[1]);
+                    const high = Math.max(span[0], span[1]);
+                    pushSearchTerm(result, `${key}:${low}..${high}`);
+                    pushFilterPart(result, key, '=', `${low}..${high}`);
+                } else if (op === '>=' || op === '>') {
+                    pushSearchTerm(result, `${key}>=${number}`);
+                    pushFilterPart(result, key, '≥', String(number));
+                } else if (op === '<=' || op === '<') {
+                    pushSearchTerm(result, `${key}<=${number}`);
+                    pushFilterPart(result, key, '≤', String(number));
+                } else {
+                    pushSearchTerm(result, `${key}:${number}`);
+                    pushFilterPart(result, key, '=', String(number));
+                }
+                return;
+            }
             case 'seed': {
                 const num = toNumber(value);
                 if (num == null) {

@@ -221,7 +221,8 @@
             boxOwnedScalars = nextOwned;
 
             // Free text is declarative: the box owns it.
-            filters.search = parsed.freeText.join(' ').trim();
+            // The generation terms travel in the search text (the server reads them out of it).
+            filters.search = [...parsed.freeText, ...(parsed.searchTerms || [])].join(' ').trim();
         });
 
         if (added.length && typeof a.showToast === 'function') {

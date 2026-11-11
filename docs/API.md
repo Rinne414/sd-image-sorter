@@ -56,6 +56,7 @@ Notes:
 - Treat `cursor` / `next_cursor` as opaque tokens. Pass `next_cursor` back unchanged.
 - Legacy integer cursors are still accepted for backward compatibility, but clients should not generate or parse cursors themselves.
 - Cursor pagination is intended for `sort_by=newest` and `sort_by=oldest`
+- `search` may carry generation terms beside ordinary words: `sampler:VALUE` (the sampler name contains it), `steps:N`, `steps:A..B`, `steps>=N`, `steps<=N`, and the same forms for `cfg`. They are taken out of the text and matched against each picture's parsed generation data; every endpoint that takes `search` (count, selection, sorting scopes, bulk operations) reads them the same way
 - For `sort_by=random`, do not use a cursor
 - `random_seed` (integer, 1 to 2147483646) picks the shuffle for `sort_by=random`: the same seed is the same order, so offset paging stays stable; without it the historical fixed order is used
 

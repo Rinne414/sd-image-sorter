@@ -37,6 +37,7 @@ from db_helpers import (
     _folder_scope_query_match_clause,
 )
 from db_search_index import SearchPlan, lora_condition
+import db_generation_search
 
 
 def _apply_tag_filter(query: str, tags: Optional[List[str]], params: List[Any],
@@ -252,6 +253,14 @@ def _apply_search_filter(conditions: List[str], params: List[Any],
         Tuple of (modified conditions, modified params)
     """
     if not search_query:
+        return conditions, params
+
+    # sampler: / steps: / cfg: terms ride inside the search text (db_generation_search):
+    # they become conditions of their own and the rest is searched as usual.
+    search_query, generation_conditions, generation_params = db_generation_search.extract(search_query)
+    conditions.extend(generation_conditions)
+    params.extend(generation_params)
+    if not search_query.strip():
         return conditions, params
 
     raw_search = str(search_query or "").strip()

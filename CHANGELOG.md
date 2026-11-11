@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added / 新增
 
+- **Search by sampler, steps and CFG**: the Gallery search understands `sampler:"euler a"`, `steps:28`, `steps:20..30`, `steps>=30`, `cfg:7`, `cfg<=5.5`, alone or beside ordinary words (`rain sampler:euler steps>=28`). They work everywhere the search text is used: counts, select all matching, Auto-Separate, Manual Sort, bulk tagging and export. The search help lists them, and the Chinese keys 采样器 and 步数 work too.
+  - **按采样器、步数和 CFG 搜索**：图库搜索认得 `sampler:"euler a"`、`steps:28`、`steps:20..30`、`steps>=30`、`cfg:7`、`cfg<=5.5`，可以单独用，也可以和普通词一起用（`rain sampler:euler steps>=28`）。凡是用到搜索文字的地方都生效：数量、全选匹配项、自动分类、手动分类、批量打标和导出。搜索帮助里已列出，也可以用中文的“采样器”“步数”。
 - **Keep / Reject finishes the job**: a Keep / Reject session marked pictures and touched no file, so getting the rejects off the disk took about ten more clicks somewhere else. When a session ends, the line "Kept 31, rejected 58. No file was touched yet." now offers: move the kept to a folder (with Undo), look at the rejected in the Gallery, or send the rejected to the recycle bin (asked first, with the count). This works whatever the reject destination was, also with "Don't save".
   - **“保留 / 剔除”可以一步收尾**：以前“保留 / 剔除”只是给图片做记号，文件一个都没动，想把剔除的图从硬盘上清掉还要到别处再点十来下。现在一轮结束时会出现一行“保留 31 张，剔除 58 张，文件都还没动。”，可以：把保留的移到文件夹（可撤销）、在图库里查看剔除的图，或把剔除的移到回收站（会先确认并写明数量）。不管剔除的去向选的是什么（包括“不保存”）都可以用。
 - **A note on a picture**: the picture viewer has a Note field: why you kept it, what to fix, whom it is for. It is saved when you leave the field (or with Ctrl+Enter), and the Gallery's search finds its words, like a caption's.
