@@ -22,6 +22,33 @@
         return window.App || {};
     }
 
+    const EAGLE_LIBRARY_PATH = /\.library([\\/]|$)/i;
+    const EAGLE_ITEM_FOLDER = /^(.*\.library[\\/]images)[\\/][^\\/]+\.info$/i;
+
+    /**
+     * An Eagle library keeps every item in a folder of its own ("<ID>.info"): ten
+     * thousand pictures would be ten thousand rows that mean nothing to a person.
+     * They are shown as the library's one "images" folder, with their counts added up.
+     */
+    function collapseEagleItemFolders(folders, counts) {
+        const kept = [];
+        const seen = new Set();
+        const sums = counts && typeof counts === 'object' ? { ...counts } : null;
+        folders.forEach((path) => {
+            const item = EAGLE_ITEM_FOLDER.exec(String(path));
+            const shown = item ? item[1] : path;
+            if (!seen.has(shown)) {
+                seen.add(shown);
+                kept.push(shown);
+            }
+            if (item && sums) {
+                sums[shown] = (Number(sums[shown]) || 0) + (Number(sums[path]) || 0);
+                delete sums[path];
+            }
+        });
+        return { folders: kept, counts: sums };
+    }
+
     function log(level, message, error) {
         const logger = appRef().Logger || window.Logger;
         if (logger && typeof logger[level] === 'function') {
@@ -86,13 +113,14 @@
         async refresh(options = {}) {
             try {
                 const result = await appRef().API?.listLibraryFolders?.();
-                const folders = Array.isArray(result?.folders) ? result.folders : [];
+                const listed = Array.isArray(result?.folders) ? result.folders : [];
+                const { folders, counts } = collapseEagleItemFolders(listed, result?.counts);
                 const previous = new Set(this._folders.map((path) => normalizePath(path)));
                 this._folders = folders;
                 this._libraryDirs = new Set(folders.map((path) => normalizePath(path)));
                 this._tree = this._buildTree(folders);
-                this._counts = result?.counts && typeof result.counts === 'object' ? result.counts : null;
-                this._addCounts(this._tree, result?.counts);
+                this._counts = counts;
+                this._addCounts(this._tree, counts);
                 // Sync the highlighted/active folder from the persisted gallery
                 // filter so a reload keeps the tree and the gallery in step.
                 const current = normalizePath(appRef().AppState?.filters?.folder || '');
@@ -119,7 +147,8 @@
 
         /** The library's folders that hold pictures, with how many (Move / Copy dialog). */
         libraryFolders() {
-            return this._folders.map((path) => {
+            // Inside an Eagle library every folder is Eagle's own: not a place to move pictures to.
+            return this._folders.filter((path) => !EAGLE_LIBRARY_PATH.test(path)).map((path) => {
                 const count = Number(this._counts?.[path]);
                 return Number.isFinite(count) ? { path, count } : { path };
             });

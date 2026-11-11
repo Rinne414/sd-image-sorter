@@ -133,7 +133,15 @@
             return false;
         }
         if (!found.count) {
-            api.showToast?.(tr('newPictures.none', 'Nothing new {since}.', { since: sinceText(found) }), 'info');
+            api.showToast?.(
+                tr('newPictures.none', 'Nothing new {since}.', { since: sinceText(found) }),
+                'info',
+                global.LibraryRootsUI?.open ? {
+                    // Pictures made since may simply not have been read in yet.
+                    actionLabel: tr('newPictures.checkFolders', 'Check the folders'),
+                    onAction: () => global.LibraryRootsUI.open(),
+                } : {},
+            );
             return false;
         }
         const shown = await global.GalleryPin?.open?.(found.ids, { source: 'new' });
@@ -152,11 +160,9 @@
 
     /** Manual Sort calls this when a Keep / Reject session ends: the set it came from is dealt with. */
     function noteCullFinished() {
-        if (!pending) return;
-        const when = minute(pending.time);
-        if (markSeen({ quiet: true })) {
-            app()?.showToast?.(tr('newPictures.culled', 'These were your new pictures: next time only ones made after {when} count as new.', { when }), 'info');
-        }
+        // The cull's own finish line and toast already speak; a third message only
+        // competed with them. The Home tile shows the new count.
+        if (pending) markSeen({ quiet: true });
     }
 
     function wire() {

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { createTestImage } from '../fixtures/test-helpers'
 
 /**
  * Import dialog > "From an Eagle library…": look at what a library holds,
@@ -108,7 +109,6 @@ test('look first, then bring it in: counts, progress and the result are all said
 })
 
 test('a library built to the public layout comes in for real, in place', async ({ page, request }) => {
-  const { createTestImage } = await import('../fixtures/test-helpers')
   const root = path.join(__dirname, '..', '..', '..', '.tmp', 'manual-test', 'eagle-real', 'Scratch.library')
   fs.rmSync(root, { recursive: true, force: true })
   const item = async (id: string, name: string, meta: Record<string, unknown>, withFile = true) => {
@@ -146,6 +146,26 @@ test('a library built to the public layout comes in for real, in place', async (
   expect(detail.image.user_rating).toBe(4)
   expect(detail.image.note).toBe('from eagle')
   expect(detail.tags.map((tag: { tag: string }) => tag.tag).sort()).toEqual(['eagle scratch tag', 'night'])
+  // The sidebar shows the library's pictures as ONE folder, not one row per Eagle item.
+  await page.locator('#eagle-import-close').click()
+  await page.evaluate(() => (window as any).FolderTreeUI.refresh())
+  await expect.poll(() => page.evaluate(() => (window as any).FolderTreeUI._folders.filter((folder: string) => /Scratch\.library/.test(folder)))).toHaveLength(1)
+  const shown = await page.evaluate(() => (window as any).FolderTreeUI._folders.filter((folder: string) => /Scratch\.library/.test(folder)))
+  expect(shown[0].split(path.win32.sep).join('/')).toMatch(/Scratch\.library\/images$/)
+  // Nor is Eagle's own folder offered as a place to move pictures to.
+  expect(await page.evaluate(() => (window as any).FolderTreeUI.libraryFolders().some((entry: { path: string }) => /\.library/.test(entry.path)))).toBe(false)
+
+  // Moving such a picture, or sending it to the bin, says what that does to Eagle first.
+  await page.evaluate((name) => (window as any).GalleryToolbar.search(name), `eagle-one-${stamp}`)
+  await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(1)
+  await page.evaluate((id) => { void (window as any).App.moveOrCopyGalleryImages([id], 'move', { source: 'context', destination: 'D:/somewhere-else' }) }, one.id)
+  const question = page.locator('#confirm-modal.visible')
+  await expect(question.locator('#confirm-message')).toContainText('Inside an Eagle library: 1. Moving takes them out of Eagle; Copy keeps both.')
+  await question.locator('#btn-confirm-cancel').click()
+  await page.evaluate((id) => { void (window as any).App.deleteGalleryImagesByIds([id]) }, one.id)
+  await expect(question.locator('#confirm-message')).toContainText('They will be gone from Eagle too')
+  await question.locator('#btn-confirm-cancel').click()
+
   // The Eagle folder itself is as it was: same files, nothing added.
   expect(fs.readdirSync(path.join(root, 'images', 'AAA.info')).sort()).toEqual([`eagle-one-${stamp}.png`, `eagle-one-${stamp}_thumbnail.png`, 'metadata.json'].sort())
 })

@@ -103,7 +103,8 @@ test('"Keep / Reject them" lands on Manual Sort in that mode, limited to the new
   // Finishing the cull is what moves the marker.
   await page.evaluate(() => (window as any).NewPictures.noteCullFinished())
   expect(await marker(page)).toEqual({ main: NEWEST })
-  await expect(page.locator('.toast').filter({ hasText: 'These were your new pictures' })).toBeVisible()
+  // Quietly: the cull's own finish line and toast already speak.
+  await expect(page.locator('.toast').filter({ hasText: 'new pictures' })).toHaveCount(0)
 })
 
 test('with a marker only later pictures count, and "nothing new" says since when and stays on Home', async ({ page }) => {

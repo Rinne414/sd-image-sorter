@@ -393,7 +393,11 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                                 {
                                     icon: '#i-keyboard',
                                     label: _formatAutoSepI18n('autosep.sortRestByHand', 'Sort the rest by hand'),
-                                    action: () => window._switchSortingSub?.('manual'),
+                                    action: () => {
+                                        window._switchSortingSub?.('manual');
+                                        // "The rest": the pictures this run just handled stay out.
+                                        if (typeof setManualSortExcludeSorted === 'function') setManualSortExcludeSorted(true);
+                                    },
                                 },
                                 // The way back: every file returns to where it was (copies are removed).
                                 ...(progress.run_token && typeof undoGalleryMove === 'function' ? [{

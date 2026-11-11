@@ -92,7 +92,9 @@ async function deleteGalleryImagesByIds(imageIds, options = {}) {
                 : ids.slice(0, 5).join(', ')),
     });
 
-    showConfirm(title, message, async () => {
+    // Pictures inside an Eagle library leave Eagle too: say so before the bin takes them.
+    const eagleNote = eagleWarning(ids, 'selection.eagleDeleteWarning', 'Inside an Eagle library: {count}. They will be gone from Eagle too.');
+    showConfirm(title, message + eagleNote, async () => {
         try {
             let result;
             if (shouldUseBulkJob(selectionToken, ids.length)) {
@@ -332,6 +334,22 @@ function addRecentMoveDestination(path) {
     }
 }
 
+/**
+ * How many of these pictures live inside an Eagle library (known for the
+ * pictures the Gallery has loaded). Eagle finds an item by its file in the
+ * item's own folder, so a move or the recycle bin takes it out of Eagle too.
+ */
+function countEagleLibraryPictures(ids) {
+    const wanted = new Set(ids.map(Number));
+    return (AppState.images || []).filter((image) => wanted.has(Number(image.id))
+        && /\.library[\\/]images[\\/][^\\/]+\.info[\\/]/i.test(String(image.path || ''))).length;
+}
+
+function eagleWarning(ids, key, fallback) {
+    const count = countEagleLibraryPictures(ids);
+    return count ? ' ' + I18n.format(appT(key, fallback), { count }) : '';
+}
+
 async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {}) {
     const normalizedOperation = operation === 'copy' ? 'copy' : 'move';
     // v3.2.1 task #34: when the user is in "Select All Filtered" scope, the
@@ -398,7 +416,10 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
         destination: trimmedDestination,
     });
 
-    showConfirm(confirmTitle, confirmBody, async () => {
+    const eagleNote = normalizedOperation === 'move'
+        ? eagleWarning(ids, 'selection.eagleMoveWarning', 'Inside an Eagle library: {count}. Moving takes them out of Eagle; Copy keeps both.')
+        : '';
+    showConfirm(confirmTitle, confirmBody + eagleNote, async () => {
         try {
             // v3.3.0 USR-1: drive the move through the background job so the
             // progress bar streams (and the user can see how far the per-file
