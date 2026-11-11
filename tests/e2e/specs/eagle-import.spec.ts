@@ -77,7 +77,7 @@ test('look first, then bring it in: counts, progress and the result are all said
   const summary = page.locator('#eagle-import-summary')
   await expect(summary).toContainText('Pictures and videos')
   await expect(summary.locator('dd').first()).toHaveText('12')
-  await expect(summary).toContainText('9 (21 different tags)')
+  await expect(summary).toContainText('9 (21 tags in all)')
   await expect(summary).toContainText('7 (5 folders)')
   await expect(summary).toContainText('Passed over: bookmarks and items without a file')
   // A count of zero is not listed as something passed over.

@@ -70,7 +70,7 @@
     function sinceText(found) {
         return found.remembered
             ? tr('newPictures.sinceCull', 'since {when}', { when: minute(found.after) })
-            : tr('newPictures.sinceDays', 'from the last {days} days', { days: FIRST_TIME_DAYS });
+            : tr('newPictures.sinceDays', 'from the last week', { days: FIRST_TIME_DAYS });
     }
 
     /** The Home tile's live line. */

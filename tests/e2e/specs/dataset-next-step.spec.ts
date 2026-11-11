@@ -54,12 +54,12 @@ test('it follows the dataset from empty to ready, and its button leads to the ri
     maker._booruTextFor = (id: number) => (Number(id) === Number(bare) ? '' : '1girl, solo')
   }, ids[0])
   await redraw(page)
-  await expect(text(page)).toHaveText('1 of 3 pictures have no caption yet.')
+  await expect(text(page)).toHaveText('No caption yet: 1 of 3 pictures.')
   await expect(go(page)).toHaveText('Caption them')
   await go(page).click()
   expect(await openTab(page)).toBe('workbench')
   // There already: the sentence stays, the button goes; the line keeps its height.
-  await expect(text(page)).toHaveText('1 of 3 pictures have no caption yet.')
+  await expect(text(page)).toHaveText('No caption yet: 1 of 3 pictures.')
   await expect(go(page)).toBeHidden()
   const height = (await line(page).boundingBox())!.height
 

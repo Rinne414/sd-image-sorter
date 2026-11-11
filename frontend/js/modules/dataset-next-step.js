@@ -36,7 +36,7 @@
         if (without > 0) {
             return {
                 tab: 'workbench',
-                text: tr('datasetNext.captions', '{n} of {total} pictures have no caption yet.', { n: without, total: ids.length }),
+                text: tr('datasetNext.captions', 'No caption yet: {n} of {total} pictures.', { n: without, total: ids.length }),
                 go: tr('datasetNext.goWorkbench', 'Caption them'),
             };
         }

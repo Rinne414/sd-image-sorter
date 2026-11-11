@@ -48,7 +48,7 @@
     function showFound(found) {
         rows(byId('eagle-import-summary'), [
             [tr('eagle.foundItems', 'Pictures and videos'), found.items],
-            [tr('eagle.foundTags', 'With tags'), `${found.with_tags} (${tr('eagle.distinctTags', '{n} different tags', { n: found.distinct_tags })})`],
+            [tr('eagle.foundTags', 'With tags'), `${found.with_tags} (${tr('eagle.distinctTags', '{n} tags in all', { n: found.distinct_tags })})`],
             [tr('eagle.foundStars', 'With stars'), found.with_stars],
             [tr('eagle.foundNotes', 'With notes'), found.with_notes],
             [tr('eagle.foundFolders', 'In folders'), `${found.in_folders} (${tr('eagle.folderCount', '{n} folders', { n: found.folders })})`],

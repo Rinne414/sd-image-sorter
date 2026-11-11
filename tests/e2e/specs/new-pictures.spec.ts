@@ -61,7 +61,7 @@ test('the tile counts what is waiting, opens exactly those pictures, and "Mark a
 
   // First time: no marker, so the last 7 days count; the tile says how many and from when.
   const tile = page.locator('#entry-mission-new')
-  await expect(tile.locator('#entry-mission-new-count')).toHaveText('3 to go through, from the last 7 days')
+  await expect(tile.locator('#entry-mission-new-count')).toHaveText('3 to go through, from the last week')
   expect(library.asked()[0]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
 
   await tile.click()
@@ -70,7 +70,7 @@ test('the tile counts what is waiting, opens exactly those pictures, and "Mark a
   await expect(page.locator('#gallery-pin-banner-title')).toHaveText('3 new pictures')
   expect(library.pinned()).toEqual([[41, 42, 43]])
   const next = page.locator('#pipeline-next-step')
-  await expect(next.locator('.pns-title')).toHaveText('3 new pictures from the last 7 days. What next?')
+  await expect(next.locator('.pns-title')).toHaveText('3 new pictures from the last week. What next?')
   await expect(next.locator('.pns-actions button')).toHaveText(['Keep / Reject them', 'Mark all as seen'])
   // Looking is not dealing with them: nothing is remembered yet.
   expect(await marker(page)).toEqual({})
