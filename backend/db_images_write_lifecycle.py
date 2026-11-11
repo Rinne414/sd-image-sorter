@@ -186,6 +186,18 @@ def update_image_path(image_id: int, new_path: str):
         cursor = conn.cursor()
         normalized_path = _normalize_indexed_image_path(new_path)
         new_filename = os.path.basename(normalized_path)
+        # The file now at this path is the one that was just moved (a move never
+        # overwrites a file). Another record still claiming the path is of a file
+        # that went missing from here; left in place it made the move fail on the
+        # unique path and put the file back (seen 2026-11-12: move a picture out
+        # with Explorer, then move it back in the program).
+        from utils.source_paths import indexed_image_path_casefold
+
+        cursor.execute(
+            "DELETE FROM images WHERE id != ? AND id IN "
+            "(SELECT image_id FROM image_path_identities WHERE path_key = ?)",
+            (image_id, indexed_image_path_casefold(normalized_path)),
+        )
         cursor.execute(
             """
             UPDATE images

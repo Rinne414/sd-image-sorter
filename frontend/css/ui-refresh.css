@@ -10201,6 +10201,37 @@ html.lang-zh #view-censor .queue-action-btn span {
     cursor: default;
     visibility: hidden;
 }
+
+/* The row's own actions (js/folder-tree-actions.js): shown with the pointer or the keyboard on the row. */
+.folder-row-more {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 22px;
+    height: 22px;
+    justify-content: center;
+    opacity: 0;
+    padding: 0;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.folder-row:hover .folder-row-more,
+.folder-row:focus-within .folder-row-more,
+.folder-row.is-active .folder-row-more {
+    opacity: 1;
+}
+.folder-row-more:hover,
+.folder-row-more:focus-visible {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.folder-row-more:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 1px;
+}
 .folder-row-open {
     align-items: center;
     background: transparent;

@@ -150,6 +150,7 @@ from routers import background_models
 from routers import network
 from routers import local_picture
 from routers import eagle as eagle_router
+from routers import folders as folders_router
 from routers import assistant as assistant_router
 from model_residency import start_idle_sweeper, stop_idle_sweeper
 
@@ -448,6 +449,7 @@ app.include_router(metadata_repair.router)
 app.include_router(output_folders.router)
 app.include_router(assistant_router.router)
 app.include_router(folder_watch.router)
+app.include_router(folders_router.router)
 app.include_router(background_models.router)
 app.include_router(generator_recipe.router)
 app.include_router(browser_extension.ext_router)

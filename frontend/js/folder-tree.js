@@ -382,7 +382,10 @@
                 + '<span class="folder-row-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span>'
                 + `<span class="folder-row-name">${this._chainLabelHtml(chain)}</span>`
                 + (Number.isFinite(node.count) ? `<span class="folder-row-count">${node.count}</span>` : '')
-                + '</button></div>';
+                + '</button>'
+                + `<button type="button" class="folder-row-more" data-path="${safePath}" aria-haspopup="menu" `
+                + `aria-label="${escapeHtml(t('folders.more', 'Folder actions'))}" title="${escapeHtml(t('folders.more', 'Folder actions'))}">`
+                + '<svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>';
 
             if (hasKids && isExpanded) {
                 html += [...node.children.values()].map((kid) => this._nodeHtml(kid, depth + 1)).join('');

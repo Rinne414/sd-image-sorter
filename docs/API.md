@@ -208,6 +208,9 @@ Example response:
 { "total": 4213 }
 ```
 
+#### POST /api/folders/rename
+Rename a folder of the library on disk and keep its pictures. Body: `{ "path": "L:/art/sketches", "new_name": "studies" }` (`new_name` is a name, not a path). The folder is renamed beside itself with one rename, so captions and other files in it travel along; every picture record under it (any depth, every library) is pointed at the new place and keeps its tags, rating, favourite mark and sets, and a library root at or under the folder follows. Returns `{ "old_path", "new_path", "pictures", "records", "roots", "replaced" }`: `pictures` counts the readable ones, `records` all that were repointed, `replaced` old records of missing files that already claimed a new path and were dropped. Refusals answer `{ "code", "message" }`: `400` `name_empty`, `name_invalid`, `name_same`, `is_drive`, `eagle_library` (a folder inside an Eagle library); `404` `folder_missing`; `409` `name_taken`, `in_use` (Windows would not rename it), `busy` (a scan or a move is running). Nothing changes on a refusal; when the records cannot be written the folder is renamed back.
+
 #### GET /api/folders
 List the distinct directories that contain indexed images, forward-slash normalized and sorted (v3.3.2 Library Navigation). The frontend builds a collapsible folder tree by splitting each path on `/`; clicking a node scopes the gallery via the `folder` parameter documented under `GET /api/images` (recursive subtree). Recomputed per call from the live index, so it always reflects the current library.
 

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added / 新增
+
+- **Rename a folder, or make a new one, from the sidebar**: each folder in the sidebar has a small menu (the dots at the end of its row, or a right-click). "Rename…" renames the folder on your disk and every picture in it keeps its tags, rating and sets, with an Undo; until now a folder could only be renamed outside the program, after which its pictures counted as missing. "Move the selection to a new folder here…" makes a folder inside it and moves the selected pictures in. Folders inside an Eagle library are left to Eagle.
+  - **在侧栏里给文件夹重命名、新建文件夹**：侧栏里每个文件夹都有一个小菜单（行尾的三个点，或右键）。“重命名…”会在磁盘上给文件夹改名，里面图片的标签、评分和集合都保留，并且可以撤销；以前只能在程序外改名，改完图片就变成“文件丢失”。“把选中的图片移到这里的新文件夹…”会在里面新建文件夹并把选中的图片移进去。Eagle 资源库里的文件夹仍由 Eagle 管理。
+
+### Fixed / 修复
+
+- **Moving a picture back to where an old record still pointed**: when a picture had been moved out of a folder outside the program, the library kept a record of the missing file. Moving a picture to that same place and name then failed and the file was put back. The old record now gives way to the picture that is really there.
+  - **把图片移回旧记录还指着的位置**：如果图片是在程序外被移出文件夹的，图库里会留下一条“文件丢失”的记录；之后再把图片移到同一个位置、同一个名字，移动会失败，文件被放回原处。现在旧记录会让位给真正在那里的图片。
+
 ### Removed / 移除
 
 - **One interface: V Opus and the trial interface are retired**: the program had three interfaces over one library, and only the classic one got new features (none of this version's additions reached the other two). On the owner's decision the program now has one interface. The Interface row in Settings and the V Opus entry in the function catalog are gone; the old addresses `/vopus/`, `/v4/` and `/next/` open the program. Your library, settings and files are not touched. A source install no longer needs Node.js to start, and packages are smaller.
