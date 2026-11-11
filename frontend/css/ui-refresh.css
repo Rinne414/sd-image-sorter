@@ -14488,3 +14488,66 @@ html:not([data-look-variant="b"]) #pro-library-views {
     background: rgba(var(--accent-primary-rgb), 0.14);
     box-shadow: inset 0 0 0 1px var(--accent-primary);
 }
+
+/* Recent moves dialog (js/modules/recent-moves.js): one row per run, Undo at its end. */
+.recent-moves-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 56vh;
+    margin: 0 0 10px;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.recent-moves-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctl, 10px);
+    background: var(--surface-1);
+}
+
+.recent-moves-text {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 2px 12px;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 14px;
+}
+
+.recent-moves-what {
+    color: var(--text);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.recent-moves-where {
+    overflow: hidden;
+    color: var(--muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recent-moves-when {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.recent-moves-state {
+    flex: none;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.recent-moves-empty {
+    padding: 18px 12px;
+    color: var(--muted);
+    text-align: center;
+}

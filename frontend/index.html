@@ -600,6 +600,12 @@
                                 <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg></span>
                                 <span class="tab-text" data-i18n="dup.navTitle">Duplicate Cleanup</span>
                             </button>
+                            <!-- Undo a move or copy after its toast is gone (js/modules/recent-moves.js) -->
+                            <button class="nav-tab nav-tools-item" id="nav-tools-recent-moves" type="button"
+                                    data-i18n-title="recentMoves.navTip" title="Recent moves and copies, each with Undo">
+                                <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-undo"/></svg></span>
+                                <span class="tab-text" data-i18n="recentMoves.nav">Recent moves</span>
+                            </button>
                             <!-- Owner 2026-07-07: 成套发布 left the More menu — the Pixiv
                                  mission, the gallery batch bar's publish button, and the
                                  function catalog are its entrances now. -->
@@ -9353,6 +9359,7 @@
     <script src="/static/js/modules/gallery-describe.js"></script>
     <script src="/static/js/folder-tree-drop.js"></script>
     <script src="/static/js/modules/eagle-import.js"></script>
+    <script src="/static/js/modules/recent-moves.js"></script>
     <script src="/static/js/modules/compare-two.js"></script>
     <script src="/static/js/reference-view/view.js"></script>
     <script src="/static/js/modules/reference-window.js"></script>

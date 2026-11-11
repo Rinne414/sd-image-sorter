@@ -596,6 +596,14 @@ async def cancel_batch_move(
     return service.cancel_batch_move()
 
 
+@router.get("/batch-move/runs")
+def list_batch_move_runs(limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0)):
+    """The recent move and copy runs, newest first, each with whether it was undone."""
+    from services.sorting import move_runs
+
+    return move_runs.list_runs(limit=limit, offset=offset)
+
+
 @router.post("/batch-move/undo")
 def undo_batch_move(
     request: BatchMoveUndoRequest,

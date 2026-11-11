@@ -146,3 +146,41 @@ test('answering No moves nothing, and a drag without pictures is not a drop here
   expect(taken).toBe(false)
   await expect(row).not.toHaveClass(/is-drop-target/)
 })
+
+test('a move can still be undone from "Recent moves" after its message is gone', async ({ page }) => {
+  await openGallery(page)
+  const id = await page.evaluate(async (name) => {
+    const found = await (window as any).App.API.getImages({ search: name, limit: 5 })
+    return Number(found.images.find((image: { filename: string }) => image.filename === name).id)
+  }, FILE)
+  await folderRow(page, toFolder)
+  const rowSelector = `#folder-tree .folder-row[data-path$="${path.basename(toFolder)}"]`
+  await dragEvent(page, rowSelector, 'drop', [id])
+  await page.locator('#confirm-modal.visible #btn-confirm-ok').click()
+  await expect.poll(() => fs.existsSync(path.join(toFolder, FILE)), { timeout: 30_000 }).toBe(true)
+
+  // The message and its Undo are gone: a reload, as if the user came back later.
+  await page.reload()
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+  await expect(page.locator('.toast-action-btn')).toHaveCount(0)
+
+  // More > Recent moves lists the run first, with what it did and where to.
+  await page.evaluate(() => (window as any).RecentMoves.open())
+  const first = page.locator('#recent-moves-list .recent-moves-row').first()
+  await expect(first.locator('.recent-moves-what')).toHaveText('Moved 1 file')
+  await expect(first.locator('.recent-moves-where')).toContainText('folder-drop-to')
+  await expect(first.locator('.recent-moves-when')).toHaveText(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
+
+  await first.getByRole('button', { name: 'Undo' }).click()
+  await expect.poll(() => fs.existsSync(path.join(fromFolder, FILE)), { timeout: 30_000 }).toBe(true)
+  expect(fs.existsSync(path.join(toFolder, FILE))).toBe(false)
+  // The run stays in the list, marked, and cannot be undone twice.
+  const again = page.locator('#recent-moves-list .recent-moves-row').first()
+  await expect(again.locator('.recent-moves-state')).toHaveText('Undone')
+  await expect(again.getByRole('button', { name: 'Undo' })).toHaveCount(0)
+
+  // The same door is in the More menu, and the dialog fits the window.
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#recent-moves-modal')).not.toHaveClass(/visible/)
+  expect(await page.locator('#nav-tools-recent-moves').count()).toBe(1)
+})

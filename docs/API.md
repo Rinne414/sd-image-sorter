@@ -272,6 +272,9 @@ Body: `{path}`. Starts bringing the library into the open library in the backgro
 #### GET /api/images?sort_by=set_order
 With `collection_id`: the pictures of that collection in the order they were put into it. A pinned set (`POST /api/collections/pinned`) keeps the order of the ids it was given, so a set made from a ranking (the Gallery's "Search by meaning") lists closest first. Paged by `offset`, like every sort but newest and oldest. Without `collection_id` it is newest first.
 
+#### GET /api/batch-move/runs
+Query: `limit` (1 to 100, default 20), `offset`. The recent move and copy runs, newest first: `{runs: [{run_token, operation, destination, started_at, files, interrupted, undone}], total}`. `run_token` is what `POST /api/batch-move/undo` takes; `interrupted` counts files a run began on and never finished. The last 100 runs are kept.
+
 #### GET /api/new-pictures
 Query: `after?` (a `newest_time` from an earlier answer, or a local `YYYY-MM-DD HH:MM:SS`). The open library's pictures made after that moment, newest first, by the picture's own time (the key of the newest-first order), not by when it was last indexed. Returns `{after, ids, count, newest_time}`; `newest_time` is the library's newest picture and is the marker to remember for next time. Without `after` every picture counts.
 

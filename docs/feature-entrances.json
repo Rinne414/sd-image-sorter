@@ -4454,6 +4454,21 @@
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
       }
+    },
+    {
+      "id": "library.recent-moves",
+      "area": "library",
+      "en": "Recent moves: the last moves and copies, each with Undo, after the result message is gone",
+      "zh": "最近的移动：最近的移动和复制，每一次都可以撤销，提示消失之后也可以",
+      "classic": [
+        "#nav-tools-recent-moves"
+      ],
+      "vopus": {
+        "missing": "Built for the classic interface first (2026-11-11)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [
