@@ -4357,6 +4357,24 @@
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
       }
+    },
+    {
+      "id": "similar.wander",
+      "area": "similar",
+      "en": "Wander: look around the library batch by batch, drifting from a starting picture",
+      "zh": "漫游：从一张图出发，一批一批地四处看，逐渐走远",
+      "classic": [
+        "#btn-wander-random",
+        "#btn-wander-from-selection",
+        "#btn-wander-more",
+        "#btn-wander-to-gallery"
+      ],
+      "vopus": {
+        "missing": "Built for the classic interface first (2026-11-11)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [

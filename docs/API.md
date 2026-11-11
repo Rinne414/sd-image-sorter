@@ -1738,6 +1738,9 @@ Get embedding statistics.
 #### GET /api/similarity/model-status
 Get local CLIP runtime readiness and the preferred local model path. Includes `message_key` (an i18n key such as `models.clip.missingModel`) alongside the English `message` so the frontend can localize the status detail.
 
+#### POST /api/similarity/wander
+Body: `{start_id?, seen_ids, count}` (`count` 1 to 200, default 24). The next batch of a wander: pictures somewhat like `start_id` that are not in `seen_ids`, ranked by CLIP similarity within a random sample of up to 600 unseen pictures. Returns `{start: {id, filename}, images: [{id, filename, similarity}], next_start_id, left}`; `next_start_id` is the least similar picture shown, which is where the walk goes on. Without `start_id` (or with one that is not indexed) the walk begins at a random unseen picture. Empty `images` means everything was seen. 409 when the library has no similarity index.
+
 #### POST /api/similarity/pick-varied
 Body: `{image_ids, count}`. From the given pictures, choose `count` that differ most from one another by their stored CLIP vectors: farthest-point sampling that starts at the most typical picture; a picture with no near neighbour in the pile waits until the others are used (that check is skipped above 20,000 pictures). Returns `{picked, considered, not_indexed}`; `picked` is in the order chosen, and pictures without a vector are only counted in `not_indexed`.
 

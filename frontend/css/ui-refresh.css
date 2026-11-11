@@ -14382,3 +14382,97 @@ html:not([data-look-variant="b"]) #pro-library-views {
     font-size: 13px;
     overflow-wrap: anywhere;
 }
+
+/* Find Similar > Wander: actions on one row, then a grid of plain thumbnails. */
+.wander-intro {
+    margin: 0 0 10px;
+}
+
+.wander-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.wander-actions [hidden] {
+    display: none;
+}
+
+.wander-status {
+    min-height: 20px;
+    margin: 0 0 10px;
+    color: var(--muted, #8A8A90);
+    font-size: 13px;
+}
+
+.wander-status[data-tone="error"] {
+    color: var(--danger, #DE6B66);
+}
+
+.wander-results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 10px;
+}
+
+.wander-item {
+    position: relative;
+    aspect-ratio: 3 / 4;
+    padding: 0;
+    border: 1px solid var(--border, #2B2B2E);
+    border-radius: var(--r-tile, 14px);
+    overflow: hidden;
+    background: var(--stage, #09090A);
+    cursor: pointer;
+}
+
+.wander-item img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.wander-item:hover {
+    border-color: var(--border-strong, #3A3A3E);
+}
+
+.wander-item:focus-visible {
+    outline: 2px solid var(--accent-line, rgba(214, 216, 220, 0.45));
+    outline-offset: 1px;
+}
+
+.wander-item.is-start {
+    border-color: var(--accent, #D6D8DC);
+}
+
+.wander-item-mark {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.72);
+    color: #fff;
+    font-size: 12px;
+}
+
+/* The last cell of a wander: a button that goes on with the walk. */
+.wander-more-tile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    border-style: dashed;
+    border-color: var(--border-strong, #3A3A3E);
+    background: var(--surface-2, #1C1C1E);
+    color: var(--text, #E8E8EA);
+    font: inherit;
+    font-weight: 600;
+    text-align: center;
+}
+
+.wander-more-tile:hover {
+    background: var(--surface-3, #232326);
+}

@@ -21,6 +21,7 @@
         assistant: ['galleryPin.titleAssistant', '{n} picked by the assistant'],
         varied: ['galleryPin.titleVaried', '{n} picked for variety'],
         rejected: ['galleryPin.titleRejected', '{n} you rejected'],
+        wander: ['galleryPin.titleWander', '{n} seen while wandering'],
     };
 
     const app = () => global.App || null;

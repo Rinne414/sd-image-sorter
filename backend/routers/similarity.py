@@ -38,6 +38,12 @@ class TextSearchRequest(BaseModel):
     scope: Optional[str] = Field(default=None, pattern="^(current_session|library)$")
 
 
+class WanderRequest(BaseModel):
+    start_id: Optional[int] = Field(default=None, ge=1, description="The picture to walk on from; left out: a random one not seen yet")
+    seen_ids: List[int] = Field(default_factory=list, description="Pictures this walk already showed")
+    count: int = Field(default=24, ge=1, le=200, description="How many pictures in the batch")
+
+
 class PickVariedRequest(BaseModel):
     image_ids: List[int] = Field(..., min_length=1, description="The pictures to pick from")
     count: int = Field(..., ge=1, description="How many to pick")
@@ -364,3 +370,28 @@ def pick_varied_pictures(request: PickVariedRequest):
     picked, left_out = varied_pick.pick_varied(request.image_ids, request.count)
     total = len(dict.fromkeys(request.image_ids))
     return {"picked": picked, "considered": total - left_out, "not_indexed": left_out}
+
+
+@router.post(
+    "/wander",
+    summary="The next batch of a wander through the library",
+    description=(
+        "From `start_id`, a batch of pictures somewhat like it that are not in `seen_ids`, ranked by "
+        "CLIP similarity within a random sample of the unseen pictures; `next_start_id` (the least "
+        "similar picture shown) is where the walk goes on, so it drifts instead of circling."
+    ),
+)
+def wander_next_batch(request: WanderRequest):
+    """Returns ``{start, images, next_start_id, left}``; an empty ``images`` means everything was seen.
+
+    409 when the library has no similarity index. A plain ``def`` (threadpool).
+    """
+    from fastapi import HTTPException
+
+    from services import wander
+
+    try:
+        return wander.next_batch(request.start_id, request.seen_ids, request.count)
+    except wander.NotIndexedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+

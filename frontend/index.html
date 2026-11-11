@@ -3381,6 +3381,7 @@
                     <div class="similar-tabs">
                         <button class="similar-tab active" data-target="panel-similar-search" data-i18n="similar.search">Search</button>
                         <button class="similar-tab" data-target="panel-similar-duplicates" data-i18n="similar.duplicates">Duplicates</button>
+                        <button class="similar-tab" data-target="panel-similar-wander" data-i18n="wander.tab">Wander</button>
                     </div>
 
                     <!-- Body -->
@@ -3442,6 +3443,19 @@
                             <div class="promptlab-load-more-row">
                                 <button class="btn btn-ghost btn-small" id="btn-similar-duplicates-more" type="button" data-i18n="common.loadMore">Load More</button>
                             </div>
+                        </div>
+
+                        <!-- Wander Panel: look around batch by batch (js/similar/wander.js) -->
+                        <div class="similar-panel" id="panel-similar-wander" style="display: none;">
+                            <p class="helper-text wander-intro" data-i18n="wander.intro">Start at a picture and look around: each batch is somewhat like the last, never repeats, and drifts a little further.</p>
+                            <div class="wander-actions">
+                                <button class="btn btn-primary" id="btn-wander-random" type="button" data-i18n="wander.random">Start from a random picture</button>
+                                <button class="btn btn-secondary" id="btn-wander-from-selection" type="button" data-i18n="wander.fromSelection">Start from the picture selected in the Gallery</button>
+                                <button class="btn btn-secondary" id="btn-wander-more" type="button" hidden data-i18n="wander.more">More, a little further</button>
+                                <button class="btn btn-ghost" id="btn-wander-to-gallery" type="button" hidden></button>
+                            </div>
+                            <p class="wander-status" id="wander-status" aria-live="polite"></p>
+                            <div id="wander-results" class="wander-results"></div>
                         </div>
                     </div>
                 </div>
@@ -9128,6 +9142,7 @@
     <script src="/static/js/similar/duplicates.js"></script>
     <script src="/static/js/similar/render.js"></script>
     <script src="/static/js/similar/to-gallery.js"></script>
+    <script src="/static/js/similar/wander.js"></script>
     <script src="/static/js/similar/events.js"></script>
     <script src="/static/js/similar/boot.js"></script>
     <script src="/static/js/similar.js"></script>

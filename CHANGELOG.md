@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added / 新增
 
+- **Wander through the library**: Find Similar has a third tab, Wander, for looking around rather than searching. Start from a random picture or from the one selected in the Gallery; each batch shows pictures somewhat like the last one, never one you already saw, and "More, a little further" goes on from the least similar picture of the batch, so the walk drifts through the library instead of circling. The pictures seen can be opened in the Gallery as one set. It uses the similarity index.
+  - **在图库里漫游**：“相似”页多了第三个标签“漫游”，用来随便看看而不是搜索。可以从随机一张图开始，也可以从图库里选中的那张开始；每一批都是和上一批有点像、但你还没看过的图，“再来一批，走远一点”会从这一批里最不像的那张继续，所以会一路走远而不是原地打转。看过的图可以作为一组在图库中打开。它使用相似索引。
 - **Compare two pictures you pick**: select exactly two pictures, open More in the selection bar and choose "Compare these two…". A dialog shows them side by side and lists what differs: prompt words added and removed, settings, LoRAs and the seed. Either picture opens in the viewer from there.
   - **比较你选的两张图**：正好选中两张图片，在选择栏的“更多”里点“比较这两张…”。对话框会把两张并排显示，并列出差别：提示词多了、少了哪些词，设置、LoRA 和种子。点其中一张可以直接在查看器里打开。
 - **Missions hand over to their next step**: the Pixiv mission opens the Gallery already in select mode, so the first click picks a picture. When Auto-Separate finishes, its line offers "Sort the rest by hand", which opens Manual Sort for what the rule did not catch.
