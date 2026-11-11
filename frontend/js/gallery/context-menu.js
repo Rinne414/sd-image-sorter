@@ -101,6 +101,7 @@ Object.assign(window.Gallery, {
             }},
             { tool: true, pictureOnly: true, label: labelWithScope('modal.addToDataset', 'Add to dataset'), icon: 'i-package', action: () => app.addToDatasetMaker?.(actionImageIds, { switchView: true, showToast: true }) },
             { tool: true, pictureOnly: true, label: t('gallery.contextFindSimilar', 'Find Similar'), icon: 'i-images', action: () => app.openSimilarFromImage?.(image.id) },
+            { tool: true, pictureOnly: true, label: t('reference.open', 'Float as reference'), icon: 'i-pin', action: () => window.ReferenceWindow?.open?.(image.id, image.filename || '').catch((error) => app.showToast?.(error?.message || String(error), 'error')) },
             { tool: true, pictureOnly: true, label: t('gallery.contextViewOnStyleMap', 'View on the Style Map'), icon: 'i-compass', action: () => window.StyleMap?.locateImage?.(image.id) },
             { tool: true, pictureOnly: true, label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: 'i-layers', action: () => window.ClipTools?.near?.(image.id) },
             actionCount === 2

@@ -4375,6 +4375,21 @@
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
       }
+    },
+    {
+      "id": "viewer.reference-window",
+      "area": "viewer",
+      "en": "Float as reference: keep one picture in a small always-on-top window (zoom, mirror, grey)",
+      "zh": "浮动参考图：把一张图放进始终置顶的小窗口（缩放、镜像、灰度）",
+      "classic": [
+        "#btn-modal-reference"
+      ],
+      "vopus": {
+        "missing": "Built for the classic interface first (2026-11-11)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [

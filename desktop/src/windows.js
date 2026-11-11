@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * The main window (the program's own web UI) and the small always-on-top
- * Quick collect window. Closing the main window hides it to the tray; after
+ * The main window (the program's own web UI), the small always-on-top
+ * Quick collect window and the always-on-top reference windows. Closing the main window hides it to the tray; after
  * HIDDEN_RELEASE_MS hidden, the page is released to give its memory back
  * and is loaded again on the next open.
  */
@@ -46,6 +46,7 @@ class WindowManager {
         this.onHiddenFirstTime = onHiddenFirstTime;
         this.main = null;
         this.quick = null;
+        this.references = new Map();
         this.quitting = false;
         this.releaseTimer = null;
         this.lastLoad = null;
@@ -118,6 +119,31 @@ class WindowManager {
         win.on('closed', () => { this.quick = null; });
         win.loadURL(url);
         this.quick = win;
+        return win;
+    }
+
+    /**
+     * A small always-on-top window showing one picture, to keep beside other
+     * work. One window per picture: asking for the same picture again brings
+     * its window forward.
+     */
+    openReference(imageId, url) {
+        const open = this.references.get(imageId);
+        if (open && !open.isDestroyed()) {
+            open.show();
+            open.focus();
+            return open;
+        }
+        const win = new BrowserWindow({
+            width: 420, height: 560, minWidth: 160, minHeight: 160,
+            alwaysOnTop: true, maximizable: false, fullscreenable: false,
+            backgroundColor: BACKGROUND, icon: this.icon, title: 'Reference', webPreferences: webPreferences(),
+        });
+        win.removeMenu();
+        guardNavigation(win, this.getPort);
+        win.on('closed', () => { if (this.references.get(imageId) === win) this.references.delete(imageId); });
+        win.loadURL(url);
+        this.references.set(imageId, win);
         return win;
     }
 

@@ -38,6 +38,7 @@ function refuse() {
  * @param {() => object} deps.describeSettings
  * @param {(key: string, value: unknown) => object} deps.changeSetting
  * @param {() => void} deps.openQuickCollect
+ * @param {(imageId: number, name: string) => void} deps.openReference
  * @param {() => void} deps.retryStart
  * @param {() => void} deps.openLogFolder
  */
@@ -57,6 +58,13 @@ function registerIpc(deps) {
     ipcMain.handle('sd:open-quick-collect', (event) => {
         if (!fromBackend(event, deps.getPort)) return refuse();
         deps.openQuickCollect();
+        return true;
+    });
+    ipcMain.handle('sd:open-reference', (event, imageId, name) => {
+        if (!fromBackend(event, deps.getPort)) return refuse();
+        const id = Number(imageId);
+        if (!Number.isInteger(id) || id <= 0) return refuse();
+        deps.openReference(id, String(name || '').slice(0, 200));
         return true;
     });
     ipcMain.handle('sd:retry-start', (event) => {

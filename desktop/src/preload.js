@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('sdDesktop', {
     getSettings: () => ipcRenderer.invoke('sd:get-settings'),
     setSetting: (key, value) => ipcRenderer.invoke('sd:set-setting', key, value),
     openQuickCollect: () => ipcRenderer.invoke('sd:open-quick-collect'),
+    /** Keep this picture of the library in a small window above other programs. */
+    openReference: (imageId, name) => ipcRenderer.invoke('sd:open-reference', imageId, name),
     retryStart: () => ipcRenderer.invoke('sd:retry-start'),
     openLogFolder: () => ipcRenderer.invoke('sd:open-log-folder'),
     onFocusSearch: (callback) => {

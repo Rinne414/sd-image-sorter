@@ -69,6 +69,7 @@ class DesktopController {
             describeSettings: () => this.describeSettings(),
             changeSetting: (key, value) => this.changeSetting(key, value),
             openQuickCollect: () => this.openQuickCollect(),
+            openReference: (imageId, name) => this.openReference(imageId, name),
             retryStart: () => this.retryStart(),
             openLogFolder: () => this.openLogFolder(),
         });
@@ -249,6 +250,13 @@ class DesktopController {
             return;
         }
         this.windows.openQuickCollect(`${backendUrl(this.port)}/static/quick-collect.html`);
+    }
+
+    openReference(imageId, name) {
+        if (!this.port) return;
+        const query = new URLSearchParams({ id: String(imageId) });
+        if (name) query.set('name', name);
+        this.windows.openReference(imageId, `${backendUrl(this.port)}/static/reference.html?${query}`);
     }
 
     focusSearch() {
