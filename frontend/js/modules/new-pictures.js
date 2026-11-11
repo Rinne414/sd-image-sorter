@@ -7,8 +7,9 @@
  * pictures made after it and offers the two ways to deal with them: Keep /
  * Reject (Manual Sort over this set) or "Mark all as seen".
  *
- * The marker moves only when the user finishes that cull or marks the set as
- * seen, never just by looking. The first time there is no marker, so the
+ * The marker is kept by the program (one per library), so the browser and the
+ * desktop program agree. It moves only when the user finishes that cull or
+ * marks the set as seen, never just by looking. The first time there is no marker, so the
  * last seven days count as new.
  *
  * GET /api/new-pictures gives the ids and the next marker
@@ -20,7 +21,6 @@
 
     const STORAGE_KEY = 'sd-new-pictures-marker-v1';
     const FIRST_TIME_DAYS = 7;
-    const DAY_MS = 24 * 60 * 60 * 1000;
     const tr = (key, fallback, params) => (
         typeof global.appT === 'function' ? global.appT(key, fallback, params) : fallback
     );
@@ -30,30 +30,28 @@
     /** What open() showed and not yet dealt with: { library, time, previous }. */
     let pending = null;
 
-    function markers() {
+    /**
+     * The marker is the program's now (PATCH /api/new-pictures/marker), so the
+     * browser and the desktop program agree. A marker an earlier version kept in
+     * this browser is handed over once, then forgotten here.
+     */
+    async function handOverBrowserMarker(library) {
+        let kept = null;
         try {
-            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            return saved && typeof saved === 'object' ? saved : {};
+            kept = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')?.[library] || null;
         } catch (_error) {
-            return {};
+            kept = null;
         }
-    }
-
-    function setMarker(library, time) {
-        const all = markers();
-        if (time) all[library] = time;
-        else delete all[library];
+        if (!kept) return;
+        await app().API.patch('/api/new-pictures/marker', { marker: kept });
         try {
+            const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            delete all[library];
             localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-        } catch (_error) { /* storage can be blocked; the marker then lasts for this page only */ }
+        } catch (_error) { /* the hand-over is done; the old copy is only tidied away */ }
     }
 
-    function firstTimeAfter() {
-        const date = new Date(Date.now() - FIRST_TIME_DAYS * DAY_MS);
-        const pad = (n) => String(n).padStart(2, '0');
-        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
-            + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-    }
+    const setMarker = (time) => app().API.patch('/api/new-pictures/marker', { marker: time || null });
 
     /** "2026-11-09 14:30": exact, and the same in both languages. */
     const minute = (time) => String(time || '').slice(0, 16);
@@ -61,10 +59,12 @@
     /** Ask the server what is new for the open library. */
     async function look() {
         const library = libraryId();
-        const remembered = markers()[library] || null;
-        const after = remembered || firstTimeAfter();
-        const data = await app().API.get(`/api/new-pictures?after=${encodeURIComponent(after)}`);
-        return { ...data, library, after, remembered };
+        let data = await app().API.get(`/api/new-pictures?default_days=${FIRST_TIME_DAYS}`);
+        if (!data.remembered) {
+            await handOverBrowserMarker(library);
+            data = await app().API.get(`/api/new-pictures?default_days=${FIRST_TIME_DAYS}`);
+        }
+        return { ...data, library, remembered: data.remembered ? data.after : null };
     }
 
     function sinceText(found) {
@@ -88,11 +88,17 @@
         }
     }
 
-    function markSeen({ quiet = false } = {}) {
+    async function markSeen({ quiet = false } = {}) {
         if (!pending || !pending.time) return false;
         const done = pending;
         pending = null;
-        setMarker(done.library, done.time);
+        try {
+            await setMarker(done.time);
+        } catch (error) {
+            pending = done;
+            app()?.showToast?.(error?.message || String(error), 'error');
+            return false;
+        }
         refreshTile();
         if (!quiet) {
             app()?.showToast?.(
@@ -100,8 +106,8 @@
                 'success',
                 {
                     actionLabel: tr('common.undo', 'Undo'),
-                    onAction: () => {
-                        setMarker(done.library, done.previous);
+                    onAction: async () => {
+                        await setMarker(done.previous);
                         pending = done;
                         refreshTile();
                     },

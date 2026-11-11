@@ -276,7 +276,10 @@ With `collection_id`: the pictures of that collection in the order they were put
 Query: `limit` (1 to 100, default 20), `offset`. The recent move and copy runs, newest first: `{runs: [{run_token, operation, destination, started_at, files, interrupted, undone}], total}`. `run_token` is what `POST /api/batch-move/undo` takes; `interrupted` counts files a run began on and never finished. The last 100 runs are kept.
 
 #### GET /api/new-pictures
-Query: `after?` (a `newest_time` from an earlier answer, or a local `YYYY-MM-DD HH:MM:SS`). The open library's pictures made after that moment, newest first, by the picture's own time (the key of the newest-first order), not by when it was last indexed. Returns `{after, ids, count, newest_time}`; `newest_time` is the library's newest picture and is the marker to remember for next time. Without `after` every picture counts.
+Query: `after?`, `default_days?`. The open library's pictures made after a moment, newest first, by the picture's own time (the key of the newest-first order), not by when it was last indexed. The moment is `after` when given (a `newest_time` from an earlier answer, or a local `YYYY-MM-DD HH:MM:SS`), else the library's stored marker, else `default_days` ago, else every picture counts. Returns `{after, ids, count, newest_time, remembered}`; `newest_time` is the library's newest picture and is the marker to store; `remembered` says a stored marker was used.
+
+#### PATCH /api/new-pictures/marker
+Body: `{marker}` (a `newest_time`, or null to forget). Stores where New pictures left off for the open library, in the program's state folder, so every client sees the same. Returns `{marker, previous}`; `previous` is what an Undo puts back.
 
 #### PATCH /api/images/{image_id}/note
 Body: `{note}` (up to 4000 characters; empty or `null` clears it). Stores the user's own note on a picture and returns `{image_id, note}`. The note is returned as `note` by `GET /api/images/{image_id}` and is matched by the Gallery's free-text `search`, like a caption. 404 when the picture does not exist.

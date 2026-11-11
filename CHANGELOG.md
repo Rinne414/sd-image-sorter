@@ -64,6 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **New Pictures remembers in one place**: where you left off was kept in the browser, so the browser and the desktop program each had their own idea of what is new. The program keeps it now, one marker per library; a marker an earlier version kept in the browser is taken over the first time.
+  - **“新图片”的记号只存一处**：以前“看到哪里了”存在浏览器里，所以浏览器和桌面版各有各的“新图片”。现在由程序保存，每个图库一个；旧版本留在浏览器里的记号会在第一次使用时接过来。
 - **Faster in a large library (measured at 100,000 pictures)**: a `steps:` search took about 1.7 s per request and now takes 0.3 s; a page in the middle of a name-sorted Gallery took 5 to 6 s and now takes about 0.5 s; `sampler:` and `cfg:` searches went from about 1.8 s to 1.3 to 1.4 s. The first page of the newest-first Gallery is unchanged at under 0.1 s. Four indexes are added at the next start (about 3 s per 100,000 pictures, once). Measured through the program on one PC with copies of real records; random order still takes about 1.5 s per page at that size.
   - **大图库更快（在 10 万张图片上实测）**：`steps:` 搜索每个请求约 1.7 秒，现在 0.3 秒；按名称排序时翻到中间一页要 5 到 6 秒，现在约 0.5 秒；`sampler:` 和 `cfg:` 搜索从约 1.8 秒降到 1.3 到 1.4 秒。按最新排序的第一页不变，不到 0.1 秒。下次启动时会新增四个索引（每 10 万张约 3 秒，只做一次）。这些数字是在一台电脑上、用真实记录的副本通过程序实测的；随机排序在这个规模下每页仍约 1.5 秒。
 - **One name, one dialog**: describing a picture in words was "Semantic search" on Find Similar and "Search by meaning" in the Gallery, with different numbers of results; both are "Search by meaning" now and start with the same 100. Right-clicking two selected pictures opened a separate tool that showed only a likeness percentage, while More > Compare these two showed what differs in the recipe: both open the same dialog now, and it also says how alike the two look.
