@@ -104,6 +104,11 @@ test('the results open as a Gallery view of exactly those pictures, all selected
     pinned.push(route.request().postDataJSON())
     await route.fulfill({ json: { collection_id: 9001, count: 2 } })
   })
+  // The set is a stand-in, so the real library holds none of its pictures: an
+  // empty Gallery asks whether the set still exists, and it does.
+  await page.route('**/api/collections/pinned/9001', async (route) => {
+    await route.fulfill({ json: { exists: true, count: 2 } })
+  })
 
   // No results yet: no line above the (empty) results.
   await expect(page.locator('#similar-results-bar')).toHaveCount(0)

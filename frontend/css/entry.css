@@ -1267,3 +1267,16 @@ body.entry-active {
         height: 30px;
     }
 }
+
+/* 720-high windows: with three libraries the tile's menu needs every pixel
+   under the library name, so the column's rows sit closer still. */
+@media (max-height: 740px) {
+    .entry-mosaic {
+        gap: 4px;
+    }
+
+    .entry-find-input,
+    .entry-find-go {
+        height: 28px;
+    }
+}
