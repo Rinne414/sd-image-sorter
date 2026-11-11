@@ -269,7 +269,7 @@ Body: `{path}`. Starts bringing the library into the open library in the backgro
 #### GET /api/eagle/import
 `{status}` is `idle`, `running` (with `step` = `index` or `details`, `current`, `total`), `done` (with `result`: `indexed`, `not_indexed`, `stars_set`, `notes_set`, `tags_added`, `sources_set`, `collections_created`, `collection_memberships`, `found`) or `error` (with `error`).
 
-#### GET /api/images?sort_by=set_order
+**`GET /api/images` with `sort_by=set_order`**
 With `collection_id`: the pictures of that collection in the order they were put into it. A pinned set (`POST /api/collections/pinned`) keeps the order of the ids it was given, so a set made from a ranking (the Gallery's "Search by meaning") lists closest first. Paged by `offset`, like every sort but newest and oldest. Without `collection_id` it is newest first.
 
 #### GET /api/batch-move/runs
