@@ -36,6 +36,7 @@
                 <button type="button" class="modal-close" id="compare-two-close">${global.UiIcon?.html?.('i-close') || ''}</button>
                 <h3 id="compare-two-title"></h3>
                 <div class="compare-two-pictures"></div>
+                <p class="compare-two-likeness" hidden></p>
                 <div class="compare-two-changes modal-changes-body"></div>
             </div>`;
         document.body.appendChild(modal);
@@ -62,10 +63,28 @@
         return figure;
     }
 
-    async function run() {
+    /** How alike the two look, from the similarity index; nothing is shown when either is not indexed. */
+    async function likeness(first, second) {
+        const line = modal.querySelector('.compare-two-likeness');
+        line.hidden = true;
+        try {
+            const response = await fetch(`/api/similarity/compare?id_a=${first}&id_b=${second}`);
+            if (!response.ok) return;
+            const data = await response.json();
+            const percent = Math.round(Number(data.similarity || 0) * 100);
+            line.textContent = tr('compareTwo.likeness', 'How alike they look: {percent}%', { percent });
+            line.hidden = false;
+        } catch (_error) {
+            // The recipe difference stands on its own; the likeness is an extra.
+        }
+    }
+
+    /** Compare the two selected pictures, or the two given (the right-click menu names them). */
+    async function run(given) {
         const api = app();
         if (!api) return;
-        const ids = (typeof global.getSelectedGalleryIds === 'function' ? global.getSelectedGalleryIds() : []).map(Number).filter(Boolean);
+        const picked = Array.isArray(given) ? given : (typeof global.getSelectedGalleryIds === 'function' ? global.getSelectedGalleryIds() : []);
+        const ids = picked.map(Number).filter(Boolean);
         if (ids.length !== 2) {
             api.showToast?.(tr('compareTwo.needTwo', 'Select exactly two pictures to compare them.'), 'info');
             return;
@@ -97,10 +116,11 @@
             global.ModalChanges?.draw?.(body, data, { showHead: false });
         }
         api.showModal?.(MODAL_ID);
+        likeness(earlier, later);
     }
 
     function wire() {
-        document.getElementById('btn-compare-selected')?.addEventListener('click', run);
+        document.getElementById('btn-compare-selected')?.addEventListener('click', () => run());
     }
 
     global.CompareTwo = Object.freeze({ run });

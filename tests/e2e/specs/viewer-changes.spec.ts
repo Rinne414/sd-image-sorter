@@ -94,6 +94,9 @@ test('two selected pictures are compared side by side from the selection bar', a
   page.on('request', (request) => {
     if (request.url().includes('/changes')) asked.push(new URL(request.url()).pathname + new URL(request.url()).search)
   })
+  await page.route('**/api/similarity/compare**', async (route) => {
+    await route.fulfill({ json: { id_a: 5001, id_b: 5002, similarity: 0.87 } })
+  })
   await page.setViewportSize({ width: 1366, height: 768 })
   await page.addInitScript(() => localStorage.setItem('aurora-entry-skip', '1'))
   await page.goto('/')
@@ -125,6 +128,16 @@ test('two selected pictures are compared side by side from the selection bar', a
   await expect(dialog.locator('.modal-change-word.is-added')).toHaveText('+ umbrella')
   await expect(dialog.locator('.modal-change-after')).toHaveText('DPM++ 2M')
   await expect(dialog).toContainText('The seed is the same.')
+  // How alike the two look is said in the same dialog (it used to be a separate right-click tool).
+  await expect(dialog.locator('.compare-two-likeness')).toHaveText('How alike they look: 87%')
+
+  // The right-click menu on two selected pictures opens this same dialog.
+  await page.keyboard.press('Escape')
+  await expect(dialog).not.toHaveClass(/visible/)
+  await page.locator('#gallery-grid .gallery-item[data-id="5001"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: /Compare these two/ }).click()
+  await expect(dialog).toHaveClass(/visible/)
+  await expect(dialog.locator('.modal-change-word.is-added')).toHaveText('+ umbrella')
 
   // Either picture opens in the viewer from here.
   await dialog.locator('.compare-two-picture').last().click()

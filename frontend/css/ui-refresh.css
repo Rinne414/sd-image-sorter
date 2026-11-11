@@ -14551,3 +14551,15 @@ html:not([data-look-variant="b"]) #pro-library-views {
     color: var(--muted);
     text-align: center;
 }
+
+/* Compare these two: how alike the pictures look, under them. */
+.compare-two-likeness {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+    text-align: center;
+}
+
+.compare-two-likeness[hidden] {
+    display: none;
+}

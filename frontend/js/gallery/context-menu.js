@@ -105,7 +105,8 @@ Object.assign(window.Gallery, {
             { tool: true, pictureOnly: true, label: t('gallery.contextViewOnStyleMap', 'View on the Style Map'), icon: 'i-compass', action: () => window.StyleMap?.locateImage?.(image.id) },
             { tool: true, pictureOnly: true, label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: 'i-layers', action: () => window.ClipTools?.near?.(image.id) },
             actionCount === 2
-                ? { tool: true, pictureOnly: true, label: t('gallery.contextCompareTwo', 'Compare 2 images (CLIP)'), icon: 'i-scale', action: () => window.ClipTools?.compare?.(actionImageIds[0], actionImageIds[1]) }
+                // The same dialog as More > Compare these two: what differs in the recipe, and how alike they look.
+                ? { tool: true, pictureOnly: true, label: t('gallery.contextCompareTwo', 'Compare these two'), icon: 'i-scale', action: () => window.CompareTwo?.run?.(actionImageIds) }
                 : null,
             { tool: true, label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: 'i-flask', action: () => app.openPromptBuildFromImage?.(image.id) },
             { tool: true, label: t('gallery.contextSendToGenerator', 'Send to generator…'), icon: 'i-upload', action: () => window.SendToGenerator?.open?.(image.id, { x: e.clientX, y: e.clientY }) },

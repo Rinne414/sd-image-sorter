@@ -69,7 +69,7 @@ test('words that match no prompt can be searched by meaning, and the closest pic
   await describe.click()
 
   await expect.poll(() => gallery.pinned()).toEqual([[62, 63]])
-  expect(gallery.asked()).toEqual([{ query: 'girl reading under a tree', limit: 60, offset: 0, threshold: 0, scope: 'library' }])
+  expect(gallery.asked()).toEqual([{ query: 'girl reading under a tree', limit: 100, offset: 0, threshold: 0, scope: 'library' }])
   await expect(page.locator('#gallery-pin-banner-title')).toHaveText('2 closest to your description')
   // The words left the search box (as text they found nothing and would hide the set).
   await expect(page.locator('#gallery-search-input')).toHaveValue('')

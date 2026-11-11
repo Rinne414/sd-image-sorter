@@ -197,12 +197,12 @@ Object.assign(window.SimilarImages, {
             this._renderLanguageNote(result, value);
         } catch (e) {
             if (requestToken !== this.activeSearchToken) return;
-            const message = String(e?.message || this._t('similar.textSearchFailed', 'Semantic search failed'));
+            const message = String(e?.message || this._t('similar.textSearchFailed', 'Search by meaning failed'));
             this._renderSearchStateNode(
                 'empty-state',
-                this._t('similar.textSearchFailedMessage', 'Semantic search failed: {message}', { message })
+                this._t('similar.textSearchFailedMessage', 'Search by meaning failed: {message}', { message })
             );
-            showToast(this._t('similar.textSearchFailed', 'Semantic search failed'), 'error');
+            showToast(this._t('similar.textSearchFailed', 'Search by meaning failed'), 'error');
         }
     },
 

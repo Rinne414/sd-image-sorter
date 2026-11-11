@@ -15,11 +15,11 @@
     'use strict';
 
     /**
-     * How many of the closest pictures to bring back. A ranking has no natural
-     * end, and the Gallery shows the set in its own order, so the set is kept
-     * to a screenful or two: 200 was the whole of a small library.
+     * How many of the closest pictures to bring back: the same first page that
+     * "Search by meaning" shows on Find Similar, so the two agree. They come
+     * closest first (sort_by=set_order).
      */
-    const CLOSEST = 60;
+    const CLOSEST = 100;
     const tr = (key, fallback, params) => (
         typeof global.appT === 'function' ? global.appT(key, fallback, params) : fallback
     );
