@@ -77,3 +77,57 @@ test('the viewer lists what changed from the picture before and opens that pictu
   await expect(page.locator('#modal-filename')).toHaveText('try-5003.png')
   await expect(section).toBeHidden()
 })
+
+test('two selected pictures are compared side by side from the selection bar', async ({ page }) => {
+  const asked: string[] = []
+  await mockViewer(page, {
+    5002: {
+      before: { id: 5001, filename: 'try-5001.png' }, after: { id: 5002, filename: 'try-5002.png' },
+      comparable: true, same: false, picked: true,
+      seed: { before: 1, after: 1, same: true },
+      settings: [{ key: 'sampler', before: 'Euler a', after: 'DPM++ 2M' }],
+      loras: { added: [], removed: [], reweighted: [] },
+      prompt: { added: ['umbrella'], removed: [] },
+      negative_prompt: { added: [], removed: [] },
+    },
+  })
+  page.on('request', (request) => {
+    if (request.url().includes('/changes')) asked.push(new URL(request.url()).pathname + new URL(request.url()).search)
+  })
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.addInitScript(() => localStorage.setItem('aurora-entry-skip', '1'))
+  await page.goto('/')
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+  const select = (ids: number[]) => page.evaluate((list) => {
+    const app = (window as any).App
+    app.setSelectionMode(true)
+    app.clearSelectedIds?.({ scope: 'visible' })
+    app.mutateSelectedIds((selected: Set<number>) => { list.forEach((id) => selected.add(id)) }, { scope: 'visible' })
+    app.updateSelectionUI()
+    app.emitSelectionStateChanged()
+  }, ids)
+
+  // One or three selected: it says what it needs and opens nothing.
+  await select([5001])
+  await page.locator('#btn-gallery-action-more').click()
+  await page.locator('#btn-compare-selected').click()
+  await expect(page.locator('#toast-container .toast').last()).toContainText('Select exactly two pictures')
+  expect(asked).toEqual([])
+
+  await select([5002, 5001])
+  await page.locator('#btn-gallery-action-more').click()
+  await page.locator('#btn-compare-selected').click()
+  const dialog = page.locator('#compare-two-modal')
+  await expect(dialog).toHaveClass(/visible/)
+  // The earlier picture is the one compared against, whatever the click order.
+  expect(asked).toEqual(['/api/images/5002/changes?against=5001'])
+  await expect(dialog.locator('.compare-two-picture')).toHaveText([/Before\s*try-5001\.png/, /After\s*try-5002\.png/])
+  await expect(dialog.locator('.modal-change-word.is-added')).toHaveText('+ umbrella')
+  await expect(dialog.locator('.modal-change-after')).toHaveText('DPM++ 2M')
+  await expect(dialog).toContainText('The seed is the same.')
+
+  // Either picture opens in the viewer from here.
+  await dialog.locator('.compare-two-picture').last().click()
+  await expect(dialog).not.toHaveClass(/visible/)
+  await expect(page.locator('#modal-filename')).toHaveText('try-5002.png')
+})

@@ -27,6 +27,7 @@ function updateSelectionUI() {
         'btn-send-to-censor',
         'btn-send-selection-to-dataset-maker',
         'btn-pick-varied',
+        'btn-compare-selected',
         'btn-send-selection-to-reader',
         'btn-send-selection-to-reverse',
         'btn-send-selection-to-privacy',

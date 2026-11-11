@@ -4342,6 +4342,21 @@
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
       }
+    },
+    {
+      "id": "gallery.compare_two",
+      "area": "gallery",
+      "en": "Compare two selected pictures (what differs: prompt words, settings, LoRAs)",
+      "zh": "比较选中的两张图片（差在哪里：提示词、设置、LoRA）",
+      "classic": [
+        "#btn-compare-selected"
+      ],
+      "vopus": {
+        "missing": "Built for the classic interface first (2026-11-11)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [

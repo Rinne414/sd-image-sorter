@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added / 新增
 
+- **Compare two pictures you pick**: select exactly two pictures, open More in the selection bar and choose "Compare these two…". A dialog shows them side by side and lists what differs: prompt words added and removed, settings, LoRAs and the seed. Either picture opens in the viewer from there.
+  - **比较你选的两张图**：正好选中两张图片，在选择栏的“更多”里点“比较这两张…”。对话框会把两张并排显示，并列出差别：提示词多了、少了哪些词，设置、LoRA 和种子。点其中一张可以直接在查看器里打开。
 - **Missions hand over to their next step**: the Pixiv mission opens the Gallery already in select mode, so the first click picks a picture. When Auto-Separate finishes, its line offers "Sort the rest by hand", which opens Manual Sort for what the rule did not catch.
   - **任务会把你带到下一步**：“Pixiv 成套发布”任务打开图库时已经是选择模式，点一下就选中图片。自动分类完成后，那一行里多了“剩下的手动分”，直接打开手动分类处理规则没分到的图。
 - **Find a picture from the Home page**: the first screen has a find box. Type words from the prompt, a tag, a model or a LoRA name (Chinese tag names work) and press Enter: the Gallery opens on the result, with everything its own search understands.

@@ -14325,3 +14325,60 @@ html:not([data-look-variant="b"]) #pro-library-views {
     flex-wrap: wrap;
     justify-content: flex-start;
 }
+
+/* "Compare these two": the two pictures side by side, the differences under them. */
+.compare-two-content {
+    width: min(760px, calc(100vw - 48px));
+    max-height: calc(100vh - 48px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+}
+
+.compare-two-pictures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.compare-two-picture {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid var(--border, #2B2B2E);
+    border-radius: var(--r-card, 12px);
+    background: var(--surface-2, #1C1C1E);
+    color: var(--text, #E8E8EA);
+    font: inherit;
+    cursor: pointer;
+}
+
+.compare-two-picture:hover {
+    border-color: var(--border-strong, #3A3A3E);
+}
+
+.compare-two-picture:focus-visible {
+    outline: 2px solid var(--accent-line, rgba(214, 216, 220, 0.45));
+    outline-offset: 1px;
+}
+
+.compare-two-picture img {
+    max-width: 100%;
+    height: min(300px, 34vh);
+    object-fit: contain;
+    border-radius: 8px;
+    background: var(--stage, #09090A);
+}
+
+.compare-two-label {
+    color: var(--muted, #8A8A90);
+    font-size: 12.5px;
+}
+
+.compare-two-name {
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}

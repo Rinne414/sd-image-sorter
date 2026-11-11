@@ -66,8 +66,13 @@
         return rows;
     }
 
-    function draw(body, data) {
+    /** Draw the differences into `body`; `showHead: false` leaves out the "Compared with" line. */
+    function draw(body, data, options = {}) {
         body.textContent = '';
+        if (options.showHead === false) {
+            drawRows(body, data);
+            return;
+        }
         const head = el('p', 'modal-change-head');
         head.append(`${tr('changes.comparedWith', 'Compared with')} `);
         const link = el('button', 'modal-change-link', data.before.filename || `#${data.before.id}`);
@@ -76,7 +81,10 @@
         link.addEventListener('click', () => global.Gallery?.openPreview?.(data.before.id));
         head.appendChild(link);
         body.appendChild(head);
+        drawRows(body, data);
+    }
 
+    function drawRows(body, data) {
         if (data.same) {
             body.appendChild(el('p', 'modal-change-same', data.seed.same
                 ? tr('changes.identical', 'Same prompt, settings and seed.')
@@ -125,5 +133,5 @@
         global.Gallery?._applyModalSectionStates?.();
     }
 
-    global.ModalChanges = Object.freeze({ show, clear });
+    global.ModalChanges = Object.freeze({ show, clear, draw });
 })(window);
