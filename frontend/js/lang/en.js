@@ -4450,6 +4450,8 @@ window.I18nLang_en = {
     'promptlab.pickImageDesc': 'Pick by thumbnail instead of guessing from file names.',
     'promptlab.pickImageSearch': 'Search filename, prompt, checkpoint...',
     'promptlab.pickImageCount': '{count} images',
+    'promptlab.pickImageCountMore': '{count} shown, scroll for more',
+    'promptlab.pickImageFailed': 'The pictures could not be loaded: {reason}',
     'promptlab.pickImageNoResults': 'No images matched this search.',
     'promptlab.pickImageForA': 'Pick Image A',
     'promptlab.pickImageForB': 'Pick Image B',

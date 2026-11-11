@@ -1,7 +1,7 @@
 /**
  * prompt-lab/image-picker.js - prompt-lab.js decomposition (verbatim Object.assign mixin).
  * Moved BYTE-IDENTICAL from frontend/js/prompt-lab.js pre-cut lines 180-376 (of 2,485):
- * image record/thumb/meta helpers, _ensureImageCatalog (newest-200), the
+ * image record/thumb/meta helpers, _ensureImageCatalog (newest 200, for the selects), the
  * _getPickerTargetMeta target map, and the image-picker modal
  * (open/close/render/debounced search/grid/select).
  * Classic script: joins the ONE unsealed window.PromptLab object declared
@@ -19,6 +19,8 @@ Object.assign(window.PromptLab, {
         if (!Number.isFinite(numericId)) return null;
         const fromCatalog = (this.imageCatalog || []).find((image) => Number(image.id) === numericId);
         if (fromCatalog) return fromCatalog;
+        const picked = this._pickedRecords?.get(numericId);
+        if (picked) return picked;
         return (window.App?.AppState?.images || []).find((image) => Number(image.id) === numericId) || null;
     },
 
@@ -136,9 +138,7 @@ Object.assign(window.PromptLab, {
         } else {
             modal?.classList.add('visible');
         }
-        this._ensureImageCatalog()
-            .then(() => this.renderImagePicker())
-            .catch(() => this.renderImagePicker());
+        this.renderImagePicker();
     },
 
     closeImagePicker() {
@@ -147,9 +147,15 @@ Object.assign(window.PromptLab, {
         this.imagePickerTarget = '';
     },
 
+    // The picker lists the whole library, newest first, a page at a time: the
+    // next page arrives when the grid is scrolled near its end. A search works
+    // the same way on its hits. (It used to stop at the newest 200.)
+    PICKER_PAGE: 200,
+    _picker: { query: '', images: [], cursor: null, hasMore: false, loading: false, run: 0, failed: '' },
+    _pickedRecords: new Map(),
+
     renderImagePicker(isLoading = false) {
         const grid = document.getElementById('pl-image-picker-grid');
-        const count = document.getElementById('pl-image-picker-count');
         if (!grid) return;
 
         if (isLoading) {
@@ -157,46 +163,80 @@ Object.assign(window.PromptLab, {
             return;
         }
 
-        const query = String(document.getElementById('pl-image-picker-search')?.value || '').trim().toLowerCase();
-
-        if (query && window.App?.API?.getImages) {
-            this._searchPickerDebounced(query, grid, count);
-            return;
-        }
-
-        const images = this._getPromptLabImages();
-        this._renderPickerGrid(images, grid, count);
+        this._bindPickerScroll(grid);
+        const query = String(document.getElementById('pl-image-picker-search')?.value || '').trim();
+        clearTimeout(this._searchPickerTimer);
+        // Typing waits a moment before asking; opening the picker asks at once.
+        this._searchPickerTimer = setTimeout(() => this._loadPickerPage(query, true), query ? 300 : 0);
     },
 
     _searchPickerTimer: null,
-    _searchPickerDebounced(query, grid, count) {
-        clearTimeout(this._searchPickerTimer);
-        this._searchPickerTimer = setTimeout(async () => {
-            try {
-                const result = await window.App.API.getImages({
-                    sortBy: 'newest',
-                    limit: 200,
-                    search: query,
-                });
-                const images = Array.isArray(result?.images) ? result.images : [];
-                this._renderPickerGrid(images, grid, count);
-            } catch {
-                this._renderPickerGrid([], grid, count);
+
+    _bindPickerScroll(grid) {
+        if (grid.dataset.pagingBound === '1') return;
+        grid.dataset.pagingBound = '1';
+        grid.addEventListener('scroll', () => {
+            const nearEnd = grid.scrollTop + grid.clientHeight >= grid.scrollHeight - 600;
+            if (nearEnd && this._picker.hasMore && !this._picker.loading) {
+                this._loadPickerPage(this._picker.query, false);
             }
-        }, 300);
+        });
     },
 
-    _renderPickerGrid(images, grid, count) {
-        if (count) {
-            count.textContent = this._t('promptlab.pickImageCount', '{count} images', { count: images.length });
-        }
-
-        if (!images.length) {
-            grid.innerHTML = `<div class="promptlab-image-preview-empty">${escapeHtml(this._t('promptlab.pickImageNoResults', 'No images matched this search.'))}</div>`;
+    async _loadPickerPage(query, fresh) {
+        const grid = document.getElementById('pl-image-picker-grid');
+        const count = document.getElementById('pl-image-picker-count');
+        if (!grid) return;
+        const state = this._picker;
+        const api = window.App?.API;
+        if (!api?.getImages) {
+            state.images = this._getPromptLabImages();
+            state.hasMore = false;
+            this._renderPickerGrid(state.images, grid, count);
             return;
         }
+        const run = fresh ? state.run + 1 : state.run;
+        if (fresh) {
+            Object.assign(state, { query, images: [], cursor: null, hasMore: false, failed: '', run });
+        }
+        state.loading = true;
+        let page = [];
+        try {
+            const result = await api.getImages({
+                sortBy: 'newest',
+                limit: this.PICKER_PAGE,
+                ...(query ? { search: query } : {}),
+                ...(state.cursor ? { cursor: state.cursor } : {}),
+            });
+            if (run !== state.run) return; // a newer search took over
+            page = Array.isArray(result?.images) ? result.images : [];
+            state.images = fresh ? page : state.images.concat(page);
+            state.cursor = result?.next_cursor || null;
+            state.hasMore = Boolean(result?.has_more && state.cursor && page.length);
+        } catch (error) {
+            if (run !== state.run) return;
+            state.hasMore = false;
+            state.failed = error?.message || String(error);
+        } finally {
+            if (run === state.run) state.loading = false;
+        }
+        if (fresh) {
+            this._renderPickerGrid(state.images, grid, count);
+            grid.scrollTop = 0;
+        } else {
+            this._appendPickerCards(page, grid, count);
+        }
+    },
 
-        grid.innerHTML = images.map((image) => `
+    _pickerCountText() {
+        const state = this._picker;
+        return state.hasMore
+            ? this._t('promptlab.pickImageCountMore', '{count} shown, scroll for more', { count: state.images.length })
+            : this._t('promptlab.pickImageCount', '{count} images', { count: state.images.length });
+    },
+
+    _pickerCardsHtml(images) {
+        return images.map((image) => `
             <div class="promptlab-image-picker-card" data-image-id="${image.id}">
                 <img src="${escapeHtml(this._getImageThumbUrl(image.id, 320))}" alt="${escapeHtml(image.filename || '')}" loading="lazy">
                 <div class="promptlab-image-picker-info">
@@ -207,11 +247,47 @@ Object.assign(window.PromptLab, {
         `).join('');
     },
 
+    _renderPickerGrid(images, grid, count) {
+        if (count) count.textContent = this._pickerCountText();
+
+        if (this._picker.failed) {
+            grid.innerHTML = `<div class="promptlab-image-preview-empty">${escapeHtml(this._t('promptlab.pickImageFailed', 'The pictures could not be loaded: {reason}', { reason: this._picker.failed }))}</div>`;
+            return;
+        }
+        if (!images.length) {
+            grid.innerHTML = `<div class="promptlab-image-preview-empty">${escapeHtml(this._t('promptlab.pickImageNoResults', 'No images matched this search.'))}</div>`;
+            return;
+        }
+
+        grid.innerHTML = this._pickerCardsHtml(images);
+    },
+
+    _appendPickerCards(images, grid, count) {
+        if (count) count.textContent = this._pickerCountText();
+        if (this._picker.failed) {
+            window.App?.showToast?.(this._t('promptlab.pickImageFailed', 'The pictures could not be loaded: {reason}', { reason: this._picker.failed }), 'error');
+            return;
+        }
+        grid.insertAdjacentHTML('beforeend', this._pickerCardsHtml(images));
+    },
+
     selectImageFromPicker(imageId) {
         const meta = this._getPickerTargetMeta(this.imagePickerTarget);
         const select = document.getElementById(meta.selectId);
         if (select) {
-            select.value = String(imageId);
+            // The selects list only the newest pictures; one picked from further
+            // down gets an option of its own, or the select would fall back to
+            // "nothing chosen" and the pick would be lost.
+            const value = String(imageId);
+            const record = this._picker.images.find((image) => String(image.id) === value);
+            if (record) this._pickedRecords.set(Number(record.id), record);
+            if (value && !Array.from(select.options).some((option) => option.value === value)) {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = record?.filename || this._t('promptlab.imageOptionFallback', 'Image #{id}', { id: value });
+                select.appendChild(option);
+            }
+            select.value = value;
             select.dispatchEvent(new Event('change', { bubbles: true }));
         }
         this.closeImagePicker();

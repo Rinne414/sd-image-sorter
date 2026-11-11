@@ -2121,6 +2121,8 @@ window.I18nLang_zhCN = {
     'promptlab.pickImageDesc': '按缩略图挑，不用对着文件名猜。',
     'promptlab.pickImageSearch': '搜索文件名、提示词、模型...',
     'promptlab.pickImageCount': '{count} 张图片',
+    'promptlab.pickImageCountMore': '已显示 {count} 张，向下滚动加载更多',
+    'promptlab.pickImageFailed': '图片加载失败：{reason}',
     'promptlab.pickImageNoResults': '没有匹配这次搜索的图片。',
     'promptlab.pickImageForA': '选择图片 A',
     'promptlab.pickImageForB': '选择图片 B',

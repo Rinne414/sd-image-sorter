@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Prompt Helper picture picker**: the picker listed only the newest 200 pictures and 200 search hits; it now goes on through the whole library as you scroll. A picture picked from a search that was not among the newest 200 was silently dropped (the box went back to "nothing chosen"); it is kept now. A failed load says why instead of showing "no images matched".
+  - **提示词助手的选图窗口**：原来只列出最新的 200 张和 200 条搜索结果，现在向下滚动可以一直看到整个图库。以前从搜索结果里选中一张不在最新 200 张里的图，会被悄悄丢掉（选择框回到“未选择”），现在会保留。加载失败时会说明原因，而不是显示“没有匹配的图片”。
 - **Manual Sort: typing in a text field no longer sorts pictures**: while a sorting session was running, letters typed into a search box or a dialog (W, A, S, D, space, Z, Y) were taken as sorting keys and moved or skipped pictures. Keys typed into any text field are now left to that field.
   - **手动分类：在输入框里打字不会再触发分类**：分类进行中，在搜索框或对话框里输入的字母（W、A、S、D、空格、Z、Y）以前会被当成分类按键，导致图片被移动或跳过。现在，在任何输入框里打的字都只属于那个输入框。
 - **Chinese interface: "caption" reads 标注**: the Dataset Maker and the export, search and tagging texts mixed the English word into Chinese sentences ("生成 caption", "Caption 编辑器"). About 180 texts now say 标注. File names (`caption.txt`) and the search key `no:caption` are unchanged.
