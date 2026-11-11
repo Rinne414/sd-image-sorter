@@ -321,10 +321,17 @@ def get_images_paginated(
             )
         else:
             # Fetch one extra to check if there are more pages
-            query += f" ORDER BY {order_clause} LIMIT ?"
-            params.append(limit + 1)
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
+            if sort_by == "random":
+                import db_ids_first_page
+
+                rows = db_ids_first_page.fetch_page(
+                    cursor, query, select_cols, params, order_clause, limit + 1
+                )
+            else:
+                query += f" ORDER BY {order_clause} LIMIT ?"
+                params.append(limit + 1)
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
             results = _rows_to_dicts(rows)
 
         # Check if there are more results

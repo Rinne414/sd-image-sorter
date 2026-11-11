@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rename a folder, or make a new one, from the sidebar**: each folder in the sidebar has a small menu (the dots at the end of its row, or a right-click). "Rename…" renames the folder on your disk and every picture in it keeps its tags, rating and sets, with an Undo; until now a folder could only be renamed outside the program, after which its pictures counted as missing. "Move the selection to a new folder here…" makes a folder inside it and moves the selected pictures in. Folders inside an Eagle library are left to Eagle.
   - **在侧栏里给文件夹重命名、新建文件夹**：侧栏里每个文件夹都有一个小菜单（行尾的三个点，或右键）。“重命名…”会在磁盘上给文件夹改名，里面图片的标签、评分和集合都保留，并且可以撤销；以前只能在程序外改名，改完图片就变成“文件丢失”。“把选中的图片移到这里的新文件夹…”会在里面新建文件夹并把选中的图片移进去。Eagle 资源库里的文件夹仍由 Eagle 管理。
 
+### Changed / 变更
+
+- **Random order is faster in a large library**: with 100,000 pictures the first shuffled page took about 1 second and a page half-way down about 9 seconds; they now take about 0.35 and 0.4 seconds. The order itself is unchanged.
+  - **大图库里随机排序更快**：10 万张图时，随机排序的第一页要约 1 秒，翻到中间的一页要约 9 秒；现在分别约 0.35 秒和 0.4 秒。顺序本身不变。
+
 ### Fixed / 修复
 
 - **Moving a picture back to where an old record still pointed**: when a picture had been moved out of a folder outside the program, the library kept a record of the missing file. Moving a picture to that same place and name then failed and the file was put back. The old record now gives way to the picture that is really there.
