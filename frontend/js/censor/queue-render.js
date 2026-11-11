@@ -58,6 +58,7 @@ function renderQueue() {
     }
 
     if (typeof updateCensorReviewProgress === 'function') updateCensorReviewProgress();
+    if (typeof syncPublishLead === 'function') syncPublishLead();
 
     // Handle empty state
     if (CensorState.queue.length === 0) {

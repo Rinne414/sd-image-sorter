@@ -101,6 +101,26 @@ function isPixivMission() {
     return window.NavMissions?.activeMission?.() === 'pixiv';
 }
 
+// The Pixiv mission ends in Publish Set, so once every picture in the queue
+// has been censored that button leads and Save All steps back. Outside the
+// mission, or while pictures are still untouched, Save All leads as before.
+function syncPublishLead() {
+    const publish = document.getElementById('btn-censor-to-publish-set');
+    const saveAll = document.getElementById('btn-save-all-processed');
+    if (!publish || !saveAll) return;
+    const lead = isPixivMission() && getCensorQueueWorkCount() > 0 && countUneditedQueueItems() === 0;
+    const emphasise = (button, on, quietClass) => {
+        button.classList.toggle('btn-primary', on);
+        button.classList.toggle('censor-save-primary', on);
+        button.classList.toggle(quietClass, !on);
+        button.classList.toggle('censor-save-secondary', !on);
+    };
+    // The colours follow this mark (tokens.css): Save All is styled by its id.
+    publish.closest('.censor-save-actions')?.setAttribute('data-lead', lead ? 'publish' : 'save');
+    emphasise(publish, lead, 'btn-ghost');
+    emphasise(saveAll, !lead, 'btn-secondary');
+}
+
 function refreshUneditedSaveOption() {
     const group = document.getElementById('save-unedited-group');
     if (!group) return;

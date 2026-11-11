@@ -2994,3 +2994,28 @@ li > .icon {
         scroll-behavior: auto !important;
     }
 }
+
+/* Censor, Pixiv mission, every queued picture censored: "To Publish Set" is
+   the main button and Save All steps back (censor/save.js syncPublishLead).
+   Save All is coloured by its id above, so the swap is spelled out by id too. */
+#view-censor .censor-save-actions[data-lead="publish"] #btn-censor-to-publish-set {
+    background: var(--blue);
+    color: var(--on-accent);
+    border-color: transparent;
+}
+
+#view-censor .censor-save-actions[data-lead="publish"] #btn-censor-to-publish-set:hover:not(:disabled) {
+    background: var(--blue-hover);
+    color: var(--on-accent);
+}
+
+#view-censor .censor-save-actions[data-lead="publish"] #btn-save-all-processed,
+#view-censor .censor-save-actions[data-lead="publish"] #btn-save-all-processed:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+#view-censor .censor-save-actions[data-lead="publish"] #btn-save-all-processed:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.07);
+}

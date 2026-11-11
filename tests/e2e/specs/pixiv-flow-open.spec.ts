@@ -149,3 +149,48 @@ test('images that load after a rename never reuse a name, even after one was rem
   expect(names[0]).toBe('set_002.png')
   expect(new Set(names.map((name: string) => name.toLowerCase())).size).toBe(names.length)
 })
+
+test('in the Pixiv mission "To Publish Set" leads once every queued picture is censored', async ({ page }) => {
+  await page.goto('/')
+  const lead = () => page.evaluate(() => ({
+    publish: document.getElementById('btn-censor-to-publish-set')!.classList.contains('btn-primary'),
+    saveAll: document.getElementById('btn-save-all-processed')!.classList.contains('btn-primary'),
+  }))
+  const setQueue = (censored: boolean[]) => page.evaluate((flags) => {
+    const state = (window as any).__CENSOR_STATE__
+    state.queue = flags.map((done, n) => ({
+      id: 700 + n, originalFilename: `lead-${n}.png`, outputFilename: `lead-${n}.png`,
+      editOperations: done ? [{ type: 'mosaic' }] : [],
+    }))
+    ;(window as any).renderQueue()
+  }, censored)
+  await page.evaluate(() => (window as any).App.switchView('censor'))
+
+  // Outside the mission Save All leads, whatever the queue holds.
+  await setQueue([true, true])
+  expect(await lead()).toEqual({ publish: false, saveAll: true })
+  const fill = (id: string) => page.locator(id).evaluate((node) => getComputedStyle(node).backgroundColor)
+  const mainFill = await fill('#btn-save-all-processed')
+  const quietFill = await fill('#btn-censor-to-publish-set')
+  expect(mainFill).not.toBe(quietFill)
+
+  await page.evaluate(() => (window as any).NavMissions.enter('pixiv'))
+  await page.evaluate(() => (window as any).App.switchView('censor'))
+  // One picture still untouched: not yet.
+  await setQueue([true, false])
+  expect(await lead()).toEqual({ publish: false, saveAll: true })
+  // All censored: the mission's last step is the page's main button, and still visible.
+  await setQueue([true, true])
+  expect(await lead()).toEqual({ publish: true, saveAll: false })
+  // It looks like it too: the two buttons trade their fills (Save All is coloured by id).
+  // (buttons fade between fills, so wait for the colour to settle)
+  await expect.poll(() => fill('#btn-censor-to-publish-set')).toBe(mainFill)
+  await expect.poll(() => fill('#btn-save-all-processed')).toBe(quietFill)
+  await expect(page.locator('#btn-censor-to-publish-set')).toBeVisible()
+  await expect(page.locator('#btn-save-all-processed')).toBeVisible()
+
+  // Leaving the mission gives Save All its place back.
+  await page.evaluate(() => (window as any).NavMissions.exit())
+  await page.evaluate(() => (window as any).renderQueue())
+  expect(await lead()).toEqual({ publish: false, saveAll: true })
+})

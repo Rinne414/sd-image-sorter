@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added / 新增
 
+- **Pixiv mission: the last step leads**: on the Censor page, once every picture in the queue has been censored, "To Publish Set" becomes the main button and "Save All" steps back. Outside the mission, or while a picture is still untouched, nothing changes.
+  - **Pixiv 任务：最后一步成为主按钮**：在打码页，队列里的图片全部打完码之后，“送到成套发布”成为主按钮，“全部保存”退为次要按钮。不在该任务中，或还有图片没处理时，一切照旧。
 - **Float as reference**: a picture can be kept in a small window above other programs while you draw or prompt elsewhere. It is in the viewer's tools menu and in the Gallery's right-click menu. The wheel zooms at the pointer, a drag moves a zoomed picture, and three buttons mirror it (H), show it in grey to read values (G) and bring the whole picture back (0). The desktop program opens its own always-on-top window, one per picture; Chrome and Edge use a picture-in-picture window (one at a time); other browsers open an ordinary window and say that it will not stay on top.
   - **浮动参考图**：在别处画画或写提示词时，可以把一张图放进一个始终显示在其他程序上方的小窗口。入口在看图窗口的工具菜单和图库的右键菜单里。滚轮以指针为中心缩放，放大后可拖动，三个按钮分别是镜像（H）、灰度看明暗（G）和回到整张图（0）。桌面版打开自己的置顶窗口，每张图一个；Chrome 和 Edge 使用画中画窗口（一次一个）；其他浏览器会打开普通窗口，并说明它不会保持置顶。
 - **Wander through the library**: Find Similar has a third tab, Wander, for looking around rather than searching. Start from a random picture or from the one selected in the Gallery; each batch shows pictures somewhat like the last one, never one you already saw, and "More, a little further" goes on from the least similar picture of the batch, so the walk drifts through the library instead of circling. The pictures seen can be opened in the Gallery as one set. It uses the similarity index.
