@@ -38,6 +38,7 @@
     <link rel="stylesheet" href="/static/css/video.css">
     <link rel="stylesheet" href="/static/css/server-watch.css">
     <link rel="stylesheet" href="/static/css/catalog-key.css">
+    <link rel="stylesheet" href="/static/css/assistant.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Graphite palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
@@ -715,6 +716,11 @@
                     <span class="nav-action-label nav-catalog-label" data-i18n="catalog.openLabel">All features</span>
                     <span class="nav-catalog-find" data-i18n="catalog.findField">Find a feature…</span>
                     <kbd aria-hidden="true">Ctrl K</kbd>
+                </button>
+                <!-- The built-in assistant: opens its chat panel on the right (js/assistant/panel.js). -->
+                <button id="btn-assistant" class="btn btn-ghost btn-icon-only nav-assistant-btn" type="button" title="Assistant: say what you want to find or do" aria-label="Open the assistant" aria-expanded="false" aria-controls="assistant-panel" data-i18n-title="assistant.openTooltip" data-i18n-aria="assistant.openLabel">
+                    <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-message"/></svg></span>
+                    <span class="nav-action-label" data-i18n="assistant.title">Assistant</span>
                 </button>
                 <button id="btn-tags-library" class="btn btn-ghost btn-icon-only" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.libraryTooltip" data-i18n-aria="action.library">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
@@ -6574,6 +6580,12 @@
                         <p id="modal-prompt-text">-</p>
                     </div>
 
+                    <!-- What differs from the picture made just before this one (js/gallery/modal-changes.js); hidden when there is nothing to compare. -->
+                    <div class="modal-section modal-changes" id="modal-changes-section" hidden>
+                        <h4 class="section-toggle" data-target="modal-changes-body" data-collapse-key="changes"><span class="section-toggle-label" data-i18n="modal.changes">Changed from the picture before</span> <span class="collapse-icon">▼</span></h4>
+                        <div id="modal-changes-body" class="modal-changes-body"></div>
+                    </div>
+
                     <!-- Text lifted from a .txt/.json sidecar (migration 042). Kept out
                          of the prompt block on purpose: it is not a generation prompt,
                          and merging the two is what polluted ~930 stored prompts. -->
@@ -8968,6 +8980,7 @@
     <script src="/static/js/gallery/modal-sections.js"></script>
     <script src="/static/js/gallery/modal-edit.js"></script>
     <script src="/static/js/gallery/modal-preview.js"></script>
+    <script src="/static/js/gallery/modal-changes.js"></script>
     <script src="/static/js/gallery/color-histogram.js"></script>
     <script src="/static/js/gallery/context-menu.js"></script>
     <script src="/static/js/gallery/lifecycle-a11y.js"></script>
@@ -9087,6 +9100,7 @@
     <script src="/static/js/similar/search.js"></script>
     <script src="/static/js/similar/duplicates.js"></script>
     <script src="/static/js/similar/render.js"></script>
+    <script src="/static/js/similar/to-gallery.js"></script>
     <script src="/static/js/similar/events.js"></script>
     <script src="/static/js/similar/boot.js"></script>
     <script src="/static/js/similar.js"></script>
@@ -9234,7 +9248,10 @@
     <script src="/static/js/modules/gallery-selection-badges.js"></script>
     <script src="/static/js/modules/gallery-search-query.js"></script>
     <script src="/static/js/modules/gallery-reshuffle.js"></script>
+    <script src="/static/js/assistant/client.js"></script>
+    <script src="/static/js/assistant/panel.js"></script>
     <script src="/static/js/modules/gallery-search-partial.js"></script>
+    <script src="/static/js/modules/gallery-search-words.js"></script>
     <script src="/static/js/modules/gallery-toolbar.js"></script>
     <script src="/static/js/modules/repair-review.js"></script>
     <script src="/static/js/modules/settings-tabs.js"></script>

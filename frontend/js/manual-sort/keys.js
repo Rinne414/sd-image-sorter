@@ -9,6 +9,9 @@
 
 function handleSortKeypress(e) {
     if (!ManualSortState.active) return;
+    // Typing in a text field (a search box, a dialog, the assistant) is never a sorting key.
+    const typedInto = e.target;
+    if (typedInto && (typedInto.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(typedInto.tagName || ''))) return;
 
     const isBracket = ManualSortState.mode === 'bracket';
     const isCull = ManualSortState.mode === 'cull';

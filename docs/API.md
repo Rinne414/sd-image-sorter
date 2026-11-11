@@ -256,6 +256,9 @@ Idle-triggered quick-import re-scan of the stalest enabled root (v3.3.2 Library 
 Get one image with its tags.
 
 
+#### GET /api/images/{image_id}/changes
+Query: `against` (optional picture id). What differs between two pictures' generation data. Without `against` the picture is compared with the one made just before it: the nearest earlier picture (by library time, then id) that carries a prompt. Returns `{before: {id, filename}, after, comparable, same, picked, seed: {before, after, same}, settings: [{key, before, after}], loras: {added, removed, reweighted}, prompt: {added, removed}, negative_prompt: {added, removed}}`. `settings` lists only keys that differ (`model`, `steps`, `sampler`, `scheduler`, `cfg`, `denoise`, `clip_skip`, `size`); prompt words are compared without weights, order or underscores. `before` is `null` and `comparable` false when there is no earlier picture to compare with. 404 when either picture does not exist.
+
 #### PATCH /api/images/{image_id}/caption
 
 Manually edit the composed display caption (`ai_caption`) and/or the pure
@@ -756,6 +759,9 @@ Create a fresh, empty folder under the data directory (`publish-staging/<session
 
 #### POST /api/publish/export
 Export an ordered publish set with sequential platform-style names (v3.5.0). Body: `{ "items": [{ "image_id", "use_censored", "censored_path"?, "output_name"? }], "metadata_option": "strip" | "keep" | "minimal" (default "strip"), "output_folder", "name_prefix": "", "start_index": 1, "pad_width": 1-4 (default 2), "caption_text": "", "censor_suffix": "_censored", "overwrite": false, "watermark": { "enabled": false, "text": "", "position": "bottom_right", "opacity": 80, "size_percent": 8, "margin_percent": 2, "color": "#FFFFFF" } }`. Item position defines the publish index: each file is copied to `{name_prefix}{number:0{pad}}{ext}` (source extension kept, e.g. `01.png`, `02.jpg`); numbering stays stable across retries because it is positional. An item's `output_name` (a name given on the Censor page) replaces the numbered name; its extension always follows the exported file, and a name used twice in one set fails that item. Items requesting `use_censored` export their `censored_path` when one is sent, otherwise the `{stem}{suffix}.*` pairing; they FAIL (per-item error) when no censored file resolves — the uncensored original is never silently substituted. `metadata_option` controls generation info: `strip` (default) re-encodes without PNG text chunks, EXIF or XMP, `minimal` keeps only the color profile and DPI, `keep` copies the file unchanged (with a watermark it re-encodes and carries the original's generation info over). Animated sources can only be exported with `keep` and no watermark. Existing files are skipped unless `overwrite`. When `watermark.enabled` is true, the selected source is rendered with the configured text into the export copy only; gallery and training sources are untouched. Non-empty `caption_text` is written to `caption.txt`. Output folder is validated against traversal and created if needed (400 on invalid); a blank `output_folder` means the `publish` folder under the output root (see Output folders). Returns `{ "success", "exported": [{ "index", "output_name", "image_id", "used_censored", "source_path", "metadata" }], "skipped_existing", "errors", "caption_file", "output_folder", "reveal_path", "metadata_option" }`; `reveal_path` is the first written (else first skipped) file, for `POST /api/output-folders/reveal`.
+
+#### GET /api/tags/words
+Query: `q` (repeat for several words). Reads Chinese or Japanese words as tags: each word is looked up in the bundled tag-name table as a whole name, never as a part of one. Returns `{words: {word: {tag, pictures}}}` for the words it knows; `pictures` is how many pictures of this library carry the tag (the tag this library has wins when several share the name). The Gallery search uses it for free-text words.
 
 #### GET /api/tags/suggest
 Type-ahead tag suggestions for autocomplete inputs (v3.5.0). Query params: `q=<partial token>`, `limit=<1..50, default 20>`. Merges the user's library tags (frequency-ranked, `source: "library"`) with the bundled danbooru vocabulary `backend/assets/danbooru_tags.csv` (popularity-ranked, alias-aware, `source: "danbooru"`). Each suggestion carries a 14-category `category` (same palette as Dataset Maker tag pills) and an optional `zh` display string. CJK queries fuzzy-match the bundled MIT Chinese/Japanese alias table (`backend/assets/danbooru_zh.csv`, derived from StoryAura/Danbooru-Dataset-csv); a user file at `data/danbooru_zh.csv` still overrides it. Returns `{ "suggestions": [{ "tag", "count", "source", "category", "zh", "copyright" }], "danbooru_loaded", "zh_loaded" }`. Character hits include the StoryAura series/copyright when known; accepting that suggestion in a comma-separated tag box also inserts the copyright token if it is not already present. Empty `q` returns the library's most frequent tags.
@@ -3104,6 +3110,37 @@ Return `{boot_id}`, a value that changes every time the server starts. After `PO
 Apply a downloaded update package. Body: `{force_check?: bool, relaunch?: bool, check_busy?: bool}` (defaults `true`, `true`, `false`). With `check_busy: true`, an install while work is running returns `{status: "busy", jobs, boot_id}` (the same ids as `POST /api/updates/restart`) before anything is downloaded or scheduled, so the page can ask the user; sending it again with `check_busy: false` installs anyway. Without the flag the endpoint installs as before (older clients; V4 and V3.5 send it).
 
 When an update is scheduled, response includes `pending_manifest` and `restart_required`. The updater validates archive entries and the package manifest before copying files, and rejects protected runtime paths such as `data/`, `update/downloads/`, `update/logs/`, `update/state/`, `update/worker/`, and `update/backups/`.
+
+### Assistant
+
+The built-in assistant (the chat panel). It talks to a chat model the user set up (OpenAI chat format) and works the program through a fixed tool table: `read` tools run at once, `show` tools change what is on screen, `change` tools (tags, stars, collections) wait for the user's confirmation. No tool moves, renames, deletes or exports a file.
+
+#### GET /api/assistant/settings
+Return `{endpoint, model, api_key_display, access, extra_instructions, use_caption_service, caption_service, ready, using}`. Addresses are returned without embedded credentials. The key itself is never returned. `using` is the service in force: the assistant's own, or the AI caption service when nothing is entered here and that service speaks the OpenAI chat format. `access` is `ask` (default), `read_only` or `auto`.
+
+#### POST /api/assistant/settings
+Body: any of `{endpoint, api_key, model, access, extra_instructions, use_caption_service, clear_api_key}`; a field left out or `null` keeps its stored value. `use_caption_service` is the user's yes to using the AI caption service when the assistant has no address of its own (never assumed). `clear_api_key` removes the stored key; the key is also dropped when the address moves to another host without a new key. Returns the same shape as GET.
+
+#### GET /api/assistant/tools
+Return `{tools: [{name, kind, description}]}`: what the assistant can do, with each tool's class (`read`, `show`, `change`).
+
+#### POST /api/assistant/models
+Ask the configured service for its model names: `{models: [...]}`. Needs an address but no model. 400 when no address is set, 502 with the reason when the service cannot be reached.
+
+#### POST /api/assistant/test
+One short question to the model: `{ok, model, reply}`. 400 when nothing is set up, 502 with the reason when it fails.
+
+#### POST /api/assistant/runs
+Body: `{messages, view}`. `messages` is the conversation so far (roles `user`, `assistant`, `tool`), ending with the user's message; `view` is what the user is looking at (page, filters, selected ids, language). Starts a run and returns `{run_id}`. 409 when no model service is set up.
+
+#### GET /api/assistant/runs/{run_id}/events
+Query: `after` (index of the first event wanted). Waits up to 20 seconds for something new and returns `{events, next, finished}`. Event types: `text` (`delta`), `text_end`, `tool` / `tool_end` (`name`, `id`, `ok`), `show` (`action`, `args`: the panel applies it), `confirm` (`id`, `summary`), `confirm_closed`, `applying`, `changed` (`summary`, `result` with `pictures_done`, `pictures_asked` and `stopped_early` when it did not finish), `empty` (`reason`), `limit`, and one last `done`, `stopped` or `error`, each with `messages`: the assistant and tool messages to append to the conversation.
+
+#### POST /api/assistant/runs/{run_id}/confirm
+Body: `{id, approved}`. The user's answer to a `confirm` event. 409 when that confirmation is no longer waiting. A confirmation nobody answers is refused after 10 minutes.
+
+#### POST /api/assistant/runs/{run_id}/stop
+Stop the run: the model request ends, a waiting confirmation is refused, and the run closes with a `stopped` event. A confirmed change that is already running is allowed to finish first and is recorded as done.
 
 ### Output folders
 

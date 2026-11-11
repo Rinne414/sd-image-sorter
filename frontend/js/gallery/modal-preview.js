@@ -284,6 +284,7 @@ ${String(value)}`)
             }
         });
         document.querySelector('#modal-key-params').style.display = 'none';
+        window.ModalChanges?.clear();
         document.querySelector('#modal-checkpoint-item').style.display = 'none';
         const aeItemReset = document.querySelector('#modal-aesthetic-item');
         if (aeItemReset) aeItemReset.style.display = 'none';
@@ -614,6 +615,8 @@ ${String(value)}`)
         this._applyModalSectionStates();
         $('#modal-loading-state').style.display = 'none';
         this._restoreModalInfoScrollState(this._pendingModalInfoScrollState);
+        // What differs from the picture made just before (gallery/modal-changes.js).
+        window.ModalChanges?.show(image);
 
         // Extract and display color distribution
         this._extractColorDistribution($('#modal-image'));

@@ -13984,3 +13984,123 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .similar-language-note > span {
     flex: 1 1 320px;
 }
+
+/* Find Similar: the line above the results (how many, and "open these in the
+   Gallery"). One compact row; the count hugs its text, the button sits beside it. */
+.similar-results-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin: 0 0 12px;
+}
+
+.similar-results-bar[hidden] {
+    display: none;
+}
+
+.similar-results-count {
+    color: var(--text, #F2F2F4);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Picture viewer: "Changed from the picture before". One row per difference:
+   a fixed-width label, then what changed. Added and removed carry a + or - as
+   well as their colour. */
+.modal-changes-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.modal-change-head,
+.modal-change-same,
+.modal-change-seed {
+    margin: 0;
+    color: var(--muted, #8A8A90);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.modal-change-same {
+    color: var(--text, #E8E8EA);
+}
+
+.modal-change-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text, #E8E8EA);
+    font: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.modal-change-link:hover {
+    color: var(--accent-bright, #E6E7EA);
+}
+
+.modal-change-link:focus-visible {
+    outline: 2px solid var(--accent-line, rgba(214, 216, 220, 0.45));
+    outline-offset: 2px;
+}
+
+.modal-change-row {
+    display: grid;
+    grid-template-columns: minmax(84px, max-content) 1fr;
+    gap: 10px;
+    align-items: baseline;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.modal-change-label {
+    color: var(--muted, #8A8A90);
+}
+
+.modal-change-words {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+}
+
+.modal-change-word {
+    padding: 1px 7px;
+    border: 1px solid var(--border, #2B2B2E);
+    border-radius: 6px;
+    overflow-wrap: anywhere;
+}
+
+.modal-change-word.is-added {
+    border-color: rgba(var(--success-rgb, 95, 179, 126), 0.5);
+    color: var(--success, #5FB37E);
+}
+
+.modal-change-word.is-removed {
+    border-color: rgba(var(--danger-rgb, 222, 107, 102), 0.5);
+    color: var(--danger, #DE6B66);
+    text-decoration: line-through;
+}
+
+.modal-change-value {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: baseline;
+}
+
+.modal-change-before {
+    color: var(--muted, #8A8A90);
+    text-decoration: line-through;
+}
+
+.modal-change-arrow {
+    color: var(--muted, #8A8A90);
+}
+
+.modal-change-after {
+    color: var(--text, #E8E8EA);
+    font-weight: 600;
+}

@@ -336,7 +336,9 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                                 errors: errorCount,
                                 }
                             ),
-                            'warning'
+                            'warning',
+                            // Undo for what did go through.
+                            typeof moveUndoToastOptions === 'function' ? moveUndoToastOptions(progress) : {}
                         );
                     } else if (movedCount > 0) {
                         // Said once, in the banner below, which stays until the user moves on.
@@ -387,6 +389,15 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                                 { icon: '#i-grid', label: _formatAutoSepI18n('nav.censor', 'Censor Edit'), action: 'view:censor' },
                                 { icon: '#i-package', label: _formatAutoSepI18n('nav.dataset', 'Dataset'), action: 'view:dataset' },
                                 { icon: '#i-image', label: _formatAutoSepI18n('nav.gallery', 'Gallery'), action: 'view:gallery' },
+                                // The way back: every file returns to where it was (copies are removed).
+                                ...(progress.run_token && typeof undoGalleryMove === 'function' ? [{
+                                    icon: '#i-undo',
+                                    label: _formatAutoSepI18n(
+                                        operationMode === 'copy' ? 'autosep.undoCopy' : 'autosep.undoMove',
+                                        operationMode === 'copy' ? 'Undo this copy' : 'Undo this move'
+                                    ),
+                                    action: () => undoGalleryMove(progress.run_token, operationMode === 'copy'),
+                                }] : []),
                             ],
                         });
                     }

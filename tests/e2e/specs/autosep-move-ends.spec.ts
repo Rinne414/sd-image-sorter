@@ -81,3 +81,34 @@ test('Run again while a hidden move runs brings its progress back and keeps foll
   state.current = DONE_WITH_A_FAILURE
   await expect(page.locator('#toast-container .toast').last()).toContainText('Moved 2 images. 1 failed.')
 })
+
+test('a finished move offers Undo beside the next steps, and Undo names that run', async ({ page }) => {
+  const state = { current: RUNNING }
+  const undone: Array<Record<string, unknown>> = []
+  await page.route('**/api/batch-move/undo', async (route) => {
+    undone.push(route.request().postDataJSON())
+    state.current = { status: 'done', step: 'done', current: 3, total: 3, moved: 3, errors: 0, operation: 'undo', run_token: 'run-abc' }
+    await route.fulfill({ json: { status: 'started' } })
+  })
+  await followMove(page, state)
+
+  state.current = { status: 'done', step: 'done', current: 3, total: 3, moved: 3, errors: 0, operation: 'move', message: 'Done', run_token: 'run-abc' }
+  const banner = page.locator('#pipeline-next-step')
+  await expect(banner).toBeVisible()
+  const undo = banner.getByRole('button', { name: 'Undo this move' })
+  await expect(undo).toBeVisible()
+  // The next steps stay first: Undo is the last, quiet button.
+  await expect(banner.locator('.pns-actions button').last()).toHaveText(/Undo this move/)
+
+  await undo.click()
+  await expect.poll(() => undone).toEqual([{ run_token: 'run-abc' }])
+  await expect(page.locator('#toast-container .toast.success').last()).toContainText('3 images are back where they were')
+})
+
+test('a move with no run to name offers no Undo', async ({ page }) => {
+  const state = { current: RUNNING }
+  await followMove(page, state)
+  state.current = { status: 'done', step: 'done', current: 3, total: 3, moved: 3, errors: 0, operation: 'move', message: 'Done' }
+  await expect(page.locator('#pipeline-next-step')).toBeVisible()
+  await expect(page.locator('#pipeline-next-step').getByRole('button', { name: 'Undo this move' })).toHaveCount(0)
+})

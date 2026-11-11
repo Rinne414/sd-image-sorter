@@ -121,7 +121,17 @@
     function applySearch(raw) {
         const a = app();
         if (!a || typeof a.updateFilters !== 'function') return;
-        const parsed = parseQuery(raw);
+        const typed = parseQuery(raw);
+        // A Chinese or Japanese word is looked up in the tag-name table first
+        // (modules/gallery-search-words.js), then the same text is applied once.
+        if (window.GallerySearchWords?.needsLookup(typed)) {
+            const wordsTurn = ++applyTurn;
+            window.GallerySearchWords.resolve(typed).then(() => {
+                if (wordsTurn === applyTurn) applySearch(raw);
+            });
+            return;
+        }
+        const parsed = window.GallerySearchWords ? window.GallerySearchWords.apply(typed) : typed;
         // A typed part of a LoRA or checkpoint name is looked up first, then
         // the same text is applied once with the names it stands for.
         const turn = ++applyTurn;
@@ -244,9 +254,19 @@
         return negated ? `${t('searchPreview.exclude', 'exclude')} ${label}` : label;
     }
 
-    function renderSearchPreview(raw, parsed) {
+    function renderSearchPreview(raw, typed) {
         const host = document.getElementById('gallery-search-preview');
         if (!host) return;
+        // Words the tag-name table knows are shown as the tags they are read as;
+        // one not asked about yet is asked now and the chips are drawn again.
+        const words = window.GallerySearchWords;
+        if (words?.needsLookup(typed)) {
+            words.resolve(typed).then(() => {
+                const input = document.getElementById('gallery-search-input');
+                if (input && input.value === raw) renderSearchPreview(raw, typed);
+            });
+        }
+        const parsed = words ? words.apply(typed) : typed;
         const hasQuery = String(raw || '').trim().length > 0;
         host.textContent = '';
         if (!hasQuery) {

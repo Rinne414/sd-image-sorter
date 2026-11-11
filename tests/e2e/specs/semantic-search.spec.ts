@@ -84,3 +84,41 @@ test('semantic search: Enter key triggers, model-not-ready 503 surfaces the mess
   await page.locator('#similar-search-text').press('Enter')
   await expect(page.locator('#similar-results .empty-state')).toContainText('not ready')
 })
+
+test('the results open as a Gallery view of exactly those pictures, all selected', async ({ page }) => {
+  await openSimilarView(page)
+  await page.route('**/api/similarity/search-text', async (route) => {
+    await route.fulfill({
+      json: {
+        query: 'cat ears',
+        results: [
+          { id: 11, filename: 'semantic-hit.png', similarity: 0.31 },
+          { id: 12, filename: 'semantic-second.png', similarity: 0.27 },
+        ],
+        count: 2, total: 2, has_more: false, offset: 0, limit: 60,
+      },
+    })
+  })
+  const pinned: Array<Record<string, unknown>> = []
+  await page.route('**/api/collections/pinned', async (route) => {
+    pinned.push(route.request().postDataJSON())
+    await route.fulfill({ json: { collection_id: 9001, count: 2 } })
+  })
+
+  // No results yet: no line above the (empty) results.
+  await expect(page.locator('#similar-results-bar')).toHaveCount(0)
+
+  await page.locator('#similar-search-text').fill('cat ears')
+  await page.locator('#btn-similar-search-text').click()
+  const bar = page.locator('#similar-results-bar')
+  await expect(bar).toContainText('2 pictures found')
+  await bar.getByRole('button', { name: /Open these in the Gallery/ }).click()
+
+  await expect.poll(() => pinned).toEqual([{ image_ids: [11, 12] }])
+  await expect(page.locator('#view-gallery.active')).toBeVisible()
+  // The Gallery says where the set came from, and its x gives the whole Gallery back.
+  await expect(page.locator('#gallery-pin-banner-title')).toHaveText('2 from Find Similar')
+  expect(await page.evaluate(() => (window as any).App.AppState.filters.collectionId)).toBe(9001)
+  await page.locator('#gallery-pin-banner-clear').click()
+  expect(await page.evaluate(() => (window as any).App.AppState.filters.collectionId)).toBeNull()
+})

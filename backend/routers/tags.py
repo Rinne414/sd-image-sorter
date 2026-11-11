@@ -219,6 +219,20 @@ def suggest_tags(
     return tag_suggest_service.suggest(q=q, limit=limit)
 
 
+@router.get("/tags/words", summary="Read Chinese or Japanese words as tags")
+def read_words_as_tags(
+    q: list[str] = Query(default=[], description="Words typed in Chinese or Japanese (repeat the parameter)"),
+):
+    """Whole-name lookup of each word in the bundled tag-name table.
+
+    Returns ``{"words": {word: {"tag", "pictures"}}}`` for the words it knows;
+    ``pictures`` is how many pictures of this library carry the tag.
+    """
+    from services import tag_word_lookup
+
+    return {"words": tag_word_lookup.lookup(q)}
+
+
 @router.post("/tags/consistency/report")
 def consistency_report(request: ConsistencyReportRequest):
     """Pre-training dataset health check (BE-5'): trigger hygiene, composition

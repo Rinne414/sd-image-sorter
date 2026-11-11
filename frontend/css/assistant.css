@@ -1,0 +1,378 @@
+/* The built-in assistant: a chat panel docked to the right edge, under the top
+   bar. It lies over the page (nothing reflows), below every dialog and the
+   picture viewer. Colours and radii come from the tokens of the look in use. */
+
+.assistant-panel {
+    position: fixed;
+    top: var(--nav-height, 56px);
+    right: 0;
+    bottom: 0;
+    z-index: 900;
+    width: min(440px, 34vw);
+    min-width: 380px;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-1);
+    border-left: 1px solid var(--border);
+    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.36);
+    color: var(--text);
+    /* One step above the page's body size: this is text to read, on a 2560 px screen too. */
+    font-size: 14px;
+}
+
+.assistant-panel[hidden] {
+    display: none;
+}
+
+.assistant-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 8px 0 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.assistant-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fs-screen-title, 15px);
+    font-weight: 600;
+}
+
+.assistant-model {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.assistant-head-actions {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.assistant-chat {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.assistant-chat[hidden],
+.assistant-setup[hidden] {
+    display: none;
+}
+
+.assistant-messages {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.assistant-msg {
+    max-width: 100%;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+.assistant-msg p {
+    margin: 0 0 8px;
+}
+
+.assistant-msg p:last-child {
+    margin-bottom: 0;
+}
+
+.assistant-msg code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--surface-3);
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+}
+
+.assistant-msg-user {
+    align-self: flex-end;
+    max-width: 88%;
+    padding: 8px 12px;
+    border-radius: var(--r-card, 12px);
+    background: var(--surface-3);
+    white-space: pre-wrap;
+}
+
+.assistant-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.assistant-step-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+}
+
+.assistant-step-mark .icon {
+    width: 13px;
+    height: 13px;
+}
+
+.assistant-step.is-running .assistant-step-mark::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    animation: assistant-pulse 1s ease-in-out infinite;
+}
+
+.assistant-step.is-done .assistant-step-mark {
+    color: var(--success);
+}
+
+.assistant-step.is-failed .assistant-step-mark {
+    color: var(--warning);
+}
+
+@keyframes assistant-pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .assistant-step.is-running .assistant-step-mark::before {
+        animation: none;
+    }
+}
+
+.assistant-confirm {
+    padding: 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-card, 12px);
+    background: var(--surface-2);
+}
+
+.assistant-confirm.is-waiting {
+    border-color: var(--accent-line);
+}
+
+.assistant-confirm-text {
+    margin: 0 0 10px;
+    font-weight: 600;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.assistant-confirm-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.assistant-confirm-status {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.assistant-confirm.is-approved .assistant-confirm-status {
+    color: var(--success);
+}
+
+.assistant-note {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.assistant-note.is-error {
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--danger-rgb), 0.45);
+    border-radius: var(--r-ctl, 10px);
+    color: var(--text);
+}
+
+.assistant-working {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.assistant-welcome {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: auto 0;
+}
+
+.assistant-welcome-title {
+    margin: 0;
+    font-size: var(--fs-screen-title, 15px);
+    font-weight: 600;
+}
+
+.assistant-welcome-text {
+    margin: 0 0 6px;
+    color: var(--muted);
+    line-height: 1.55;
+}
+
+.assistant-examples {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.assistant-example {
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctl, 10px);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    line-height: 1.4;
+    text-align: left;
+    cursor: pointer;
+}
+
+.assistant-example:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-3);
+}
+
+.assistant-example:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: 1px;
+}
+
+.assistant-composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--border);
+}
+
+.assistant-composer textarea,
+.assistant-setup input,
+.assistant-setup select,
+.assistant-setup textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-ctl, 10px);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    line-height: 1.45;
+}
+
+.assistant-composer textarea {
+    flex: 1;
+    min-height: 56px;
+    max-height: 180px;
+    resize: none;
+}
+
+.assistant-composer textarea:focus-visible,
+.assistant-setup input:focus-visible,
+.assistant-setup select:focus-visible,
+.assistant-setup textarea:focus-visible {
+    border-color: var(--accent-line);
+    outline: none;
+}
+
+.assistant-composer .btn {
+    flex: none;
+    min-width: 64px;
+}
+
+.assistant-setup {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.assistant-setup-title {
+    margin: 0;
+    font-size: var(--fs-screen-title, 15px);
+    font-weight: 600;
+}
+
+.assistant-setup-sent,
+.assistant-setup-borrowed {
+    margin: 0 0 4px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.assistant-setup-borrowed {
+    color: var(--text);
+}
+
+.assistant-setup label {
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.assistant-setup textarea {
+    resize: vertical;
+}
+
+.assistant-setup-row {
+    display: flex;
+    gap: 8px;
+}
+
+.assistant-setup-row .btn {
+    flex: none;
+}
+
+.assistant-setup-status {
+    min-height: 18px;
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.assistant-setup-status[data-tone="ok"] {
+    color: var(--success);
+}
+
+.assistant-setup-status[data-tone="error"] {
+    color: var(--danger);
+}
+
+.assistant-setup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* The top-bar button stays lit while the panel is open. */
+#btn-assistant[aria-expanded="true"] {
+    background: var(--surface-3);
+    color: var(--text);
+}

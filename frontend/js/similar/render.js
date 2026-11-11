@@ -22,8 +22,11 @@ Object.assign(window.SimilarImages, {
         if (this.searchResults.length === 0) {
             container.innerHTML = `<div class="empty-state">${escapeHtml(this.searchEmptyMessage)}</div>`;
             if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+            window.SimilarToGallery?.show(container, []);
             return;
         }
+        // The line above the results that opens them all as a Gallery view (similar/to-gallery.js).
+        window.SimilarToGallery?.show(container, this.searchResults.map((result) => Number(result.id)).filter(Boolean));
 
         const { API } = window.App;
         const getThumbnailUrl = (id) => API?.getThumbnailUrl?.(id) ?? `/api/image-thumbnail/${id}?size=256`;

@@ -103,6 +103,7 @@ from routers.images_parts import selection  # (2) selection-token · selection-c
 from routers.images_parts import repair     # (3) reconnect-missing/* · repair-candidates · repair-confirm
 from routers.images_parts import counting   # (4) GET /images/count (static, pre-{image_id})
 from routers.images_parts import detail     # (5) GET /images/{image_id} · PATCH caption
+from routers.images_parts import changes    # (5b) GET /images/{image_id}/changes
 from routers.images_parts import export     # (6) export-data · selection-ids · POST count
 from routers.images_parts import jobs       # (7) delete-selected/* · remove-selected/* · bulk-jobs/*
 from routers.images_parts import item_ops   # (8) reparse · rating

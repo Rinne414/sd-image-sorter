@@ -13,7 +13,13 @@
  */
 (function initGalleryPin(global) {
     const STORAGE_KEY = 'sd-image-sorter-gallery-pin';
-    const state = { id: null, count: 0, gone: false, previous: null };
+    // source: where the set came from ('stylemap', 'similar', 'assistant'); it words the banner.
+    const state = { id: null, count: 0, gone: false, previous: null, source: 'stylemap' };
+    const TITLES = {
+        stylemap: ['galleryPin.title', '{n} from the Style Map'],
+        similar: ['galleryPin.titleSimilar', '{n} from Find Similar'],
+        assistant: ['galleryPin.titleAssistant', '{n} picked by the assistant'],
+    };
 
     const app = () => global.App || null;
     const tr = (key, fallback, params) => (
@@ -23,7 +29,7 @@
     function persist() {
         try {
             if (state.id === null) localStorage.removeItem(STORAGE_KEY);
-            else localStorage.setItem(STORAGE_KEY, JSON.stringify({ id: state.id, count: state.count, previous: state.previous }));
+            else localStorage.setItem(STORAGE_KEY, JSON.stringify({ id: state.id, count: state.count, previous: state.previous, source: state.source }));
         } catch (_error) { /* storage can be blocked; the pin then lasts for this page only */ }
     }
 
@@ -34,6 +40,7 @@
                 state.id = Number(saved.id);
                 state.count = Number(saved.count) || 0;
                 state.previous = saved.previous || { collectionId: null, scope: null };
+                state.source = TITLES[saved.source] ? saved.source : 'stylemap';
             }
         } catch (_error) { /* a damaged value is ignored */ }
     }
@@ -47,7 +54,7 @@
         if (title) {
             title.textContent = state.gone
                 ? tr('galleryPin.gone', 'This set of pictures is no longer available')
-                : tr('galleryPin.title', '{n} from the Style Map', { n: state.count.toLocaleString() });
+                : tr(...TITLES[state.source], { n: state.count.toLocaleString() });
         }
         const clear = document.getElementById('gallery-pin-banner-clear');
         if (clear) {
@@ -58,9 +65,10 @@
     }
 
     /** Make the Gallery show exactly the pictures of pinned set `id`. */
-    function apply(id, count) {
+    function apply(id, count, source) {
         const api = app();
         if (!api) return;
+        state.source = TITLES[source] ? source : 'stylemap';
         if (state.id === null) {
             const filters = api.AppState?.filters || {};
             state.previous = { collectionId: filters.collectionId ?? null, scope: filters.scope ?? null };
@@ -81,7 +89,7 @@
     }
 
     /** Store `ids` as a pinned set and open the Gallery on it. Resolves false when nothing could be pinned. */
-    async function open(ids) {
+    async function open(ids, options = {}) {
         const api = app();
         if (!api || !ids?.length) return false;
         const made = await api.API.post('/api/collections/pinned', { image_ids: ids });
@@ -89,7 +97,7 @@
             api.showToast?.(tr('galleryPin.empty', 'None of these pictures are in the Gallery any more'), 'info');
             return false;
         }
-        apply(made.collection_id, made.count);
+        apply(made.collection_id, made.count, options.source);
         return true;
     }
 

@@ -4296,6 +4296,21 @@
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
       }
+    },
+    {
+      "id": "assistant.panel",
+      "area": "assistant",
+      "en": "Built-in assistant (chat panel that finds, shows and, after a confirmation, tags, rates and collects)",
+      "zh": "内置助手（聊天面板：找图、显示结果，确认后打标签、评星、放入收藏集）",
+      "classic": [
+        "#btn-assistant"
+      ],
+      "vopus": {
+        "missing": "The assistant was built for the classic interface first (2026-11-11); V Opus has no chat panel yet"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [
