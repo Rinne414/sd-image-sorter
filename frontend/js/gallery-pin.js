@@ -22,6 +22,7 @@
         varied: ['galleryPin.titleVaried', '{n} picked for variety'],
         rejected: ['galleryPin.titleRejected', '{n} you rejected'],
         wander: ['galleryPin.titleWander', '{n} seen while wandering'],
+        new: ['galleryPin.titleNew', '{n} new pictures'],
     };
 
     const app = () => global.App || null;

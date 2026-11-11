@@ -274,6 +274,14 @@
                     <span class="tile-output" data-i18n="entry.missionPixivOutput">A censored, ordered set ready to upload</span>
                     <span class="tile-steps" data-i18n="entry.missionPixivSteps">Pick, censor, order and rename, export</span>
                 </button>
+                <button type="button" class="entry-tile entry-mission-new" id="entry-mission-new">
+                    <span class="tile-head">
+                        <span class="tile-title" data-i18n="entry.missionNewTitle">New Pictures</span>
+                        <span class="tile-arrow" aria-hidden="true">→</span>
+                    </span>
+                    <span class="tile-output" data-i18n="entry.missionNewOutput">Keep the good ones, clear out the rest</span>
+                    <span class="tile-steps" id="entry-mission-new-count"></span>
+                </button>
             </div>
 
             <div class="entry-eyebrow"><span data-i18n="entry.groupTools">Tools</span></div>
@@ -2327,6 +2335,8 @@
                                 </div>
                             </div>
                             <div class="filter-summary-compact" id="manual-sort-filter-summary">
+                                <span class="summary-item" id="manual-sort-summary-set-row" hidden><strong data-i18n="manual.summarySet">Only:</strong> <span
+                                        id="manual-sort-summary-set"></span></span>
                                 <span class="summary-item"><strong>Generators:</strong> <span
                                         id="manual-sort-summary-generators" data-i18n="common.all">All</span></span>
                                 <span class="summary-item"><strong>Tags:</strong> <span
@@ -9297,6 +9307,7 @@
     <script src="/static/js/modules/gallery-search-words.js"></script>
     <script src="/static/js/modules/pose-view-chooser.js"></script>
     <script src="/static/js/modules/pick-varied.js"></script>
+    <script src="/static/js/modules/new-pictures.js"></script>
     <script src="/static/js/modules/compare-two.js"></script>
     <script src="/static/js/reference-view/view.js"></script>
     <script src="/static/js/modules/reference-window.js"></script>

@@ -395,6 +395,8 @@ async function finishCullSorting(result) {
     const dests = { keep: getCullDest('keep'), reject: getCullDest('reject') };
     const routeStats = await collectCullDecisions(map, dests);
     reportCullRouting(routeStats, { kept: keptCount, rejected: rejectedCount }, dests);
+    // A cull that came from "New pictures" has dealt with them: its marker moves on.
+    window.NewPictures?.noteCullFinished?.();
     // The decisions are remembered for the file actions offered next, whatever
     // the destinations were (a reject sent to "Don't save" can still be trashed).
     offerCullFileActions(

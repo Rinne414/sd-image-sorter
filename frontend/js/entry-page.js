@@ -664,6 +664,7 @@
         const [summary, session] = await Promise.all(requests);
         renderSummary(summary);
         renderSortSession(session);
+        window.NewPictures?.refreshTile?.();
     }
 
     // ------------------------------------------------------------------
@@ -891,6 +892,12 @@
                 window.App?.setSelectionMode?.(true);
                 window.showToast?.(t('pub.entryPickThenCensor', null,
                     'Select the images for this set in the Gallery first, then click Censor Edit in the bar at the bottom.'), 'info');
+            },
+            // Only what was made since the last cull, opened in the Gallery with
+            // Keep / Reject one press away (modules/new-pictures.js). With nothing
+            // new it says so and stays on Home.
+            'entry-mission-new': async () => {
+                if (await window.NewPictures?.open?.()) hide();
             },
             'entry-mission-organize': () => {
                 enterMission('organize');

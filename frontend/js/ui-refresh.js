@@ -234,6 +234,7 @@
                 'summary.dimensions'
             ]);
             this._setSummaryStrongs('#manual-sort-filter-summary', [
+                'manual.summarySet', // the "Only: <set>" row, first (hidden unless the scope is a set)
                 'summary.generators',
                 'summary.tags',
                 'summary.ratings',

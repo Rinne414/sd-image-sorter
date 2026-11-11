@@ -260,6 +260,9 @@ Get one image with its tags.
 #### GET /api/images/{image_id}/changes
 Query: `against` (optional picture id). What differs between two pictures' generation data. Without `against` the picture is compared with the one made just before it: the nearest earlier picture (by library time, then id) that carries a prompt. Returns `{before: {id, filename}, after, comparable, same, picked, seed: {before, after, same}, settings: [{key, before, after}], loras: {added, removed, reweighted}, prompt: {added, removed}, negative_prompt: {added, removed}}`. `settings` lists only keys that differ (`model`, `steps`, `sampler`, `scheduler`, `cfg`, `denoise`, `clip_skip`, `size`); prompt words are compared without weights, order or underscores. `before` is `null` and `comparable` false when there is no earlier picture to compare with. 404 when either picture does not exist.
 
+#### GET /api/new-pictures
+Query: `after?` (a `newest_time` from an earlier answer, or a local `YYYY-MM-DD HH:MM:SS`). The open library's pictures made after that moment, newest first, by the picture's own time (the key of the newest-first order), not by when it was last indexed. Returns `{after, ids, count, newest_time}`; `newest_time` is the library's newest picture and is the marker to remember for next time. Without `after` every picture counts.
+
 #### PATCH /api/images/{image_id}/note
 Body: `{note}` (up to 4000 characters; empty or `null` clears it). Stores the user's own note on a picture and returns `{image_id, note}`. The note is returned as `note` by `GET /api/images/{image_id}` and is matched by the Gallery's free-text `search`, like a caption. 404 when the picture does not exist.
 

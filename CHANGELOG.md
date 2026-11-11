@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added / 新增
 
+- **New Pictures**: Home has a fourth mission beside Pixiv Set Publishing. It opens the Gallery on only the pictures made since your last cull (the first time: the last 7 days) and offers "Keep / Reject them", which starts Manual Sort over exactly that set, or "Mark all as seen". The tile shows how many are waiting. The marker moves only when you finish that cull or mark the set as seen, never by looking, and marking can be undone. Also in the function catalog (Ctrl K).
+  - **新图片**：首页在“Pixiv 成套发布”旁边多了第四个任务。它在图库里只显示上次挑选之后生成的图片（第一次是最近 7 天），并提供“逐张决定留 / 汰”（对这一组直接开始手动整理）或“全部标为已看过”。磁贴上会显示还有多少张待挑选。只有挑完或标为已看过时记号才会前移，光是看不会；标记可以撤销。功能目录（Ctrl K）里也有。
 - **Pixiv mission: the last step leads**: on the Censor page, once every picture in the queue has been censored, "To Publish Set" becomes the main button and "Save All" steps back. Outside the mission, or while a picture is still untouched, nothing changes.
   - **Pixiv 任务：最后一步成为主按钮**：在打码页，队列里的图片全部打完码之后，“送到成套发布”成为主按钮，“全部保存”退为次要按钮。不在该任务中，或还有图片没处理时，一切照旧。
 - **Float as reference**: a picture can be kept in a small window above other programs while you draw or prompt elsewhere. It is in the viewer's tools menu and in the Gallery's right-click menu. The wheel zooms at the pointer, a drag moves a zoomed picture, and three buttons mirror it (H), show it in grey to read values (G) and bring the whole picture back (0). The desktop program opens its own always-on-top window, one per picture; Chrome and Edge use a picture-in-picture window (one at a time); other browsers open an ordinary window and say that it will not stay on top.

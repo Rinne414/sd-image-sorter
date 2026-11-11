@@ -105,6 +105,7 @@ from routers.images_parts import counting   # (4) GET /images/count (static, pre
 from routers.images_parts import detail     # (5) GET /images/{image_id} · PATCH caption
 from routers.images_parts import changes    # (5b) GET /images/{image_id}/changes
 from routers.images_parts import note       # (5c) PATCH /images/{image_id}/note
+from routers.images_parts import new_pictures  # (5d) GET /new-pictures
 from routers.images_parts import export     # (6) export-data · selection-ids · POST count
 from routers.images_parts import jobs       # (7) delete-selected/* · remove-selected/* · bulk-jobs/*
 from routers.images_parts import item_ops   # (8) reparse · rating

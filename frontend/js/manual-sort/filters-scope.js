@@ -452,6 +452,22 @@ function updateManualSortFilterSummary() {
         el.textContent = value;
     };
 
+    // A scope that is one set of pictures (a collection, or a set the Gallery
+    // shows such as "56 new pictures") says so first: every row below would
+    // otherwise read "All / None" as if the whole library were in scope.
+    const setRow = $('#manual-sort-summary-set-row');
+    if (setRow) {
+        const setId = Number(filters.collectionId);
+        const isSet = Number.isInteger(setId) && setId > 0;
+        setRow.hidden = !isSet;
+        if (isSet) {
+            const pinned = Number(window.GalleryPin?._state?.id) === setId
+                ? document.getElementById('gallery-pin-banner-title')?.textContent?.trim()
+                : '';
+            $('#manual-sort-summary-set').textContent = pinned
+                || formatManualSortI18n('manual.summarySetCollection', 'the pictures of one collection');
+        }
+    }
     setSummary('#manual-sort-summary-generators', summary.generators);
     setSummary('#manual-sort-summary-tags', summary.tags);
     setSummary('#manual-sort-summary-ratings', summary.ratings);

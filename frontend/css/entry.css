@@ -550,7 +550,8 @@ body.entry-active {
 /* mission tiles: one geometry per tier, rows flush (FB-2) */
 .entry-mission-lora,
 .entry-mission-organize,
-.entry-mission-pixiv { flex: 1; }
+.entry-mission-pixiv,
+.entry-mission-new { flex: 1; }
 
 /* function tiles: equal cards inside each row; the live numbers still talk,
    at one calm size instead of four */

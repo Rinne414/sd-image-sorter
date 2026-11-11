@@ -4390,6 +4390,21 @@
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
       }
+    },
+    {
+      "id": "home.new-pictures",
+      "area": "home",
+      "en": "New Pictures: only what was made since the last cull, with Keep / Reject or Mark all as seen",
+      "zh": "新图片：只看上次挑选之后生成的图片，可逐张留 / 汰或全部标为已看过",
+      "classic": [
+        "#entry-mission-new"
+      ],
+      "vopus": {
+        "missing": "Built for the classic interface first (2026-11-11)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [

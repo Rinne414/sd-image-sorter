@@ -14476,3 +14476,8 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .wander-more-tile:hover {
     background: var(--surface-3, #232326);
 }
+
+/* Manual Sort scope summary: the "Only: <set>" row exists only for a set scope. */
+.filter-summary-compact .summary-item[hidden] {
+    display: none;
+}
