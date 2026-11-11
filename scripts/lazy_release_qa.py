@@ -13,7 +13,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import shutil
 import socket
 import subprocess
@@ -50,9 +49,8 @@ PACKAGE_FORBIDDEN_PREFIXES = (
     "desktop/dist/",
     "desktop/package.json",
     "desktop/package-lock.json",
-    # Vopus ships as its build (frontend-v4/dist) only.
-    "frontend-v4/node_modules/",
-    "frontend-v4/src/",
+    # The second interface was retired on 2026-11-12: nothing of it ships.
+    "frontend-v4/",
     "node_modules/",
     "tests/",
     "update/backups/",
@@ -69,7 +67,6 @@ PACKAGE_REQUIRED_COMMON_APP_FILES = (
     "frontend/index.html",
     "frontend/js/app.js",
     "frontend/js/gallery.js",
-    "frontend-v4/dist/index.html",
     # The program builds the Chrome and Firefox extension folders from these.
     "browser-extension/manifest.base.json",
     "browser-extension/src/background.js",
@@ -89,17 +86,6 @@ SHELL_REQUIRED_FILES = (
 )
 # Electron files that must never sit loose at the top of the package.
 SHELL_MISPLACED_AT_TOP = ("resources.pak", "icudtl.dat", "ffmpeg.dll", "resources/app.asar", "locales/en-US.pak")
-
-V4_DIST_PREFIX = "frontend-v4/dist/"
-V4_INDEX_PATH = V4_DIST_PREFIX + "index.html"
-# The address the backend serves Vopus at; its build loads every file from here.
-V4_BASE_URL = "/vopus/"
-# A content-hashed Vite build file as index.html, the JS chunks and the
-# stylesheets name it: "/vopus/assets/x-AbC12345.js", "./x-AbC12345.js",
-# "assets/x-AbC12345.css" or url(/vopus/assets/x-AbC12345.woff2).
-V4_ASSET_REF_RE = re.compile(
-    r"(?:/vopus/assets/|\./|\bassets/)([\w.-]+-[\w-]{8}\.(?:js|css|svg|png|webp|woff2?))\b"
-)
 
 PACKAGE_REQUIRED_FILES_BY_KIND = {
     "windows-portable": (
@@ -310,37 +296,6 @@ def assert_shell_not_managed(read_member: Callable[[str], bytes], names: Iterabl
         raise LazyQaError(f"package-manifest.json manages desktop shell files: {', '.join(managed_shell[:5])}")
 
 
-def assert_frontend_v4_build(
-    names: Iterable[str],
-    read_text: Callable[[str], str],
-    *,
-    package_kind: str,
-) -> None:
-    """Fail unless the Vopus index.html and every file it loads, directly or through a chunk or stylesheet, ship."""
-    present = set(names)
-    if V4_INDEX_PATH not in present:
-        raise LazyQaError(f"{package_kind} archive missing required file: {V4_INDEX_PATH}")
-    index_text = read_text(V4_INDEX_PATH)
-    if f'src="{V4_BASE_URL}assets/' not in index_text:
-        raise LazyQaError(
-            f"{package_kind} archive has a Vopus index.html that does not load its script "
-            f"from {V4_BASE_URL}assets/, the address the backend serves Vopus at"
-        )
-
-    pending = sorted(set(V4_ASSET_REF_RE.findall(index_text)))
-    checked: set[str] = set()
-    while pending:
-        ref = pending.pop()
-        if ref in checked:
-            continue
-        checked.add(ref)
-        asset_path = f"{V4_DIST_PREFIX}assets/{ref}"
-        if asset_path not in present:
-            raise LazyQaError(f"{package_kind} archive missing Vopus file: {asset_path}")
-        if ref.endswith((".js", ".css")):
-            pending.extend(V4_ASSET_REF_RE.findall(read_text(asset_path)))
-
-
 def _check_package_archive(
     names: Iterable[str],
     read_member: Callable[[str], bytes],
@@ -349,14 +304,8 @@ def _check_package_archive(
 ) -> None:
     raw_names = list(names)
     assert_archive_contents(raw_names, package_kind=package_kind)
-    members = {normalize_archive_name(name): name for name in raw_names}
     if package_kind == "windows-portable":
         assert_shell_not_managed(read_member, raw_names)
-    assert_frontend_v4_build(
-        members,
-        lambda path: read_member(members[path]).decode("utf-8"),
-        package_kind=package_kind,
-    )
 
 
 def _read_tar_member(archive: tarfile.TarFile, name: str) -> bytes:

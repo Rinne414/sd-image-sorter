@@ -22,9 +22,9 @@
     // small" is written "1 image is too small". The packs keep one plural
     // sentence; when a count is exactly 1, format() writes the noun that
     // follows it (maybe after one modifier, "{count} folder images") and a
-    // verb right after it ("are", "have") in the singular. The lists are the
-    // ones in frontend-v4/src/i18n/plural.ts; backend/tests/test_i18n_plural.py
-    // keeps them equal and holds every English count in lang/en.js to them.
+    // verb right after it ("are", "have") in the singular.
+    // backend/tests/test_i18n_plural.py holds every English count in
+    // lang/en.js to these lists.
     // Chinese has no plural and never matches.
     var PLURALS = {
         images: 'image', pictures: 'picture', videos: 'video', sources: 'source', conditions: 'condition',

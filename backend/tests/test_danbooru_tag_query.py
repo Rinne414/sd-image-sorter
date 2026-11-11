@@ -490,26 +490,13 @@ def test_frontends_name_both_models_in_both_languages():
     zh = (REPO_ROOT / "frontend" / "js" / "lang" / "zh-CN.js").read_text(
         encoding="utf-8"
     )
-    vopus = (
-        REPO_ROOT / "frontend-v4" / "src" / "features" / "tagging" / "taggers.ts"
-    ).read_text(encoding="utf-8")
-    vopus_en = (REPO_ROOT / "frontend-v4" / "src" / "i18n" / "en.ts").read_text(
-        encoding="utf-8"
-    )
-    vopus_zh = (REPO_ROOT / "frontend-v4" / "src" / "i18n" / "zh-CN.ts").read_text(
-        encoding="utf-8"
-    )
 
     for variant, prefix, note in ((B16, "dtqB16", "dtqB16"), (L16, "dtqL16", "dtqL16")):
         assert f"'{variant}': 'tagger.model.{prefix}'" in ui
         assert f"'{variant}':" in ensure
-        assert f"'{variant}':" in vopus
         for key in ("summary", "bestFor", "runtimeNote", "safeModeNote"):
             assert f"'tagger.model.{prefix}.{key}'" in en
             assert f"'tagger.model.{prefix}.{key}'" in zh
-        assert (
-            f"'tagger.note.{note}'" in vopus_en and f"'tagger.note.{note}'" in vopus_zh
-        )
 
 
 def test_a_batch_size_that_ran_out_of_memory_is_not_tried_again():

@@ -112,7 +112,7 @@ from fastapi.responses import JSONResponse
 import app_static
 from app_diagnostics import build_support_diagnostics, open_support_log_file
 from app_security import _is_loopback_host, configure_security_middleware
-from app_static import FRONTEND_V4_DIST_PATH, mount_frontend_static, mount_frontend_v4, serve_root, static_cache_bust_token
+from app_static import mount_frontend_static, mount_retired_interfaces, serve_root, static_cache_bust_token
 
 _STATIC_CACHE_BUST_RE = app_static._STATIC_CACHE_BUST_RE
 
@@ -135,7 +135,7 @@ from exceptions import (
 
 # Import routers
 import network_proxy
-from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_quality, caption_tokens, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders, batches, batch_uploads, file_manager, image_lookup, interface, folder_watch, generator_recipe, browser_extension, collect, videos
+from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_quality, caption_tokens, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders, batches, batch_uploads, file_manager, image_lookup, folder_watch, generator_recipe, browser_extension, collect, videos
 
 # Import services
 from services import (
@@ -397,8 +397,8 @@ configure_security_middleware(app)
 frontend_path = str(BACKEND_DIR.parent / "frontend")
 mount_frontend_static(app, frontend_path=frontend_path)
 
-# The second interface, Vopus (Vite build of frontend-v4), at /vopus/.
-mount_frontend_v4(app, dist_path=str(FRONTEND_V4_DIST_PATH))
+# The retired second interfaces (/vopus/, /v4/, /next/): their addresses lead to /.
+mount_retired_interfaces(app)
 
 
 def _static_cache_bust_token(asset_path: str) -> str:
@@ -458,7 +458,6 @@ app.include_router(eagle_router.router)
 app.include_router(videos.router)
 app.include_router(file_manager.router)
 app.include_router(image_lookup.router)
-app.include_router(interface.router)
 
 
 # ============================================================
@@ -637,7 +636,7 @@ async def support_open_log():
 @app.get("/")
 async def root(request: Request):
     """
-    Serve the main frontend page (or Vopus, when Settings chose it).
+    Serve the main frontend page.
 
     Injects ``?v=APP_VERSION`` cache-busters onto every ``/static/*.js`` and
     ``/static/*.css`` reference in ``index.html``. This ensures that when a
@@ -646,7 +645,7 @@ async def root(request: Request):
     cached language packs and breaking new i18n keys until the user does a
     hard refresh (ctrl+shift+r). DB rows, scan progress, filters and
     selections live in localStorage / SQLite so this is purely a transport
-    fix; no user data is touched. ``/?ui=classic`` always opens this page.
+    fix; no user data is touched.
     """
     return serve_root(request, frontend_path=frontend_path, app_version=APP_VERSION)
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed / 移除
+
+- **One interface: V Opus and the trial interface are retired**: the program had three interfaces over one library, and only the classic one got new features (none of this version's additions reached the other two). On the owner's decision the program now has one interface. The Interface row in Settings and the V Opus entry in the function catalog are gone; the old addresses `/vopus/`, `/v4/` and `/next/` open the program. Your library, settings and files are not touched. A source install no longer needs Node.js to start, and packages are smaller.
+  - **只保留一套界面：V Opus 和试验界面已停用**：以前程序在同一个图库上有三套界面，而新功能只进了经典界面（这个版本新增的功能在另外两套里一个也没有）。按所有者的决定，程序现在只有一套界面。设置里的“界面”一项和功能目录里的 V Opus 入口已移除；旧地址 `/vopus/`、`/v4/`、`/next/` 会直接打开程序。图库、设置和文件都不受影响。从源码运行不再需要 Node.js，安装包也更小。
+
 ### Added / 新增
 
 - **Recent moves**: a move or copy could be undone only from its result message, which went away after twelve seconds or with the page. "Recent moves" (More menu, and the function catalog) lists the last runs, newest first, with when, how many files and where to, and an Undo for each one not undone yet. It covers the Gallery's Move and Copy, a drop on a folder and Auto-Separate; the program keeps the last 100 runs.

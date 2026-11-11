@@ -176,13 +176,9 @@ fs.mkdirSync(e2eFixtureRoot, { recursive: true })
 // Playwright loads this file again in every worker. Only the main process
 // starts from a clean slate: a worker deleting the stub modules while the
 // server it shares has them open fails with EPERM on Windows (flaked three
-// times on 2026-11-08), and a worker deleting interface.json mid-run could
-// undo an interface-switch spec.
+// times on 2026-11-08).
 if (process.env.TEST_WORKER_INDEX === undefined) {
   fs.rmSync(e2eStubModulesDir, { recursive: true, force: true })
-  // Every run starts on the classic interface at /, even after an aborted
-  // interface-switch spec left Vopus chosen in this reused data folder.
-  fs.rmSync(path.join(e2eDataDir, 'config', 'interface.json'), { force: true })
 }
 const artistRuntimeZip = path.join(e2eFixtureRoot, 'comfyui-lsnet-runtime.zip')
 const artistRuntimeSource = path.join(e2eFixtureRoot, 'comfyui-lsnet-runtime-source')

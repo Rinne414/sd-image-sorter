@@ -46,17 +46,6 @@ for (const [lang, sentence, other] of [['zh-CN', SOCKS_ZH, SOCKS_EN], ['en', SOC
   })
 }
 
-test('Vopus: a SOCKS address is refused in Chinese only on a Chinese screen', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
-  await page.goto('/vopus/#/settings/models')
-  await page.locator('[data-testid="network-proxy-input"]').fill(SOCKS)
-  await page.locator('[data-testid="network-proxy-save"]').click()
-  const toast = page.getByText(SOCKS_ZH, { exact: false }).first()
-  await expect(toast).toBeVisible()
-  await expect(toast).not.toContainText('SOCKS is not supported')
-  await expect(toast).not.toContainText(' / ')
-})
-
 test('classic: only a real English / Chinese pair is split', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('aurora-entry-skip', '1'))
   await page.goto('/')

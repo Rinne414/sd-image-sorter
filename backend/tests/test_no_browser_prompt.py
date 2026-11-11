@@ -3,7 +3,7 @@
 The desktop program (Electron) has no window.prompt(): it throws "prompt() is
 not supported", so New library and Rename library did nothing there (found
 2026-10-30). Every name or value is asked with the program's own dialog
-(classic: App.showInputModal; V Opus: its Dialog).
+(App.showInputModal).
 
 confirm() and alert() work, but look unfinished: Chrome's unstyled
 "127.0.0.1:8487 says" box with untranslated buttons, or a native OS box in the
@@ -27,14 +27,11 @@ PROMPT_CALL = re.compile(r"\bwindow\s*\.\s*prompt\s*\(|\bglobalThis\s*\.\s*promp
 CLASSIC_BOX_CALL = re.compile(
     r"(?<![\w$.])(?:(?:window|globalThis)\s*\.\s*)?(?:confirm|alert)\s*\("
 )
-V4_BOX_CALL = re.compile(r"\b(?:window|globalThis)\s*\.\s*(?:confirm|alert)\s*\(")
 
 
 def _sources():
     yield from (ROOT / "frontend").rglob("*.js")
     yield from (ROOT / "frontend").rglob("*.html")
-    for pattern in ("*.ts", "*.tsx"):
-        yield from (ROOT / "frontend-v4" / "src").rglob(pattern)
 
 
 def _classic_sources():
@@ -42,11 +39,6 @@ def _classic_sources():
         if not any(path.is_relative_to(skip) for skip in CLASSIC_SKIP):
             yield path
     yield from (ROOT / "frontend").glob("*.html")
-
-
-def _v4_sources():
-    for pattern in ("*.ts", "*.tsx"):
-        yield from (ROOT / "frontend-v4" / "src").rglob(pattern)
 
 
 def _matching_lines(paths, pattern):
@@ -80,14 +72,6 @@ def test_the_classic_ui_never_calls_the_browser_confirm_or_alert_box():
     )
 
 
-def test_v_opus_never_calls_the_browser_confirm_or_alert_box():
-    found = _matching_lines(_v4_sources(), V4_BOX_CALL)
-    assert not found, (
-        "window.confirm() and window.alert() show the browser's own box. Use "
-        "V Opus's own Dialog and toasts instead:\n" + "\n".join(found)
-    )
-
-
 def test_the_box_check_tells_calls_from_methods_and_longer_names():
     assert CLASSIC_BOX_CALL.search("if (!window.confirm(msg)) return;")
     assert CLASSIC_BOX_CALL.search("if (!confirm(text)) return;")
@@ -97,5 +81,3 @@ def test_the_box_check_tells_calls_from_methods_and_longer_names():
     assert not CLASSIC_BOX_CALL.search("this._confirm(message)")
     assert not CLASSIC_BOX_CALL.search("dialog.confirm(answer)")
     assert not CLASSIC_BOX_CALL.search("await App.confirmAsync({ title })")
-    assert V4_BOX_CALL.search("if (window.confirm('Delete?')) remove()")
-    assert not V4_BOX_CALL.search("onClick={() => void confirm()}")

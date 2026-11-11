@@ -704,7 +704,7 @@ Save an image copy with edited metadata fields. The edit is written in the image
 Open an image's containing folder in the host file explorer.
 
 #### POST /api/images/by-ids
-Gallery rows (id, path, filename, generator, width, height, file_size, checkpoint, loras, user_rating, aesthetic_score, is_readable, metadata_status, created_at, library_order_time, media_type) for a list of image ids, in the order given. Body: `{ "image_ids": [12, 7, 30] }` (at most 2000). Ids that no longer exist or belong to another library are left out; repeats come back once. Returns `{ "images": [...], "count": n }`. Used by ranked views (similarity search, duplicate review) and by Vopus's Censor action, which tells the stills of a pick from its GIFs (file name) and videos (`media_type`) with one request per 2000 ids.
+Gallery rows (id, path, filename, generator, width, height, file_size, checkpoint, loras, user_rating, aesthetic_score, is_readable, metadata_status, created_at, library_order_time, media_type) for a list of image ids, in the order given. Body: `{ "image_ids": [12, 7, 30] }` (at most 2000). Ids that no longer exist or belong to another library are left out; repeats come back once. Returns `{ "images": [...], "count": n }`. Used by ranked views (similarity search, duplicate review) and by a Censor action that tells the stills of a pick from its GIFs (file name) and videos (`media_type`) with one request per 2000 ids.
 
 #### POST /api/open-path
 Open an existing folder in the host file explorer (Windows explorer, macOS open, Linux xdg-open). Body: `{ "path": "D:/exports/pixiv" }`. The path must pass the shared path validation and be an existing directory: a missing folder returns 404, a file or a suspicious path returns 400 and nothing is launched. The launcher receives an argument list (no shell). Returns `{ "success": true, "path": "<resolved folder>" }`.
@@ -1004,7 +1004,7 @@ Reset stuck batch move progress.
 Undo a finished batch move/copy run: body `{"run_token": "<32 hex>"}`. Runs in the batch-move slot (same progress and cancel; 409 while another run is busy) with `run_kind: "undo"`. Each moved file goes back to where it came from and each copy the run made is removed, but only while it is still what the run left behind; a file moved again since, an original place now taken by another file, a copy changed since or imported into the library, and an image no longer in the library are left alone and listed in `error_items` with the reason. The run's journal has an `intent` line per file synced to disk before the file is touched and a `done` line synced after (older journals: one line per file, no phase, read as done); a file with an intent but no done line (a crash or power cut mid-file) goes back only when it is at the destination and not at its old place, otherwise it is listed for a look at the disk (a copy cut short is always kept and listed). 404 for an unknown run, 409 for a run already undone.
 
 #### POST /api/sort/start
-Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `prompt_match_mode`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported, including `prompt_match_mode=exact|contains`. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress. `exclude_sorted=true` leaves out pictures Auto-Separate (`/api/batch-move`) or an earlier Manual Sort already copied or moved (recorded in `sorted_images`, migration 051); the response's `excluded_sorted` says how many were left out. The default (`false`) queues every match. A body with `image_ids` sorts exactly those images in that order (V Opus starts from the picks, or from every match of the gallery filter resolved by `POST /api/images/selection-ids`); the filter fields are then not used, and ids that are not readable images of the current library are dropped.
+Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `prompt_match_mode`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported, including `prompt_match_mode=exact|contains`. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress. `exclude_sorted=true` leaves out pictures Auto-Separate (`/api/batch-move`) or an earlier Manual Sort already copied or moved (recorded in `sorted_images`, migration 051); the response's `excluded_sorted` says how many were left out. The default (`false`) queues every match. A body with `image_ids` sorts exactly those images in that order; the filter fields are then not used, and ids that are not readable images of the current library are dropped.
 
 #### POST /api/sort/scope-count
 Count what a session with the same body would queue, without starting one. Returns `{"total", "sorted", "remaining"}`: `total` pictures match the filters, `sorted` of them were already copied or moved by Auto-Separate or Manual Sort, and `remaining` is what `exclude_sorted=true` queues. Uses the same filter path as `/api/sort/start`, so the Manual Sort setup count equals the queue length. A body with `image_ids` counts exactly those pictures instead (the filter fields are then not used; ids that are not readable images of the current library are dropped), as `/api/sort/start` does; V Opus asks this way, for its picks or the ids its filter resolved to.
@@ -3000,7 +3000,7 @@ Download the LGPL shared ffmpeg build from GitHub (BtbN/FFmpeg-Builds), check it
 Errors: `403` `Only this program's own page can install video support.`; `409` `code: "video_install_unsupported"` (`No ready-made ffmpeg for this system; install ffmpeg with your package manager`).
 
 #### POST /api/videos/which
-Which of these images are videos. Body `{"image_ids": [1, 2, 3]}`; answers `{"video_ids": [2]}` (those that are videos, in the order asked, each once; ids that do not exist are left out). Read only. The V Opus interface uses it so that picture-only actions (censor, similarity, scoring, captioning, privacy and reverse-prompt tools, datasets) can leave videos out of a mixed selection and say how many.
+Which of these images are videos. Body `{"image_ids": [1, 2, 3]}`; answers `{"video_ids": [2]}` (those that are videos, in the order asked, each once; ids that do not exist are left out). Read only. A page can use it so that picture-only actions (censor, similarity, scoring, captioning, privacy and reverse-prompt tools, datasets) can leave videos out of a mixed selection and say how many.
 
 #### GET /api/videos/{image_id}/playback
 How to play one video. `plays_in_browser` is whether the browser is expected to play the original (by codec); when it cannot, `converted` tells whether a playable preview exists (`status` is `none`, `queued`, `running`, `done` or `failed`), and `converted_url` is where it is served.
@@ -3071,27 +3071,12 @@ Return a copyable support diagnostics payload for stalled scans and troubleshoot
 #### POST /api/support/open-log
 Open the configured rotating backend support log in the operating system file manager. The endpoint does not accept a user-supplied path; it only opens the app-controlled `LOG_FILE_PATH` location so the scan dialog can offer an "Open log file" action. If no OS opener is available, it returns `opened=false` with the log path instead of failing with a server error. The JSON response includes both the raw local `path` for local clipboard use and `path_redacted` for display, so frontend UI must display the redacted value and only copy the raw path on explicit user action.
 
-### Interface
+### Retired addresses
 
-The backend serves two interfaces: the classic one at `/` and Vopus at `/vopus/`
-(old `/v4/...` addresses answer 308 with the same path under `/vopus/`). Which one
-`/` opens is remembered here, so every browser and every launch agree. When Vopus
-is chosen and built, `GET /` answers 307 to `/vopus/` with the same query;
-`GET /?ui=classic` always serves the classic interface.
-
-#### GET /api/interface
-
-```json
-{ "interface": "classic", "vopus_built": true }
-```
-
-`interface` is `classic` (the default, also when the saved choice is missing or
-unreadable) or `vopus`. `vopus_built` says whether `frontend-v4/dist/index.html` exists.
-
-#### PUT /api/interface
-
-Body: `{ "interface": "classic" | "vopus" }`. Returns the same shape as `GET`.
-`409` when `vopus` is asked for before it is built; `400` for any other value.
+The program has one interface, served at `/`. The addresses of the two
+interfaces retired on 2026-11-12 (`/vopus/`, `/v4/`, `/next/` and anything
+under them) answer 307 to `/`, so an old bookmark opens the program. The
+`/api/interface` endpoints went with them.
 
 ### Updates
 
@@ -3120,7 +3105,7 @@ Key response fields:
 The release manifest (`release-manifest.json`) may carry `shell_version` (the desktop program version the package was built with) and `min_shell_version` (the oldest desktop program the release runs on). When the running desktop program is older than `min_shell_version`, the status sets `shell_update_required` and explains in `update_unavailable_reason` that the full package must be downloaded instead (the explanation is bilingual).
 
 #### GET /api/updates/desktop-program
-Whether this install holds the desktop program: `{windows, installed, portable, launcher, download_url}`. `portable` is true for a portable package (its own `python/python.exe`, no `.git`): only then do the pages say to extract the full package over the folder; a source install is told the desktop program comes with the full package. `installed` is true when both `SD Image Sorter.exe` (the launcher) at the package root and `desktop/sd-image-sorter-shell.exe` exist. The in-app updater never installs the desktop program, so an install made before 3.8.0 and updated in place, or a source checkout, answers `false`; classic Settings > General and V Opus Settings > Desktop, opened in a browser on Windows, then say how to get it (the full Windows package, extracted over the program folder; `data/` is not in the package and stays). `download_url` is the releases page of the latest release. Reads the disk only, never the network.
+Whether this install holds the desktop program: `{windows, installed, portable, launcher, download_url}`. `portable` is true for a portable package (its own `python/python.exe`, no `.git`): only then do the pages say to extract the full package over the folder; a source install is told the desktop program comes with the full package. `installed` is true when both `SD Image Sorter.exe` (the launcher) at the package root and `desktop/sd-image-sorter-shell.exe` exist. The in-app updater never installs the desktop program, so an install made before 3.8.0 and updated in place, or a source checkout, answers `false`; Settings > General, opened in a browser on Windows, then says how to get it (the full Windows package, extracted over the program folder; `data/` is not in the package and stays). `download_url` is the releases page of the latest release. Reads the disk only, never the network.
 
 #### GET /api/updates/whats-new
 What the running version changed, for a one-time notice after an update: `{available, version, title, summary_zh, summary_en, notes_url, updated, previous_version}`. `title` and the two summaries come from the top of the package's `release-notes.md` (title line, then the Chinese and English summary before the first `---`); `available` is false when that file is missing or belongs to another version. `updated` says whether this run follows another version: the first call of each server run records the running version in `<state dir>/last-run-version.json`; with no earlier record, a library that already holds pictures counts as updated (an install from before the record existed) and an empty one does not. `previous_version` is the recorded older version, or null. The classic page shows the summary once per window after an update (`localStorage` `sd-whats-new-seen-version`) with a link to `notes_url`. Reads the disk only, never the network.

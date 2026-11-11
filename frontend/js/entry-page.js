@@ -1027,9 +1027,8 @@
         document.addEventListener('keydown', onKeydownCapture, true);
     }
 
-    // Another interface opens one page here from an address
-    // (/?ui=classic&view=stylemap, frontend-v4/src/next/classicLink.ts):
-    // that page instead of the entry page.
+    // An address can name one page to open (/?view=stylemap): that page
+    // instead of the entry page.
     const LINKABLE_VIEWS = ['gallery', 'reader', 'sorting', 'censor', 'similar', 'stylemap', 'dataset', 'promptlab', 'reverse', 'artist'];
 
     function linkedView() {

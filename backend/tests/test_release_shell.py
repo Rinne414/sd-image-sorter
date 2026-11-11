@@ -197,7 +197,6 @@ def test_only_the_windows_package_holds_the_shell_and_the_updater_does_not_manag
     )
     monkeypatch.setattr(builder, "find_seven_zip", lambda: None)
     monkeypatch.setattr(builder, "copy_project", minimal_project)
-    monkeypatch.setattr(builder, "build_frontend_v4", lambda: None)
     monkeypatch.setattr(builder, "build_desktop_shell", lambda root: shell_build)
     monkeypatch.setattr(builder, "prepare_embedded_python", lambda stage_dir: None)
     monkeypatch.setattr(
@@ -248,7 +247,6 @@ def test_only_the_windows_package_holds_the_shell_and_the_updater_does_not_manag
 def test_a_failed_shell_build_stops_the_release(builder, shell, monkeypatch, tmp_path):
     monkeypatch.setattr(builder, "ARTIFACT_ROOT", tmp_path / "artifacts")
     monkeypatch.setattr(builder, "STAGING_ROOT", tmp_path / "artifacts" / "staging")
-    monkeypatch.setattr(builder, "build_frontend_v4", lambda: None)
 
     def failed(root):
         raise RuntimeError("npm was not found")
@@ -410,7 +408,6 @@ def _fake_release_tree(builder, monkeypatch, tmp_path, version="9.9.9"):
     monkeypatch.setattr(builder, "BOOTSTRAP_DOWNLOAD_ROOT", artifact_root / "staging" / "_downloads")
     monkeypatch.setattr(builder, "find_seven_zip", lambda: None)
     monkeypatch.setattr(builder, "copy_project", minimal_project)
-    monkeypatch.setattr(builder, "build_frontend_v4", lambda: None)
     monkeypatch.setattr(builder, "prepare_embedded_python", lambda stage_dir: None)
     monkeypatch.setattr(builder, "prepare_bundled_linux_python", lambda stage_dir, arch: None)
 

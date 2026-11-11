@@ -1,6 +1,6 @@
 """
 Feature-entrance check (owner, 2026-10-23): a feature's entrance may not
-silently disappear from an interface that should have it.
+silently disappear.
 
 docs/feature-entrances.json lists every user-facing feature with the classic
 interface (frontend/index.html) as the baseline. This static half fails when a
@@ -96,7 +96,7 @@ def test_every_classic_button_belongs_to_a_feature():
         "New classic buttons that no feature lists: "
         + ", ".join(unclaimed)
         + ". Add each to its feature in docs/feature-entrances.json (a new feature needs "
-        "en/zh names and its vopus/next status), or to not_entrances with the reason."
+        "en/zh names), or to not_entrances with the reason."
     )
 
 
@@ -123,53 +123,3 @@ def test_removals_carry_date_reason_and_owner_words():
             assert removal["id"] not in live or removal.get("selector"), (
                 f"{removal['id']} is listed as removed from classic but is still a live feature"
             )
-
-
-V4_SOURCE_DIR = ROOT / "frontend-v4" / "src"
-TEST_ID_RE = re.compile(r'\[data-testid="([^"]+)"\]')
-
-
-def _v4_source() -> str:
-    return "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in V4_SOURCE_DIR.rglob("*.ts*")
-        if ".test." not in path.name
-    )
-
-
-def _test_id_in_source(test_id: str, source: str) -> bool:
-    """A literal id, or one built from a template such as `censor-tab-${id}`."""
-    if f'"{test_id}"' in source or f"'{test_id}'" in source:
-        return True
-    parts = test_id.split("-")
-    prefixes = ("-".join(parts[:cut]) + "-" for cut in range(1, len(parts)))
-    return any(f"`{prefix}${{" in source or f"'{prefix}' +" in source for prefix in prefixes)
-
-
-def test_vopus_and_next_say_where_each_feature_is_or_that_it_is_missing():
-    for feature in _registry()["features"]:
-        for interface in ("vopus", "next"):
-            entrance = feature.get(interface)
-            assert isinstance(entrance, dict), f"{feature['id']} needs a {interface} entry"
-            if entrance.get("missing"):
-                assert not entrance.get("find"), f"{feature['id']}.{interface}: missing and found at once"
-                continue
-            assert entrance.get("at", "").startswith("#/"), f"{feature['id']}.{interface} needs 'at' (a #/ route)"
-            assert entrance.get("find"), f"{feature['id']}.{interface} needs 'find', or 'missing' with the reason"
-
-
-def test_every_vopus_and_next_test_id_still_exists_in_the_source():
-    # The browser spec cannot build every state (a running job, missing files);
-    # this keeps those entrances honest too.
-    source = _v4_source()
-    gone = sorted(
-        {
-            f"{feature['id']}.{interface}: {test_id}"
-            for feature in _registry()["features"]
-            for interface in ("vopus", "next")
-            for selector in [feature[interface].get("find", ""), *feature[interface].get("open", [])]
-            for test_id in TEST_ID_RE.findall(selector)
-            if not _test_id_in_source(test_id, source)
-        }
-    )
-    assert not gone, "Entrances gone from frontend-v4/src:\n  " + "\n  ".join(gone) + "\n" + HOW_TO_REMOVE

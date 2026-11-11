@@ -2,7 +2,7 @@
  * The program's one way to find a picture's main colours, in HSV.
  *
  * Keep in step with backend/hsv_palette.py (the reasons and measurements are
- * there) and frontend-v4/src/lib/hsvPalette.ts: all three give the answers in
+ * there): both give the answers in
  * backend/tests/fixtures/hsv_palette_vectors.json. Classic script; exposes
  * window.hsvPalette(rgba, top) -> [{ hex, pct, share }], largest share first,
  * from canvas ImageData (fully transparent pixels are not part of the picture).

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { cleanupImages, seedImages } from '../fixtures/v4-seed'
+import { cleanupImages, seedImages } from '../fixtures/seed-images'
 
 /**
  * The opt-in professional look (goal 2026-11-08, .plans/ui-pro-2026-11):

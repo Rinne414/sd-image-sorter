@@ -216,18 +216,6 @@ def _isolate_external_model_store(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _isolate_interface_choice(tmp_path, monkeypatch):
-    """Keep the remembered interface (classic / Vopus) in the test's own folder.
-
-    ``GET /`` follows it, so a developer who chose Vopus would otherwise turn
-    every classic-page test into a redirect.
-    """
-    from services import interface_preference
-
-    monkeypatch.setattr(interface_preference, "CONFIG_DIR", tmp_path / "interface-config")
-
-
-@pytest.fixture(autouse=True)
 def _isolate_vlm_prompt_presets(tmp_path, monkeypatch):
     """Saved VLM prompt presets go to the test's own folder, never to the
     developer's ``CONFIG_DIR/vlm-prompt-presets.json``."""

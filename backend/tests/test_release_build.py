@@ -559,7 +559,6 @@ def test_all_five_release_archives_use_packaged_release_notes(monkeypatch, tmp_p
     monkeypatch.setattr(release_builder, "BOOTSTRAP_DOWNLOAD_ROOT", staging_root / "_downloads")
     monkeypatch.setattr(release_builder, "find_seven_zip", lambda: None)
     monkeypatch.setattr(release_builder, "copy_project", copy_minimal_project)
-    monkeypatch.setattr(release_builder, "build_frontend_v4", lambda: None)
     (fake_root / "desktop").mkdir()
     (fake_root / "desktop" / "package.json").write_text('{"version": "0.4.0"}', encoding="utf-8")
     unpacked = tmp_path / "unpacked"
@@ -1780,7 +1779,6 @@ def _lazy_release_common_archive_names():
         "sd-image-sorter/frontend/index.html",
         "sd-image-sorter/frontend/js/app.js",
         "sd-image-sorter/frontend/js/gallery.js",
-        "sd-image-sorter/frontend-v4/dist/index.html",
         "sd-image-sorter/browser-extension/manifest.base.json",
         "sd-image-sorter/browser-extension/src/background.js",
         "sd-image-sorter/update/package-manifest.json",

@@ -18,8 +18,7 @@ function localizeErrorText(enText, zhText) {
 // Backend sentences arrive as "<English> / <中文>" so either interface can
 // show them; the interface shows its own half. Anything else comes back
 // unchanged: an English line that only names a Chinese folder, or a Chinese
-// line that mentions "Linux / macOS", is not split. Same rule as Vopus
-// (frontend-v4/src/lib/bilingual.ts).
+// line that mentions "Linux / macOS", is not split.
 const BILINGUAL_SEPARATOR = ' / ';
 const BILINGUAL_MIN_CJK = 3;
 const BILINGUAL_LETTERS_PER_CJK = 3;

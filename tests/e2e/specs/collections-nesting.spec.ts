@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { cleanupImages, seedImages } from '../fixtures/v4-seed'
+import { cleanupImages, seedImages } from '../fixtures/seed-images'
 
 /**
  * Collections inside collections in the classic sidebar: make one inside

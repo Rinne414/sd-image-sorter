@@ -1,10 +1,9 @@
 {
   "about": [
-    "Every user-facing feature entrance, with the classic interface (/) as the baseline (owner, 2026-10-23, M203).",
+    "Every user-facing feature entrance of the program's one interface (owner, 2026-10-23, M203).",
     "classic: selectors in frontend/index.html; each must still exist. Every <button id> there belongs to a feature or to not_entrances.",
-    "vopus / next: where the same feature is entered in /vopus/ and /next/, or 'missing' with what is not ported yet. /next/ is frozen since 2026-11-07: it lost to classic (owner, 2026-10-23), so it keeps every feature it has and a new feature may simply say 'missing' there. Undo: revert this line and the matching one in CLAUDE.md.",
-    "Never delete a feature or a selector to make a check pass. A removal the owner agreed to goes to 'removed' with date, reason and the owner's words.",
-    "Checks: backend/tests/test_feature_entrances.py (fast, static) and tests/e2e/specs/feature-entrances.spec.ts (real browser)."
+    "V Opus (/vopus/) and the /next/ trial were retired on 2026-11-12 on the owner's word; their columns are gone and the removal is recorded in 'removed'.",
+    "Never delete a feature to pass a check. A removal needs the owner's word, recorded in 'removed' with date, reason and owner_words."
   ],
   "features": [
     {
@@ -18,17 +17,7 @@
         "#entry-mission-pixiv",
         "#nav-mission-chip-label",
         "#nav-mission-exit"
-      ],
-      "vopus": {
-        "at": "#/home",
-        "find": "[data-testid=\"home-start-pixiv\"]",
-        "note": "Pixiv = home-start-pixiv, LoRA dataset = home-start-dataset, organise = home-start-sort"
-      },
-      "next": {
-        "at": "#/home",
-        "find": "[data-testid=\"home-start-dataset\"]",
-        "note": "three start cards: home-start-pixiv, home-start-dataset, home-start-sort; the picking banner is adding-banner"
-      }
+      ]
     },
     {
       "id": "entry.continue",
@@ -38,19 +27,7 @@
       "classic": [
         "#entry-anchor-continue",
         "#entry-resume-continue"
-      ],
-      "vopus": {
-        "at": "#/home",
-        "find": "[data-testid=\"home-batch\"]",
-        "needs": "batch",
-        "note": "Also home-sort-continue for an unfinished sort; needs a saved batch or sort"
-      },
-      "next": {
-        "at": "#/home",
-        "find": "[data-testid=\"home-batch\"], [data-testid=\"home-sort\"]",
-        "needs": "batch",
-        "note": "cards appear only when a batch or an unfinished sort exists"
-      }
+      ]
     },
     {
       "id": "entry.tool-cards",
@@ -65,17 +42,7 @@
         "#entry-fn-similar",
         "#entry-fn-models",
         "#entry-hero-swap"
-      ],
-      "vopus": {
-        "at": "#/home",
-        "find": "[data-testid=\"home-tool-reader\"]",
-        "note": "home-tool-reader, -privacy, -similar, -duplicates, -models, -all; Censor and Sort are the start cards"
-      },
-      "next": {
-        "at": "#/home",
-        "find": "[data-testid=\"home-tool-reader\"]",
-        "note": "same cards as V Opus Home (shared page)"
-      }
+      ]
     },
     {
       "id": "entry.all-features",
@@ -85,20 +52,7 @@
       "classic": [
         "#entry-all-tools",
         "#btn-all-features"
-      ],
-      "vopus": {
-        "at": "#/home",
-        "open": [
-          "[data-testid=\"tools-menu\"]"
-        ],
-        "find": "[data-item=\"tool-reader\"]",
-        "note": "Tools menu lists every tool; the same menu is on every page"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"open-palette\"]",
-        "note": "the \"Find a feature\" button (Ctrl K)"
-      }
+      ]
     },
     {
       "id": "library.switch",
@@ -110,15 +64,7 @@
         "#nav-library-chip",
         "#btn-sidebar-library",
         "#entry-fn-gallery"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"library-switch\"]"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-library-crumb\"]"
-      }
+      ]
     },
     {
       "id": "library.manage",
@@ -127,20 +73,7 @@
       "zh": "管理图库",
       "classic": [
         "#entry-library-manage"
-      ],
-      "vopus": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"libset-manage\"]",
-        "note": "Also library-switch menu > Manage libraries (menuitem, no test id)"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-library-crumb\"]"
-        ],
-        "find": "[role=\"dialog\"] [role=\"menu\"] > li:last-child > button[role=\"menuitem\"]",
-        "note": "last item of the library menu; also Settings > Library: libset-manage"
-      }
+      ]
     },
     {
       "id": "library.clear",
@@ -150,17 +83,7 @@
       "classic": [
         "#btn-sidebar-clear-library",
         "#btn-settings-clear-library"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"rail-clear-library\"]",
-        "note": "Rail foot, below Library status; Settings > Library has clear-index"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-clear-library\"]",
-        "note": "also Settings > Library: libset-clear"
-      }
+      ]
     },
     {
       "id": "library.roots",
@@ -171,17 +94,7 @@
         "#btn-manage-roots",
         "#btn-refresh-folders",
         "#btn-library-roots-add"
-      ],
-      "vopus": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"roots-add\"]",
-        "note": "Refresh per folder: root-rescan"
-      },
-      "next": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"roots-add\"]",
-        "note": "refresh per folder: root-rescan"
-      }
+      ]
     },
     {
       "id": "library.watch",
@@ -191,17 +104,7 @@
       "classic": [
         "#btn-manage-roots",
         "#library-roots-watch-hint"
-      ],
-      "vopus": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"watch-hint\"]",
-        "note": "the switch is root-watch on each source-folder row, its live state root-watch-state; new pictures refresh the gallery by themselves"
-      },
-      "next": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"watch-hint\"]",
-        "note": "same Settings › Library page as Vopus: root-watch per folder, live state root-watch-state"
-      }
+      ]
     },
     {
       "id": "library.collect-paste",
@@ -212,23 +115,7 @@
         "#btn-paste-picture",
         "#btn-collect-url-save",
         "#btn-collect-url-cancel"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"import-button\"]"
-        ],
-        "find": "[data-testid=\"import-paste-picture\"]",
-        "note": "Ctrl+V on the library page saves a pasted picture or asks about a pasted picture address"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"import-button\"]"
-        ],
-        "find": "[data-testid=\"import-paste-picture\"]",
-        "note": "Ctrl+V on the library page saves a pasted picture or asks about a pasted picture address"
-      }
+      ]
     },
     {
       "id": "library.browser-extension",
@@ -244,17 +131,7 @@
         "#btn-ext-pair-allow",
         "#btn-ext-pair-deny",
         "#modal-collected-source"
-      ],
-      "vopus": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"ext-settings\"]",
-        "note": "The pairing prompt (ext-pair-dialog) opens wherever you are when a browser extension asks; the source line shows on a collected picture's card"
-      },
-      "next": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"ext-settings\"]",
-        "note": "The pairing prompt (ext-pair-dialog) opens wherever you are when a browser extension asks; the source line shows on a collected picture's card"
-      }
+      ]
     },
     {
       "id": "desktop.settings",
@@ -267,19 +144,7 @@
         "#btn-settings-desktop-close",
         "#settings-desktop-shortcut",
         "#btn-settings-desktop-shortcut-reset"
-      ],
-      "vopus": {
-        "at": "#/settings/desktop",
-        "find": "[data-testid=\"desktop-login\"]",
-        "needs": "desktop shell",
-        "note": "Start at login, keep running in the tray and the shortcut box exist only inside the desktop program (window.sdDesktop); a plain browser shows desktop-browser-note instead"
-      },
-      "next": {
-        "at": "#/settings/desktop",
-        "find": "[data-testid=\"desktop-login\"]",
-        "needs": "desktop shell",
-        "note": "Start at login, keep running in the tray and the shortcut box exist only inside the desktop program (window.sdDesktop); a plain browser shows desktop-browser-note instead"
-      }
+      ]
     },
     {
       "id": "desktop.get-program",
@@ -289,19 +154,7 @@
       "classic": [
         "#settings-desktop-browser",
         "#btn-settings-desktop-download"
-      ],
-      "vopus": {
-        "at": "#/settings/desktop",
-        "find": "[data-testid=\"desktop-program-download\"]",
-        "needs": "no desktop program",
-        "note": "Shown in a browser on Windows when the program folder has no desktop program (in-app updates never install it): says how to get it and links the full package; with the program there it says to double-click SD Image Sorter.exe"
-      },
-      "next": {
-        "at": "#/settings/desktop",
-        "find": "[data-testid=\"desktop-program-download\"]",
-        "needs": "no desktop program",
-        "note": "Shown in a browser on Windows when the program folder has no desktop program (in-app updates never install it): says how to get it and links the full package; with the program there it says to double-click SD Image Sorter.exe"
-      }
+      ]
     },
     {
       "id": "desktop.quick-collect",
@@ -310,17 +163,7 @@
       "zh": "快速收集：把图拖进或粘贴进小窗口即可加入图库（副本在 output/collected）",
       "classic": [
         "#btn-settings-desktop-quick-collect"
-      ],
-      "vopus": {
-        "at": "#/settings/desktop",
-        "find": "[data-testid=\"desktop-quick-collect\"]",
-        "note": "Settings > Desktop > Quick collect > Open; works in a browser (popup) and in the desktop program"
-      },
-      "next": {
-        "at": "#/settings/desktop",
-        "find": "[data-testid=\"desktop-quick-collect\"]",
-        "note": "Settings > Desktop > Quick collect > Open; works in a browser (popup) and in the desktop program"
-      }
+      ]
     },
     {
       "id": "library.import",
@@ -332,15 +175,7 @@
         "#empty-state-scan-btn",
         "#btn-start-scan",
         "#btn-browse-folder"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"import-button\"]"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"import-button\"]"
-      }
+      ]
     },
     {
       "id": "library.import-diagnostics",
@@ -354,21 +189,7 @@
         "#btn-settings-open-log",
         "#btn-copy-scan-log-path",
         "#btn-stop-scan-from-diagnostics"
-      ],
-      "vopus": {
-        "at": "#/settings/about",
-        "find": "[data-testid=\"about-copy-diag\"]",
-        "note": "Copy diagnostics and Open log are in About > Support; the stalled-scan card (scan-stall) shows in the Jobs drawer only while an import stalls"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"jobs-button\"]"
-        ],
-        "find": "[data-testid=\"scan-stall\"]",
-        "needs": "job",
-        "note": "appears in the jobs drawer when an import stalls"
-      }
+      ]
     },
     {
       "id": "library.find-moved",
@@ -381,19 +202,7 @@
         "#gallery-unreadable-banner-cta",
         "#btn-start-reconnect",
         "#btn-browse-reconnect-folder"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"library-status\"]",
-        "needs": "missing-files",
-        "note": "Rail status row button 'Deal with it...' opens missing-dialog > 'Find them in another folder...'; shown only when files are missing"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-footer\"] ul button",
-        "needs": "missing files",
-        "note": "footer row \"Deal with it\" opens missing-dialog, whose \"Find them in another folder\" does the search"
-      }
+      ]
     },
     {
       "id": "library.missing-records",
@@ -403,19 +212,7 @@
       "classic": [
         "#gallery-missing-toggle-details",
         "#gallery-missing-clear-all"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"library-status\"]",
-        "needs": "missing-files",
-        "note": "Same dialog: missing-groups with 'Clear these records...' and missing-clear-all-open; reached from the rail status row only when files are missing"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-footer\"] ul button",
-        "needs": "missing files",
-        "note": "footer row opens missing-dialog (missing-groups, missing-clear-all-open)"
-      }
+      ]
     },
     {
       "id": "library.repair-review",
@@ -425,19 +222,7 @@
       "classic": [
         "#btn-repair-review-prev",
         "#btn-repair-review-next"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"library-status\"]",
-        "needs": "missing-files",
-        "note": "Dialog section missing-reviews (review-preview) inside missing-dialog; shown only when there are repair matches to review"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-footer\"] ul button",
-        "needs": "missing files",
-        "note": "missing-dialog shows missing-reviews (found matches to approve or skip)"
-      }
+      ]
     },
     {
       "id": "jobs.background",
@@ -458,22 +243,7 @@
         "#bg-remove-cancel",
         "#bg-remove-reset",
         "#nav-ai-busy"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"jobs-button\"]"
-        ],
-        "find": "[data-testid=\"jobs-drawer\"]",
-        "note": "Stop button per job; stuck reset is job-stuck, shown only for a stuck job",
-        "needs": "job"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"jobs-button\"]",
-        "needs": "job",
-        "note": "drawer lists jobs with Stop and the stuck-job reset (job-stuck); ai-busy chip shows AI work"
-      }
+      ]
     },
     {
       "id": "nav.places",
@@ -491,17 +261,7 @@
         "#nav-tab-promptlab",
         "#nav-tab-artist",
         "#nav-tab-stylemap"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"tools-menu\"]",
-        "note": "Places are customizable (Customize top bar). Library, Batch and Sort are tabs (nav[aria-label=main] button); Style Map is a Tools page (Tools menu, Ctrl K); Similar and duplicates are Library dialogs; Censor and Dataset are steps of a batch"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-place-library\"]",
-        "note": "Places are customizable. Dataset is made in a batch (More > Dataset maker starts one); Censor and Similar are menus in the bar"
-      }
+      ]
     },
     {
       "id": "nav.more-tools",
@@ -520,23 +280,7 @@
         "#nav-tools-similar",
         "#nav-tools-dataset",
         "#nav-tools-dup-cleaner"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"tools-menu\"]"
-        ],
-        "find": "[data-item=\"tool-reader\"]",
-        "note": "Also tool-reverse, tool-promptlab, tool-artist, tool-lexicon, tool-privacy, censor, edit-tags"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-more\"]"
-        ],
-        "find": "[data-item=\"dataset\"]",
-        "note": "Dataset maker starts a V Opus dataset batch (pick in the library, the banner makes the batch), as Home does; Reader and Style Map are places in the bar, not repeated in More"
-      }
+      ]
     },
     {
       "id": "nav.customize",
@@ -546,21 +290,7 @@
       "classic": [
         "#nav-tools-customize",
         "#nav-customize-reset"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"tools-menu\"]"
-        ],
-        "find": "[data-item=\"customize-places\"]"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-more\"]"
-        ],
-        "find": "[data-item=\"customize-places\"]"
-      }
+      ]
     },
     {
       "id": "shell.language",
@@ -570,17 +300,7 @@
       "classic": [
         "#btn-language-toggle",
         "#entry-lang-btn"
-      ],
-      "vopus": {
-        "at": "#/settings/appearance",
-        "find": "[data-testid=\"setting-lang\"]",
-        "note": "Also a Ctrl K row 'Language: switch to ...'"
-      },
-      "next": {
-        "at": "#/settings/appearance",
-        "find": "[data-testid=\"setting-lang\"]",
-        "note": "also a Ctrl K command"
-      }
+      ]
     },
     {
       "id": "shell.update",
@@ -592,17 +312,7 @@
         "#btn-settings-check-update",
         "#btn-settings-auto-update",
         "#entry-update-btn"
-      ],
-      "vopus": {
-        "at": "#/settings/about",
-        "find": "[data-testid=\"update-check\"]",
-        "note": "Top bar shows update-hint when a new version exists; About also has update-install and update-auto"
-      },
-      "next": {
-        "at": "#/settings/about",
-        "find": "[data-testid=\"update-check\"]",
-        "note": "top bar shows update-hint when a newer version is found"
-      }
+      ]
     },
     {
       "id": "shell.help",
@@ -613,25 +323,7 @@
         "#btn-help",
         "#btn-pro-help",
         "#btn-shortcuts"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"open-palette\"]"
-        ],
-        "palette": "Keyboard shortcuts",
-        "find": "[data-testid=\"palette\"] [role=\"option\"]",
-        "then_find": "[data-testid=\"shortcut-sheet\"]",
-        "note": "Also one 'Help: <page>' row per page; there is no help button on the page itself"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"open-palette\"]"
-        ],
-        "find": "[data-testid=\"palette\"] [role=\"option\"]",
-        "note": "only through Ctrl K (type help or shortcuts); no ? button in the top bar"
-      }
+      ]
     },
     {
       "id": "shell.settings",
@@ -641,17 +333,7 @@
       "classic": [
         "#btn-open-model-manager",
         "#entry-settings-btn"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"settings-button\"]",
-        "note": "Model Center tab: settings-tab-models"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"settings-button\"]",
-        "note": "Model Center is settings-tab-models"
-      }
+      ]
     },
     {
       "id": "gallery.search",
@@ -662,16 +344,7 @@
         "#gallery-search-input",
         "#gallery-search-clear",
         "#entry-find-go"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"query-input\"]",
-        "note": "Suggestions list is query-suggest while typing a key:value"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"query-input\"]"
-      }
+      ]
     },
     {
       "id": "gallery.search-help",
@@ -680,15 +353,7 @@
       "zh": "搜索语法说明",
       "classic": [
         "#btn-search-help"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"query-help\"]"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"query-help\"]"
-      }
+      ]
     },
     {
       "id": "gallery.generator-tabs",
@@ -702,20 +367,7 @@
         "[data-gen=\"forge\"]",
         "[data-gen=\"webui\"]",
         "[data-gen=\"unknown\"]"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-rail-section=\"sources\"]",
-        "note": "Rail 'Sources' list with a count per generator (toggle rows), not tabs; the rail must be open"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-scope-crumb\"]"
-        ],
-        "find": "[data-rail-section=\"sources\"]",
-        "note": "sources list with counts inside the scope menu"
-      }
+      ]
     },
     {
       "id": "gallery.quick-chips",
@@ -727,23 +379,7 @@
         "#chip-aesthetic-7",
         "#chip-no-caption",
         "#chip-untagged"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"filter-button\"]"
-        ],
-        "find": "[data-testid=\"filter-panel\"]",
-        "note": "Has params, score 7+ and No caption are buttons inside the Filter panel, not chips on the page"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"filter-button\"]"
-        ],
-        "find": "[data-testid=\"filter-panel\"]",
-        "note": "has params, no caption, score 5+ / 7+ rows"
-      }
+      ]
     },
     {
       "id": "gallery.aspect",
@@ -754,23 +390,7 @@
         "[data-aspect=\"square\"]",
         "[data-aspect=\"landscape\"]",
         "[data-aspect=\"portrait\"]"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"filter-button\"]"
-        ],
-        "find": "[data-testid=\"filter-panel\"]",
-        "note": "Aspect row in the Filter panel"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"filter-button\"]"
-        ],
-        "find": "[data-testid=\"filter-panel\"]",
-        "note": "Aspect row"
-      }
+      ]
     },
     {
       "id": "gallery.sort",
@@ -780,22 +400,7 @@
       "classic": [
         "#gallery-sort",
         "#sort-reverse-btn"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"query-bar\"] > div:nth-last-child(3) > button"
-        ],
-        "find": "[data-item=\"newest\"]",
-        "note": "Sort menu; reverse is [data-item=reverse]"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"query-bar\"] > div:nth-last-of-type(2) > button"
-        ],
-        "find": "[data-item=\"reverse\"]"
-      }
+      ]
     },
     {
       "id": "gallery.view-mode",
@@ -806,23 +411,7 @@
         "[data-size=\"grid\"]",
         "[data-size=\"large\"]",
         "[data-size=\"waterfall\"]"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"query-bar\"] > div:nth-last-child(2) > button"
-        ],
-        "find": "[data-item=\"masonry\"]",
-        "note": "View menu: masonry and grid; also [data-item=grid]"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"query-bar\"] > div:nth-last-of-type(1) > button"
-        ],
-        "find": "[data-item=\"masonry\"]",
-        "note": "also item grid"
-      }
+      ]
     },
     {
       "id": "gallery.group-runs",
@@ -832,18 +421,7 @@
       "classic": [
         "#btn-group-runs",
         "#btn-pro-view"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"query-bar\"] > div:nth-last-child(2) > button"
-        ],
-        "find": "[data-item=\"group-runs\"]",
-        "note": "View menu: Group runs; also the command palette"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "gallery.thumb-size",
@@ -854,23 +432,7 @@
         "#grid-size-slider",
         "#grid-size-decrease",
         "#grid-size-increase"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"query-bar\"] > div:nth-last-child(2) > button"
-        ],
-        "find": "[data-item=\"m\"]",
-        "note": "View menu sizes s / m / l"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"query-bar\"] > div:nth-last-of-type(1) > button"
-        ],
-        "find": "[data-item=\"l\"]",
-        "note": "items s, m, l"
-      }
+      ]
     },
     {
       "id": "gallery.random",
@@ -880,24 +442,7 @@
       "classic": [
         "#btn-random",
         "#btn-pro-more"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"open-palette\"]"
-        ],
-        "palette": "Open a random image (from the whole filtered result)",
-        "find": "[data-testid=\"palette\"] [role=\"option\"]",
-        "note": "Palette only; sort 'random' is also in the Sort menu"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"open-palette\"]"
-        ],
-        "find": "[data-testid=\"palette\"] [role=\"option\"]",
-        "note": "Ctrl K command \"random image\"; the sort menu also has a Random order (item random)"
-      }
+      ]
     },
     {
       "id": "gallery.filter-editor",
@@ -912,21 +457,7 @@
         "#btn-pro-filters-more",
         "#btn-apply-modal-filters",
         "#btn-reset-filters"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"filter-button\"]"
-        ],
-        "find": "[data-testid=\"filter-panel\"]"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"filter-button\"]"
-        ],
-        "find": "[data-testid=\"filter-panel\"]"
-      }
+      ]
     },
     {
       "id": "gallery.filter-summary",
@@ -937,18 +468,7 @@
         "#btn-clear-filters",
         "#btn-clear-artist",
         "#gallery-pin-banner-clear"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"filter-button\"]",
-        "note": "Button shows the count of active filters; each filter is a removable chip in query-chips (only while a query exists); Clear is in the Filter panel footer"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-clear-conditions\"]",
-        "needs": "filter",
-        "note": "query-chips lists each condition; the button clears them all"
-      }
+      ]
     },
     {
       "id": "gallery.filter-presets",
@@ -959,23 +479,7 @@
         "#btn-save-filter-preset",
         "#btn-smart-folders-manage",
         "#smart-folders-list"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"filter-button\"]"
-        ],
-        "find": "[data-testid=\"filter-save-name\"]",
-        "note": "Saved searches then list in the rail (smart-filters) with a remove button"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"filter-button\"]"
-        ],
-        "find": "[data-testid=\"filter-save-name\"]",
-        "note": "saved ones are listed in the scope menu (smart-filters)"
-      }
+      ]
     },
     {
       "id": "gallery.folders",
@@ -984,20 +488,7 @@
       "zh": "文件夹树",
       "classic": [
         "#folder-tree"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"folder-tree\"]",
-        "note": "Rail Folders section; shown only when the library has folders"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-scope-crumb\"]"
-        ],
-        "find": "[data-testid=\"folder-tree\"]",
-        "needs": "folders"
-      }
+      ]
     },
     {
       "id": "gallery.collections",
@@ -1008,18 +499,7 @@
         "#modal-favorite-btn",
         "#collections-list",
         "#btn-new-collection"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "find": "[data-testid=\"batch-list\"]",
-        "note": "A batch is V Opus's group of images: classic collections open as batches (Batch page, collection-row appears when collections exist) and new groups are made as batches"
-      },
-      "next": {
-        "at": "#/batch",
-        "find": "[data-testid=\"collection-row\"]",
-        "needs": "collection",
-        "note": "A batch is the group of images: collections open as batches (collection-row on the Batch page) and new groups are made as batches"
-      }
+      ]
     },
     {
       "id": "gallery.collection-nesting",
@@ -1028,13 +508,7 @@
       "zh": "合集里的合集（拖放图片或合集、移到…）",
       "classic": [
         "#collections-drop-top"
-      ],
-      "vopus": {
-        "missing": "V Opus groups pictures as batches, which do not nest, and its library page lists no collections (2026-11-08)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "gallery.details-panel",
@@ -1043,13 +517,7 @@
       "zh": "图库旁的资讯面板（专业外观）：指向的图片",
       "classic": [
         "#btn-pro-inspector"
-      ],
-      "vopus": {
-        "missing": "V Opus has no details panel beside its grid; its preview shows the details (2026-11-08)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "gallery.sidebar-collapse",
@@ -1059,17 +527,7 @@
       "classic": [
         "#btn-collapse-desktop-sidebar",
         "#btn-restore-desktop-sidebar"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"rail-collapse\"]",
-        "note": "Restore: rail-expand in the query bar"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-scope-crumb\"]",
-        "note": "There is no sidebar to collapse: its lists are in the scope menu at the top"
-      }
+      ]
     },
     {
       "id": "gallery.load-more",
@@ -1078,17 +536,7 @@
       "zh": "加载更多图片",
       "classic": [
         "#load-more-btn"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"gallery-scroller\"]",
-        "note": "No button: the grid loads more by itself while scrolling"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"gallery-scroller\"]",
-        "note": "loads more while scrolling; no button"
-      }
+      ]
     },
     {
       "id": "gallery.color-analysis",
@@ -1104,18 +552,7 @@
         "#btn-color-progress-pause",
         "#btn-color-progress-hide",
         "#btn-color-backfill-dismiss"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"library-status\"]",
-        "note": "Rail row 'Analyse' shown only when images lack colours; while it runs the row shows the count with Pause / Resume (colors-pause) and Hide (colors-hide); the Jobs drawer pauses and stops it too; card-colors-analyse inside an open card"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-footer\"]",
-        "needs": "colors missing",
-        "note": "footer row offers Analyse; while it runs the row shows the count with Pause / Resume and Hide; the card also has card-colors-analyse"
-      }
+      ]
     },
     {
       "id": "gallery.unreadable-banner",
@@ -1124,19 +561,7 @@
       "zh": "无法读取文件横幅（暂时隐藏）",
       "classic": [
         "#gallery-unreadable-banner-dismiss"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"status-hide-unreadable\"]",
-        "needs": "missing files",
-        "note": "Hide for now on the unreadable-files row: hidden while the number stays the same in this session, back when it changes; the library report always lists them"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"status-hide-unreadable\"]",
-        "needs": "missing files",
-        "note": "same Hide for now on the footer row"
-      }
+      ]
     },
     {
       "id": "select.mode",
@@ -1146,17 +571,7 @@
       "classic": [
         "#btn-toggle-select",
         "#btn-clear-selection"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"gallery-scroller\"]",
-        "note": "Always on: click / Ctrl / Shift-click picks, no mode switch; selection-bar appears once something is picked; Esc clears"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"tile\"]",
-        "note": "Ctrl/Shift-click or Space picks; no selection-mode button; clear is in selection-bar (Esc)"
-      }
+      ]
     },
     {
       "id": "select.all-invert",
@@ -1166,19 +581,7 @@
       "classic": [
         "#btn-select-all",
         "#btn-invert-selection-filtered"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"select-all-matching\"]",
-        "needs": "picks",
-        "note": "Invert: invert-picks (or Ctrl+I)"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"select-all-matching\"]",
-        "needs": "picks",
-        "note": "invert-picks next to it"
-      }
+      ]
     },
     {
       "id": "select.move-copy",
@@ -1188,19 +591,7 @@
       "classic": [
         "#btn-move-selected",
         "#btn-copy-selected"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"selection-bar\"] [data-action=\"move\"]",
-        "needs": "picks",
-        "note": "Copy is in the More menu: [data-item=copy]"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"selection-bar\"] [data-action=\"move\"]",
-        "needs": "picks",
-        "note": "Copy is item copy in the More menu"
-      }
+      ]
     },
     {
       "id": "select.tag",
@@ -1209,18 +600,7 @@
       "zh": "AI 标注选中图片",
       "classic": [
         "#btn-tag-selected"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"selection-bar\"] [data-action=\"tag\"]",
-        "needs": "picks"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"selection-bar\"] [data-action=\"tag\"]",
-        "needs": "picks",
-        "note": "top bar next-ai-tag also works"
-      }
+      ]
     },
     {
       "id": "select.to-censor",
@@ -1229,25 +609,7 @@
       "zh": "选中图片送去打码",
       "classic": [
         "#btn-send-to-censor"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"censor\"]",
-        "needs": "picks",
-        "note": "Also Tools menu > [data-item=censor] without picks"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"censor\"]",
-        "needs": "picks",
-        "note": "turns the picks into a censoring batch"
-      }
+      ]
     },
     {
       "id": "select.to-collection",
@@ -1256,19 +618,7 @@
       "zh": "选中图片加入收藏集",
       "classic": [
         "#btn-add-selected-to-collection"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"add-to-batch\"]",
-        "needs": "picks",
-        "note": "A batch is V Opus's group of images: picks go to a batch (Add to batch menu), and a classic collection opens as a batch"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"add-to-batch\"]",
-        "needs": "picks",
-        "note": "Picks go to a batch, the group of images here; a classic collection opens as a batch"
-      }
+      ]
     },
     {
       "id": "select.to-dataset",
@@ -1278,24 +628,7 @@
       "classic": [
         "#btn-send-selection-to-dataset-maker",
         "#btn-batch-export-to-dataset"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"add-to-batch\"]"
-        ],
-        "find": "[data-item=\"batch-new-dataset\"]",
-        "needs": "picks",
-        "note": "New dataset batch from the picks; existing batches are batch-add-<id>"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"add-to-batch\"]"
-        ],
-        "find": "[data-item=\"batch-new-dataset\"]",
-        "needs": "picks"
-      }
+      ]
     },
     {
       "id": "select.to-reader",
@@ -1305,25 +638,7 @@
       "classic": [
         "#btn-send-selection-to-reader",
         "#btn-send-selection-to-reverse"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"send-reader\"]",
-        "needs": "one pick",
-        "note": "Needs exactly one pick; reverse prompt is [data-item=send-reverse]"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"send-reader\"]",
-        "needs": "one pick",
-        "note": "exactly one pick; send-reverse for Reverse prompt"
-      }
+      ]
     },
     {
       "id": "select.to-privacy",
@@ -1332,23 +647,7 @@
       "zh": "选中图片送到隐私工具",
       "classic": [
         "#btn-send-selection-to-privacy"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"send-privacy\"]",
-        "needs": "picks"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"send-privacy\"]",
-        "needs": "picks"
-      }
+      ]
     },
     {
       "id": "select.publish-set",
@@ -1363,25 +662,7 @@
         "#btn-pub-export",
         "#btn-pub-uncensored-skip",
         "#btn-pub-uncensored-include"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"export\"]"
-        ],
-        "find": "[data-testid=\"export-step\"]",
-        "needs": "batch",
-        "note": "Pixiv-kind batch: censor, order and name steps then export-step with export-preflight (preflight-skip for uncensored)"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"add-to-batch\"]"
-        ],
-        "find": "[data-item=\"batch-new-pixiv\"]",
-        "needs": "picks",
-        "note": "Pixiv batch: order, censor and export steps"
-      }
+      ]
     },
     {
       "id": "select.export-text",
@@ -1393,25 +674,7 @@
         "#btn-download-export",
         "#btn-copy-export",
         "#btn-export-tags-alt"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"export\"]",
-        "needs": "picks",
-        "note": "Opens export-dialog"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"export\"]",
-        "needs": "picks",
-        "note": "opens export-dialog (prompts, tags, CSV, JSONL)"
-      }
+      ]
     },
     {
       "id": "select.export-captions",
@@ -1423,25 +686,7 @@
         "#btn-start-batch-export",
         "#btn-refresh-preview",
         "#btn-batch-export-cancel-job"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"export\"]"
-        ],
-        "find": "[data-testid=\"ds-export-step\"]",
-        "needs": "batch",
-        "note": "Dataset-kind batch export step"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"export\"]"
-        ],
-        "find": "[data-testid=\"ds-export-step\"]",
-        "needs": "batch",
-        "note": "dataset batch, Export step: caption files beside each image"
-      }
+      ]
     },
     {
       "id": "select.caption-editor",
@@ -1451,25 +696,7 @@
       "classic": [
         "#btn-open-caption-editor",
         "#btn-caption-editor-refresh"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-panel\"]",
-        "needs": "batch",
-        "note": "Dataset-kind batch Edit step"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-step\"]",
-        "needs": "batch",
-        "note": "dataset batch, Edit step; one image caption also in the card (caption-editor)"
-      }
+      ]
     },
     {
       "id": "select.trait-pruner",
@@ -1479,27 +706,7 @@
       "classic": [
         "#btn-export-trait-pruner",
         "#btn-dataset-trait-pruner"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]",
-          "[data-testid=\"edit-mode-bulk\"]"
-        ],
-        "find": "[data-testid=\"freq-traits\"]",
-        "needs": "batch",
-        "note": "Dataset-kind batch Edit step, bulk mode"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]",
-          "[data-testid=\"edit-mode-bulk\"]"
-        ],
-        "find": "[data-testid=\"freq-traits\"]",
-        "needs": "batch",
-        "note": "dataset batch, Edit step, all-images mode"
-      }
+      ]
     },
     {
       "id": "select.remove",
@@ -1508,23 +715,7 @@
       "zh": "从图库移除选中项（文件保留）",
       "classic": [
         "#btn-remove-selected-gallery"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"remove\"]",
-        "needs": "picks"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"remove\"]",
-        "needs": "picks"
-      }
+      ]
     },
     {
       "id": "select.trash",
@@ -1533,23 +724,7 @@
       "zh": "把选中文件移到回收站",
       "classic": [
         "#btn-delete-selected-files"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"trash\"]",
-        "needs": "picks"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"trash\"]",
-        "needs": "picks"
-      }
+      ]
     },
     {
       "id": "select.more-menu",
@@ -1558,17 +733,7 @@
       "zh": "更多操作菜单",
       "classic": [
         "#btn-gallery-action-more"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])",
-        "needs": "picks"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])",
-        "needs": "picks"
-      }
+      ]
     },
     {
       "id": "tags.library",
@@ -1584,17 +749,7 @@
         "#library-tab-loras",
         "#library-tab-checkpoints",
         "#btn-library-show-all"
-      ],
-      "vopus": {
-        "at": "#/tools/lexicon",
-        "find": "[data-testid=\"lexicon-page\"]",
-        "note": "Tabs lex-tab-tags / prompts / loras / checkpoints"
-      },
-      "next": {
-        "at": "#/tools/lexicon",
-        "find": "[data-testid=\"lex-tab-tags\"]",
-        "note": "tabs lex-tab-tags, -prompts, -loras, -checkpoints; reached from More > Tag & prompt library (item tool-lexicon)"
-      }
+      ]
     },
     {
       "id": "tags.mass-editor",
@@ -1609,23 +764,7 @@
         "#btn-mass-tag-dry-run",
         "#btn-mass-tag-apply",
         "#btn-mass-tag-confirm-apply"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"tools-menu\"]"
-        ],
-        "find": "[data-item=\"edit-tags\"]",
-        "note": "Tools menu works without picks (it asks to pick first); also [data-item=edit-tags] in the selection More menu; opens tagedit-dialog"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-more\"]"
-        ],
-        "find": "[data-item=\"edit-tags\"]",
-        "note": "opens tagedit-dialog (find, replace, add, remove with preview); also in the selection More menu"
-      }
+      ]
     },
     {
       "id": "tags.ai-tagging",
@@ -1639,21 +778,7 @@
         "#tagger-model-current",
         "#btn-confirm-model-select",
         "#btn-tag-scope-clear"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] [data-action=\"tag\"]"
-        ],
-        "find": "[data-testid=\"tag-dialog\"]",
-        "needs": "picks",
-        "note": "Also rail status row 'Tag' for untagged images and the Tag step of a dataset batch"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-ai-tag\"]",
-        "note": "opens tag-dialog with the model list"
-      }
+      ]
     },
     {
       "id": "tags.prefill-blacklist",
@@ -1664,23 +789,7 @@
         "#btn-tag-prebl-quality",
         "#btn-tag-prebl-meta",
         "#btn-tag-prebl-clear"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] [data-action=\"tag\"]"
-        ],
-        "find": "[data-testid=\"tag-blacklist-presets\"]",
-        "needs": "picks"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] [data-action=\"tag\"]"
-        ],
-        "find": "[data-testid=\"tag-blacklist-presets\"]",
-        "needs": "picks"
-      }
+      ]
     },
     {
       "id": "tags.import-export-json",
@@ -1690,17 +799,7 @@
       "classic": [
         "#btn-export-tags-json",
         "#btn-import-tags"
-      ],
-      "vopus": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"tags-export\"]",
-        "note": "Import: tags-import"
-      },
-      "next": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"tags-export\"]",
-        "note": "tags-import beside it"
-      }
+      ]
     },
     {
       "id": "tags.smart-tag",
@@ -1717,25 +816,7 @@
         "#btn-smart-tag-existing-skip",
         "#btn-smart-tag-existing-include",
         "#btn-tag-modal-smart-tag-dismiss"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] [data-action=\"tag\"]"
-        ],
-        "find": "[data-testid=\"tag-describe\"]",
-        "needs": "picks",
-        "note": "Tag dialog describer option; the Tag step of a dataset batch has tag-describer"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-ai-tag\"]"
-        ],
-        "find": "[data-testid=\"tag-describe\"]",
-        "needs": "picks",
-        "note": "describer area of tag-dialog (WD14 + captioner)"
-      }
+      ]
     },
     {
       "id": "tags.vlm-caption",
@@ -1746,25 +827,7 @@
         "#btn-vlm-start",
         "#btn-vlm-cancel",
         "#btn-vlm-retry-failed"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"describe\"]",
-        "needs": "picks",
-        "note": "More > Describe with AI; also card-describe on an open card"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"describe\"]",
-        "needs": "picks",
-        "note": "More > Analyze > describe; one image: card-describe"
-      }
+      ]
     },
     {
       "id": "tags.vlm-settings",
@@ -1779,17 +842,7 @@
         "#btn-vlm-probe-concurrency",
         "#btn-vlm-test",
         "#btn-vlm-save-settings"
-      ],
-      "vopus": {
-        "at": "#/settings/ai",
-        "find": "[data-testid=\"ai-vlm\"]",
-        "note": "vlm-fetch-models, vlm-probe, vlm-test, ollama section"
-      },
-      "next": {
-        "at": "#/settings/ai",
-        "find": "[data-testid=\"ai-vlm\"]",
-        "note": "vlm-fetch-models, vlm-probe, vlm-test inside"
-      }
+      ]
     },
     {
       "id": "tags.vlm-prompt-presets",
@@ -1805,17 +858,7 @@
         "#btn-vlm-preset-name-ok",
         "#btn-vlm-preset-name-cancel",
         "#btn-vlm-preset-undo"
-      ],
-      "vopus": {
-        "at": "#/settings/ai",
-        "find": "[data-testid=\"vlm-preset-save-as\"]",
-        "note": "Settings > AI > Prompts: save the prompts as a new preset, save changes into one of yours, rename, delete with Undo"
-      },
-      "next": {
-        "at": "#/settings/ai",
-        "find": "[data-testid=\"vlm-preset-save-as\"]",
-        "note": "same Settings > AI page as Vopus"
-      }
+      ]
     },
     {
       "id": "tags.vlm-chat",
@@ -1825,17 +868,7 @@
       "classic": [
         "#btn-vlm-debug-chat",
         "#btn-vlm-debug-chat-refresh"
-      ],
-      "vopus": {
-        "at": "#/settings/ai",
-        "find": "[data-testid=\"ai-log\"]",
-        "note": "API chat log of captioning calls (ai-log-fold); there is no interactive chat box"
-      },
-      "next": {
-        "at": "#/settings/ai",
-        "find": "[data-testid=\"ai-log\"]",
-        "note": "API chat log of the last 80 captioning calls (read-only, not a live chat)"
-      }
+      ]
     },
     {
       "id": "tags.aesthetic",
@@ -1849,25 +882,7 @@
         "#btn-score-aesthetic",
         "#btn-cancel-aesthetic",
         "#btn-cancel-aesthetic-tab"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"aesthetic\"]",
-        "needs": "picks",
-        "note": "Score picks; whole library via rail status row"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"selection-bar\"] button[aria-haspopup=\"menu\"]:not([data-testid])"
-        ],
-        "find": "[data-item=\"aesthetic\"]",
-        "needs": "picks",
-        "note": "whole library: footer row Score all (info.aes.missing)"
-      }
+      ]
     },
     {
       "id": "image.view",
@@ -1877,19 +892,7 @@
       "classic": [
         "#modal-prev-image",
         "#modal-next-image"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"lightbox-image\"]",
-        "needs": "opened image",
-        "note": "Needs an opened image (Enter or double-click); previous / next are buttons with aria-label Previous / Next inside [data-testid=lightbox]"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"lightbox\"]",
-        "needs": "opened image",
-        "note": "double-click a tile; arrows go previous / next"
-      }
+      ]
     },
     {
       "id": "image.copy",
@@ -1904,19 +907,7 @@
         "#btn-copy-tags-category",
         "#btn-copy-params",
         "#btn-toggle-prompt-format"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"card-copy-menu\"]",
-        "needs": "picks",
-        "note": "Needs an inspected image (card open); items copy-prompt, copy-negative, copy-tags, copy-parameters, copy-path"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"card-copy-menu\"]",
-        "needs": "image",
-        "note": "click a tile first; the card opens beside the grid"
-      }
+      ]
     },
     {
       "id": "image.sendToGenerator",
@@ -1928,17 +919,7 @@
         "[data-modal-handoff=\"generator\"]",
         "#settings-comfyui-url",
         "#btn-settings-comfyui-reset"
-      ],
-      "vopus": {
-        "at": "#/settings/ai",
-        "find": "[data-testid=\"settings-comfyui\"]",
-        "note": "ComfyUI address in Settings > AI services; the Send to generator dialog opens from the picture card button (card-send-generator), the right-click menu and Ctrl K"
-      },
-      "next": {
-        "at": "#/settings/ai",
-        "find": "[data-testid=\"settings-comfyui\"]",
-        "note": "Same components as Vopus: card button, right-click menu, Ctrl K, ComfyUI address in Settings > AI services"
-      }
+      ]
     },
     {
       "id": "gallery.media-filter",
@@ -1950,19 +931,7 @@
         "[data-media=\"\"]",
         "[data-media=\"image\"]",
         "[data-media=\"video\"]"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"media-toggle\"]",
-        "needs": "library with videos",
-        "note": "All / Pictures / Videos beside the search line; shown only while the library holds videos (or a media: filter is on). Also media:video in the search line"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"media-toggle\"]",
-        "needs": "library with videos",
-        "note": "the same toggle inside the scope line; shown only while the library holds videos"
-      }
+      ]
     },
     {
       "id": "image.videoPlayback",
@@ -1974,19 +943,7 @@
         "#modal-video-sound",
         "#modal-video-prev-frame",
         "#modal-video-next-frame"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"video-loop\"], [data-testid=\"video-sound\"], [data-testid=\"video-prev-frame\"], [data-testid=\"video-next-frame\"]",
-        "needs": "opened video",
-        "note": "opening a video (double-click) plays it in the big image: native controls, Loop, Sound, frame steps (comma, period), a converted preview when the browser cannot play it"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"video-loop\"], [data-testid=\"video-sound\"], [data-testid=\"video-prev-frame\"], [data-testid=\"video-next-frame\"]",
-        "needs": "opened video",
-        "note": "the same player in the big image (the lightbox is shared)"
-      }
+      ]
     },
     {
       "id": "settings.videoSupport",
@@ -1997,17 +954,7 @@
         "#settings-video-support",
         "#btn-video-install",
         "#gallery-video-banner-install"
-      ],
-      "vopus": {
-        "at": "#/settings/models",
-        "find": "[data-testid=\"video-support\"]",
-        "note": "Settings > Models, last section; the library banner (video-banner-install) offers it too while the library holds videos and ffmpeg is missing"
-      },
-      "next": {
-        "at": "#/settings/models",
-        "find": "[data-testid=\"video-support\"]",
-        "note": "Settings > Models, last section; the same banner above the library"
-      }
+      ]
     },
     {
       "id": "image.reread",
@@ -2016,18 +963,7 @@
       "zh": "重新读取元数据",
       "classic": [
         "#btn-reparse-metadata"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"generation-card\"] button[title^=\"Read this image\"]",
-        "needs": "picks",
-        "note": "English title; card button 'Read again'"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"generation-card\"] button[title^=\"Read this image\"]",
-        "needs": "image"
-      }
+      ]
     },
     {
       "id": "image.edit-metadata",
@@ -2037,19 +973,7 @@
       "classic": [
         "#btn-edit-metadata",
         "#btn-meta-edit-save"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"card-open-reader\"]",
-        "needs": "picks",
-        "note": "Editing happens in the Reader (reader-editor-form, reader-overwrite, reader-save-as)"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"card-open-reader\"]",
-        "needs": "image",
-        "note": "opens the Reader with its metadata editor (reader-editor-form)"
-      }
+      ]
     },
     {
       "id": "image.open-folder",
@@ -2058,18 +982,7 @@
       "zh": "在文件夹中打开",
       "classic": [
         "#btn-open-folder"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"card-open-folder\"]",
-        "needs": "picks",
-        "note": "Also lightbox-open-folder and a right-click item"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"card-open-folder\"]",
-        "needs": "image"
-      }
+      ]
     },
     {
       "id": "image.edit-tags",
@@ -2080,18 +993,7 @@
         "#btn-edit-modal-tags",
         "#btn-save-modal-tags",
         "#btn-toggle-all-tags"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"card-tag-input\"]",
-        "needs": "picks",
-        "note": "Remove button on each tag chip"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"card-tag-input\"]",
-        "needs": "image"
-      }
+      ]
     },
     {
       "id": "image.edit-caption",
@@ -2102,19 +1004,7 @@
         "#btn-edit-caption",
         "#btn-save-caption",
         "#btn-copy-caption"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"card-describe\"] + button",
-        "needs": "picks",
-        "note": "Card caption section 'Edit' / 'Add a caption' button, opens caption-editor"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"card-describe\"] + button",
-        "needs": "image",
-        "note": "Caption section 'Edit' / 'Add a caption' on the inspected image's card; opens caption-editor"
-      }
+      ]
     },
     {
       "id": "reader.read",
@@ -2126,17 +1016,7 @@
         "#reader-paste-btn",
         "#reader-clear",
         "#reader-toggle-format"
-      ],
-      "vopus": {
-        "at": "#/tools/reader",
-        "find": "[data-testid=\"intake-pick\"]",
-        "note": "Also intake-paste and drop zone intake-zone"
-      },
-      "next": {
-        "at": "#/tools/reader",
-        "find": "[data-testid=\"intake-pick\"]",
-        "note": "drop, paste (intake-paste) or choose a file"
-      }
+      ]
     },
     {
       "id": "reader.copy",
@@ -2150,19 +1030,7 @@
         "#reader-copy-prompt-category",
         "#reader-copy-negative",
         "#reader-copy-params"
-      ],
-      "vopus": {
-        "at": "#/tools/reader",
-        "find": "[data-testid=\"reader-copy-menu\"]",
-        "needs": "image in Reader",
-        "note": "Needs an image opened in the Reader"
-      },
-      "next": {
-        "at": "#/tools/reader",
-        "find": "[data-testid=\"reader-copy-menu\"]",
-        "needs": "image in Reader",
-        "note": "after an image with parameters is read"
-      }
+      ]
     },
     {
       "id": "reader.save-as",
@@ -2172,19 +1040,7 @@
       "classic": [
         "#reader-save-metadata-as",
         "#reader-edit-jump"
-      ],
-      "vopus": {
-        "at": "#/tools/reader",
-        "find": "[data-testid=\"reader-save-as\"]",
-        "needs": "image in Reader",
-        "note": "Needs an image opened in the Reader"
-      },
-      "next": {
-        "at": "#/tools/reader",
-        "find": "[data-testid=\"reader-save-as\"]",
-        "needs": "image in Reader",
-        "note": "after an image is read"
-      }
+      ]
     },
     {
       "id": "privacy.obfuscate",
@@ -2200,17 +1056,7 @@
         "#obfuscate-btn-download-all",
         "#obfuscate-preview-copy",
         "#obfuscate-preview-download"
-      ],
-      "vopus": {
-        "at": "#/tools/privacy",
-        "find": "[data-testid=\"privacy-page\"]",
-        "note": "privacy-protect-all and privacy-restore-all appear with files in the queue"
-      },
-      "next": {
-        "at": "#/tools/privacy",
-        "find": "[data-testid=\"privacy-page\"]",
-        "note": "reached from More > Privacy scramble (item tool-privacy); protect / restore all: privacy-protect-all, privacy-restore-all once files are added"
-      }
+      ]
     },
     {
       "id": "privacy.disguise",
@@ -2229,17 +1075,7 @@
         "#disguise-pack-reveal",
         "#disguise-btn-copy-all",
         "#disguise-output-folder"
-      ],
-      "vopus": {
-        "at": "#/tools/privacy",
-        "find": "[data-testid=\"privacy-mode-disguise\"]",
-        "note": "the Chat disguise mode of Privacy; its cover, pack and save-folder settings appear once it is chosen; make and restore are privacy-protect-all and privacy-restore-all with files in the queue"
-      },
-      "next": {
-        "at": "#/tools/privacy",
-        "find": "[data-testid=\"privacy-mode-disguise\"]",
-        "note": "same Privacy page, reached from More > Privacy scramble: the Chat disguise mode"
-      }
+      ]
     },
     {
       "id": "autosep.scope",
@@ -2251,23 +1087,7 @@
         "#btn-autosep-use-gallery-scope",
         "#btn-autosep-resync-scope",
         "#btn-autosep-keep-scope"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "open": [
-          "[data-testid=\"sort-mode-rules\"]"
-        ],
-        "find": "[data-testid=\"sort-source\"]",
-        "note": "Choose picks or a condition (query) as the source"
-      },
-      "next": {
-        "at": "#/sort",
-        "open": [
-          "[data-testid=\"sort-mode-rules\"]"
-        ],
-        "find": "[data-testid=\"sort-source\"]",
-        "note": "picks, or a condition typed or taken from the library search"
-      }
+      ]
     },
     {
       "id": "autosep.configs",
@@ -2280,17 +1100,7 @@
         "#btn-autosep-save-config",
         "#btn-autosep-delete-config",
         "#btn-autosep-rename-config"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-presets\"]",
-        "note": "Presets save the whole setup including rules; there is no rename button"
-      },
-      "next": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-presets\"]",
-        "note": "saved setups (presets) include the by-rules setup"
-      }
+      ]
     },
     {
       "id": "autosep.run",
@@ -2302,23 +1112,7 @@
         "#btn-preview-autosep-start",
         "#btn-browse-destination",
         "#btn-execute-autosep"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "open": [
-          "[data-testid=\"sort-mode-rules\"]"
-        ],
-        "find": "[data-testid=\"sort-start\"]",
-        "note": "Preview plan is sort-rules-plan after Start"
-      },
-      "next": {
-        "at": "#/sort",
-        "open": [
-          "[data-testid=\"sort-mode-rules\"]"
-        ],
-        "find": "[data-testid=\"sort-start\"]",
-        "note": "sort-rule-preview shows the preview; destination picker inside"
-      }
+      ]
     },
     {
       "id": "autosep.settings",
@@ -2329,20 +1123,7 @@
         "#btn-autosep-settings",
         "#btn-reset-autosep-settings",
         "#btn-save-autosep-settings"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-presets\"]",
-        "note": "No separate settings dialog: copy / move and split options sit in the rules form and are saved with presets; the switch Preview automatically (sort-auto-preview) is in its Preview part"
-      },
-      "next": {
-        "at": "#/sort",
-        "open": [
-          "[data-testid=\"sort-mode-rules\"]"
-        ],
-        "find": "[data-testid=\"sort-auto-preview\"]",
-        "note": "The switch Preview automatically when the rule changes sits in the Preview part of the rules form; off shows a Show preview button"
-      }
+      ]
     },
     {
       "id": "sort.session",
@@ -2355,17 +1136,7 @@
         "#btn-discard-session",
         "#btn-exit-sorting",
         "#return-to-gallery-btn"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-start\"]",
-        "note": "Resume: sort-continue / sort-resume; end: sort-end; discard: sort-new"
-      },
-      "next": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-start\"]",
-        "note": "sort-resume / sort-continue when unfinished; sort-end leaves a session"
-      }
+      ]
     },
     {
       "id": "sort.presets",
@@ -2377,15 +1148,7 @@
         "#btn-sort-preset-save",
         "#btn-sort-preset-delete",
         "#sort-preset-select"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-presets\"]"
-      },
-      "next": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-presets\"]"
-      }
+      ]
     },
     {
       "id": "sort.scope",
@@ -2398,15 +1161,7 @@
         "#btn-manual-sort-resync-scope",
         "#btn-manual-sort-keep-scope",
         "#btn-sort-scope-sorted-toggle"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-exclude-sorted\"]"
-      },
-      "next": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-exclude-sorted\"]"
-      }
+      ]
     },
     {
       "id": "sort.modes",
@@ -2422,17 +1177,7 @@
         "#cull-btn-keep",
         "#cull-btn-reject",
         "#cull-btn-skip"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-mode-slots\"]",
-        "note": "Modes: sort-mode-slots, sort-mode-bracket, sort-mode-cull, sort-mode-rules"
-      },
-      "next": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-mode-bracket\"]",
-        "note": "also sort-mode-slots (keys to folders), sort-mode-cull, sort-mode-rules"
-      }
+      ]
     },
     {
       "id": "sort.undo",
@@ -2444,19 +1189,7 @@
         "#bracket-btn-redo",
         "#cull-btn-undo",
         "#cull-btn-redo"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-undo\"]",
-        "needs": "session",
-        "note": "Needs a running sort session; redo is a button with aria-label Redo"
-      },
-      "next": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-undo\"]",
-        "needs": "session",
-        "note": "inside a running sort"
-      }
+      ]
     },
     {
       "id": "sort.focus-sound",
@@ -2466,17 +1199,7 @@
       "classic": [
         "#btn-sort-zen",
         "#btn-sort-mute"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-focus-option\"]",
-        "note": "Sound: sort-sound-option"
-      },
-      "next": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-focus-option\"]",
-        "note": "sort-sound-option beside it; inside a session sort-focus and sort-sound"
-      }
+      ]
     },
     {
       "id": "sort.cooldown",
@@ -2486,17 +1209,7 @@
       "classic": [
         "#manual-sort-cooldown-toggle",
         "#manual-sort-cooldown-ms"
-      ],
-      "vopus": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-cooldown\"]",
-        "note": "Milliseconds: sort-cooldown-ms"
-      },
-      "next": {
-        "at": "#/sort",
-        "find": "[data-testid=\"sort-cooldown\"]",
-        "note": "sort-cooldown-ms sets the milliseconds"
-      }
+      ]
     },
     {
       "id": "censor.queue-sort",
@@ -2513,23 +1226,7 @@
         "#qs-profile-new",
         "#qs-profile-save",
         "#qs-profile-apply"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"order\"]"
-        ],
-        "find": "[data-testid=\"queue-sort\"]",
-        "needs": "batch"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"order\"]"
-        ],
-        "find": "[data-testid=\"queue-sort\"]",
-        "needs": "batch"
-      }
+      ]
     },
     {
       "id": "censor.queue-filter",
@@ -2544,25 +1241,7 @@
         "#qs-filter-gallery",
         "#qs-filter-advanced",
         "#btn-queue-filter"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-strip-filter\"]",
-        "needs": "batch",
-        "note": "Filmstrip filter; the batch filter bar (batch-filter) is also in Pick / Order"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-strip-filter\"]",
-        "needs": "batch",
-        "note": "name filter in the film strip; condition filter and select-matching (batch-select-matches) in the Pick step"
-      }
+      ]
     },
     {
       "id": "censor.queue-order",
@@ -2578,25 +1257,7 @@
         "#btn-queue-move-bottom",
         "#btn-queue-manager-move-position",
         "#btn-queue-manager-remove-selected"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"order\"]"
-        ],
-        "find": "[data-testid=\"order-grid\"]",
-        "needs": "batch",
-        "note": "Order step: order-top / up / down / bottom, drag, undo"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"order\"]"
-        ],
-        "find": "[data-testid=\"order-grid\"]",
-        "needs": "batch",
-        "note": "Order step: move to front / earlier / later / back, drag"
-      }
+      ]
     },
     {
       "id": "censor.tools",
@@ -2609,25 +1270,7 @@
         "[data-tool=\"eraser\"]",
         "[data-tool=\"clone\"]",
         "[data-tool=\"remove-bg\"]"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-tool-brush\"]",
-        "needs": "batch",
-        "note": "Also censor-tool-pen / eraser / clone; remove background: adjust tab then censor-bg-open"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-tool-brush\"]",
-        "needs": "batch",
-        "note": "batch with a censor step (Pixiv kind); open it through the Censor menu or Batches. brush, pen, eraser, clone (censor-tool-<name>); remove background: censor-bg-open in the Adjust tab"
-      }
+      ]
     },
     {
       "id": "censor.history",
@@ -2639,25 +1282,7 @@
         "#btn-redo",
         "#btn-clear-edits",
         "#btn-show-changes"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-undo\"]",
-        "needs": "batch",
-        "note": "censor-redo, censor-reset, censor-changes-toggle"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-undo\"]",
-        "needs": "batch",
-        "note": "batch with a censor step (Pixiv kind); open it through the Censor menu or Batches. censor-redo, censor-reset, censor-changes-toggle"
-      }
+      ]
     },
     {
       "id": "censor.zoom",
@@ -2668,25 +1293,7 @@
         "#btn-zoom-out",
         "#btn-zoom-in",
         "#btn-zoom-fit"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-zoom-in\"]",
-        "needs": "batch",
-        "note": "censor-zoom-out, censor-fit"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-zoom-in\"]",
-        "needs": "batch",
-        "note": "batch with a censor step (Pixiv kind); open it through the Censor menu or Batches. censor-zoom-out, censor-fit"
-      }
+      ]
     },
     {
       "id": "censor.detect",
@@ -2702,27 +1309,7 @@
         "#btn-auto-detect-all-modal",
         "#btn-browse-model",
         "#censor-confidence-sidebar"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
-          "[data-testid=\"censor-tab-detect\"]"
-        ],
-        "find": "[data-testid=\"censor-detect-current\"]",
-        "needs": "batch",
-        "note": "censor-detect-all, detectors, confidence, censor-yolo-path"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
-          "[data-testid=\"censor-tab-detect\"]"
-        ],
-        "find": "[data-testid=\"censor-detect-current\"]",
-        "needs": "batch",
-        "note": "batch with a censor step (Pixiv kind); open it through the Censor menu or Batches. censor-detect-all, censor-detectors, censor-yolo-path"
-      }
+      ]
     },
     {
       "id": "censor.sam3",
@@ -2734,27 +1321,7 @@
         "#btn-sam3-refine-all-sidebar",
         "#btn-segment-text-current",
         "#btn-sam3-batch-refine"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
-          "[data-testid=\"censor-tab-detect\"]"
-        ],
-        "find": "[data-testid=\"censor-sam3-segment\"]",
-        "needs": "batch",
-        "note": "censor-refine-current / censor-refine-all"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
-          "[data-testid=\"censor-tab-detect\"]"
-        ],
-        "find": "[data-testid=\"censor-sam3-segment\"]",
-        "needs": "batch",
-        "note": "batch with a censor step (Pixiv kind); open it through the Censor menu or Batches. censor-refine-all, censor-sam3-common"
-      }
+      ]
     },
     {
       "id": "censor.review",
@@ -2767,27 +1334,7 @@
         "#btn-review-detect",
         "#btn-review-approve",
         "#btn-review-skip"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
-          "[data-testid=\"censor-tab-review\"]"
-        ],
-        "find": "[data-testid=\"censor-review-approve\"]",
-        "needs": "batch",
-        "note": "censor-review-skip, censor-review-redetect"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
-          "[data-testid=\"censor-tab-review\"]"
-        ],
-        "find": "[data-testid=\"censor-review-approve\"]",
-        "needs": "batch",
-        "note": "batch with a censor step (Pixiv kind); open it through the Censor menu or Batches. censor-review-skip, censor-review-progress"
-      }
+      ]
     },
     {
       "id": "censor.color-filters",
@@ -2805,27 +1352,7 @@
         "#btn-apply-filters-selected",
         "#btn-apply-filters-all",
         "#filter-brightness"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
-          "[data-testid=\"censor-tab-adjust\"]"
-        ],
-        "find": "[data-testid=\"censor-adjust-apply\"]",
-        "needs": "batch",
-        "note": "Presets censor-preset-<id>"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
-          "[data-testid=\"censor-tab-adjust\"]"
-        ],
-        "find": "[data-testid=\"censor-adjust-apply\"]",
-        "needs": "batch",
-        "note": "batch with a censor step (Pixiv kind); open it through the Censor menu or Batches. presets censor-preset-<id> (vivid, warm, cool, bw, hdr, reset)"
-      }
+      ]
     },
     {
       "id": "censor.save",
@@ -2837,25 +1364,7 @@
         "#btn-confirm-save-options",
         "#btn-save-browse-folder",
         "#btn-save-apply-filters-current"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-status\"]",
-        "needs": "batch",
-        "note": "Censoring saves by itself; censor-status says so and censor-save appears only when a save failed or is pending"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-status\"]",
-        "needs": "batch",
-        "note": "Censoring saves by itself; censor-status says so and censor-save appears only when a save failed or is pending"
-      }
+      ]
     },
     {
       "id": "censor.rename",
@@ -2867,25 +1376,7 @@
         "#btn-batch-rename",
         "#btn-queue-manager-batch-rename",
         "#btn-apply-rename"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-rename\"]",
-        "needs": "batch",
-        "note": "Batch rename is the Name step: name-step"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]"
-        ],
-        "find": "[data-testid=\"censor-rename\"]",
-        "needs": "batch",
-        "note": "batch with a censor step (Pixiv kind); open it through the Censor menu or Batches. batch rename with a template: Name step (name-step)"
-      }
+      ]
     },
     {
       "id": "censor.clear-queue",
@@ -2894,26 +1385,7 @@
       "zh": "清空打码队列",
       "classic": [
         "#btn-clear-queue"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]"
-        ],
-        "find": "[data-testid=\"pick-select-all\"]",
-        "needs": "batch",
-        "note": "Select all then pick-remove-selected in the Pick step"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]",
-          "[data-testid=\"pick-select-all\"]"
-        ],
-        "find": "[data-testid=\"pick-remove-selected\"]",
-        "needs": "batch",
-        "note": "select all + remove in the Pick step; no single clear button"
-      }
+      ]
     },
     {
       "id": "censor.media",
@@ -2926,27 +1398,7 @@
         "#media-censor-stop",
         "#media-censor-browse-source",
         "#media-censor-browse-output"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
-          "[data-testid=\"censor-tab-detect\"]"
-        ],
-        "find": "[data-testid=\"mediacensor-open\"]",
-        "needs": "batch",
-        "note": "The Detect tab of the censor step opens the GIF and video dialog (folder or files, style, save folder, start/stop as a job in Jobs). The library's Censor... on picked GIFs or videos opens the same dialog with those files."
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
-          "[data-testid=\"censor-tab-detect\"]"
-        ],
-        "find": "[data-testid=\"mediacensor-open\"]",
-        "needs": "batch",
-        "note": "batch with a censor step (Pixiv kind); open it through the Censor menu or Batches. Detect tab > GIFs and videos; the library's Censor... on picked GIFs or videos opens the same dialog."
-      }
+      ]
     },
     {
       "id": "censor.empty-open-gallery",
@@ -2955,22 +1407,7 @@
       "zh": "打码为空时：打开图库",
       "classic": [
         "#btn-censor-empty-open-gallery"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "find": "[data-testid=\"censor-empty-open-library\"]",
-        "needs": "empty censor step",
-        "note": "An empty censor step opens the Library in add-to-this-batch mode; the Pick step has add-from-library"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]"
-        ],
-        "find": "[data-testid=\"add-from-library\"]",
-        "needs": "batch",
-        "note": "an empty batch Pick step offers Add from the library"
-      }
+      ]
     },
     {
       "id": "similar.index",
@@ -2980,25 +1417,7 @@
       "classic": [
         "#btn-similar-embed",
         "#btn-similar-status-embed"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"open-palette\"]"
-        ],
-        "palette": "Build or update the similarity index",
-        "find": "[data-testid=\"palette\"] [role=\"option\"]",
-        "note": "Also rail status row 'Build' when the index is behind"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-similar\"]",
-          "[data-item=\"similar-dup\"]"
-        ],
-        "find": "[data-testid=\"duplicates-coverage\"]",
-        "note": "coverage line with the build-index button; footer row sim.index.pending; Ctrl K build index"
-      }
+      ]
     },
     {
       "id": "similar.search",
@@ -3012,20 +1431,7 @@
         "#similar-search-threshold",
         "#similar-search-scope",
         "#btn-similar-load-more"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "find": "[data-testid=\"search-by-image\"]",
-        "note": "By text: semantic-toggle; by image id: card-find-similar / right-click 'Find similar'; threshold / scope: similar-threshold, similar-scope in similar-banner"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-similar\"]"
-        ],
-        "find": "[data-item=\"similar-meaning\"]",
-        "note": "by meaning (text), by image (upload), like the image in view; threshold and scope: similar-threshold, similar-scope in the banner"
-      }
+      ]
     },
     {
       "id": "similar.duplicates",
@@ -3035,25 +1441,7 @@
       "classic": [
         "#btn-similar-duplicates",
         "#btn-similar-duplicates-more"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"open-palette\"]"
-        ],
-        "palette": "Find duplicate images…",
-        "find": "[data-testid=\"palette\"] [role=\"option\"]",
-        "then_find": "[data-testid=\"duplicates-dialog\"]",
-        "note": "Palette, or rail status row when duplicate groups were found; modes duplicates-mode-*, pairs view"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-similar\"]",
-          "[data-item=\"similar-dup\"]"
-        ],
-        "find": "[data-testid=\"duplicates-dialog\"]"
-      }
+      ]
     },
     {
       "id": "dup.cleanup",
@@ -3066,26 +1454,7 @@
         "#btn-dup-cancel-scan",
         "#btn-dup-apply-all",
         "#btn-dup-load-more"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"open-palette\"]"
-        ],
-        "palette": "Find duplicate images…",
-        "find": "[data-testid=\"palette\"] [role=\"option\"]",
-        "then_find": "[data-testid=\"duplicates-scan\"]",
-        "note": "Dialog has duplicates-scan, duplicates-apply-all, duplicates-remove-marked, duplicates-trash-marked"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-similar\"]",
-          "[data-item=\"similar-dup\"]"
-        ],
-        "find": "[data-testid=\"duplicates-scan\"]",
-        "note": "duplicates-apply-all keeps the best of each group"
-      }
+      ]
     },
     {
       "id": "reverse.run",
@@ -3096,17 +1465,7 @@
         "#btn-reverse-run",
         "#btn-reverse-cancel",
         "#btn-reverse-tipo"
-      ],
-      "vopus": {
-        "at": "#/tools/reverse",
-        "find": "[data-testid=\"reverse-page\"]",
-        "note": "Run: reverse-run-button (needs an image), TIPO: reverse-tipo-open"
-      },
-      "next": {
-        "at": "#/tools/reverse",
-        "find": "[data-testid=\"reverse-page\"]",
-        "note": "Run: reverse-run-button (needs an image), TIPO: reverse-tipo-open"
-      }
+      ]
     },
     {
       "id": "promptlab.stats",
@@ -3120,19 +1479,7 @@
         "#pl-best-checkpoints-more",
         "#pl-top-scored-images-more",
         "#pl-recipe-suggestions-more"
-      ],
-      "vopus": {
-        "at": "#/tools/promptlab",
-        "open": [
-          "[data-testid=\"pl-mode-stats\"]"
-        ],
-        "find": "[data-testid=\"pl-stats\"]"
-      },
-      "next": {
-        "at": "#/tools/promptlab",
-        "find": "[data-testid=\"pl-stats\"]",
-        "note": "Stats mode is the default; More > Prompt Lab (item tool-promptlab)"
-      }
+      ]
     },
     {
       "id": "promptlab.compare",
@@ -3143,21 +1490,7 @@
         "#pl-pick-a",
         "#pl-pick-b",
         "#pl-compare-go"
-      ],
-      "vopus": {
-        "at": "#/tools/promptlab",
-        "open": [
-          "[data-testid=\"pl-mode-compare\"]"
-        ],
-        "find": "[data-testid=\"pl-compare\"]"
-      },
-      "next": {
-        "at": "#/tools/promptlab",
-        "open": [
-          "[data-testid=\"pl-mode-compare\"]"
-        ],
-        "find": "[data-testid=\"pl-compare\"]"
-      }
+      ]
     },
     {
       "id": "promptlab.build",
@@ -3174,21 +1507,7 @@
         "#pl-build-reorder",
         "#pl-build-copy",
         "#pl-build-copy-all"
-      ],
-      "vopus": {
-        "at": "#/tools/promptlab",
-        "open": [
-          "[data-testid=\"pl-mode-build\"]"
-        ],
-        "find": "[data-testid=\"pl-build\"]"
-      },
-      "next": {
-        "at": "#/tools/promptlab",
-        "open": [
-          "[data-testid=\"pl-mode-build\"]"
-        ],
-        "find": "[data-testid=\"pl-build\"]"
-      }
+      ]
     },
     {
       "id": "promptlab.generate",
@@ -3204,23 +1523,7 @@
         "#btn-promptlab-save-preset",
         "#btn-promptlab-apply-tagset",
         "#btn-promptlab-use-gallery"
-      ],
-      "vopus": {
-        "at": "#/tools/promptlab",
-        "open": [
-          "[data-testid=\"pl-mode-random\"]"
-        ],
-        "find": "[data-testid=\"pl-random\"]",
-        "note": "pl-randomize, pl-generate, pl-check (validate), pl-presets"
-      },
-      "next": {
-        "at": "#/tools/promptlab",
-        "open": [
-          "[data-testid=\"pl-mode-random\"]"
-        ],
-        "find": "[data-testid=\"pl-generate\"]",
-        "note": "pl-presets, pl-check (validate), pl-randomize"
-      }
+      ]
     },
     {
       "id": "promptlab.categories",
@@ -3231,23 +1534,7 @@
         "#btn-promptlab-recategorize",
         "#btn-promptlab-category-board",
         "#promptlab-category-board-submit"
-      ],
-      "vopus": {
-        "at": "#/tools/promptlab",
-        "open": [
-          "[data-testid=\"pl-mode-random\"]"
-        ],
-        "find": "[data-testid=\"pl-browser\"]",
-        "note": "Category browser beside the random panel"
-      },
-      "next": {
-        "at": "#/tools/promptlab",
-        "open": [
-          "[data-testid=\"pl-mode-random\"]"
-        ],
-        "find": "[data-testid=\"pl-browser\"]",
-        "note": "recategorise a tag in the Tag & prompt library list (lex-category)"
-      }
+      ]
     },
     {
       "id": "artist.identify",
@@ -3262,17 +1549,7 @@
         "#btn-artist-load-more",
         "[data-view=\"grid\"]",
         "[data-view=\"list\"]"
-      ],
-      "vopus": {
-        "at": "#/tools/artist",
-        "find": "[data-testid=\"artist-run\"]",
-        "note": "artist-go, artist-vocab (vocabulary check), artist-stats"
-      },
-      "next": {
-        "at": "#/tools/artist",
-        "find": "[data-testid=\"artist-go\"]",
-        "note": "More > Style finder (item tool-artist); artist-vocab-check, artist-stats"
-      }
+      ]
     },
     {
       "id": "artist.clear",
@@ -3281,16 +1558,7 @@
       "zh": "画风识别：清除全部识别结果",
       "classic": [
         "#btn-clear-artist-data"
-      ],
-      "vopus": {
-        "at": "#/tools/artist",
-        "find": "[data-testid=\"artist-clear\"]",
-        "note": "Button artist-clear-button then dialog artist-clear-dialog"
-      },
-      "next": {
-        "at": "#/tools/artist",
-        "find": "[data-testid=\"artist-clear-button\"]"
-      }
+      ]
     },
     {
       "id": "stylemap.build",
@@ -3305,23 +1573,7 @@
         "#stylemap-index-pause",
         "#stylemap-index-cancel",
         "#stylemap-empty-similar"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"tools-menu\"]",
-          "[data-item=\"tool-stylemap\"]"
-        ],
-        "find": "[data-testid=\"stylemap-index\"]",
-        "note": "Tools > Style Map (#/tools/stylemap), also Ctrl K. stylemap-index holds stylemap-build (Build / Refresh index), or while it runs stylemap-index-pause and stylemap-index-cancel (the same job in the Jobs drawer, job-pause); the start card has stylemap-empty-build or stylemap-empty-similar (build the similarity index); the layout line has stylemap-install-umap and stylemap-retry-layout"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-place-stylemap\"]"
-        ],
-        "find": "[data-testid=\"stylemap-index\"]"
-      }
+      ]
     },
     {
       "id": "stylemap.view",
@@ -3339,24 +1591,7 @@
         "#stylemap-near-action",
         "#stylemap-near-clear",
         "[data-modal-handoff=\"stylemap\"]"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"tools-menu\"]",
-          "[data-item=\"tool-stylemap\"]"
-        ],
-        "find": "[data-testid=\"stylemap-axes-toggle\"]",
-        "note": "stylemap-axes-toggle (axis card stylemap-axes-panel, tabs stylemap-axes-tab-model and stylemap-axes-tab-custom for My axes), stylemap-labels-toggle, stylemap-landmarks-toggle, stylemap-reset-view, stylemap-locate-input with stylemap-locate-clear and stylemap-locate-action, nearest pictures stylemap-near-drop with stylemap-near-clear and stylemap-near-action; box select is stylemap-drag-box (Left-drag: Turn / Box / Lasso, Shift + drag always boxes, Shift + click toggles a dot); the picture window's Style Map button is lightbox-stylemap (shared lightbox, also in /next/)"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-place-stylemap\"]"
-        ],
-        "find": "[data-testid=\"stylemap-axes-toggle\"]",
-        "note": "The same tool page as Vopus (box select stylemap-drag-box, My axes in the axis card, lightbox-stylemap in the picture window)"
-      }
+      ]
     },
     {
       "id": "stylemap.selection",
@@ -3369,26 +1604,7 @@
         "#stylemap-sel-dataset",
         "#stylemap-sel-gallery",
         "#stylemap-sel-clear"
-      ],
-      "vopus": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"tools-menu\"]",
-          "[data-item=\"tool-stylemap\"]"
-        ],
-        "find": "[data-testid=\"stylemap-sel-library\"]",
-        "needs": "dots picked on the map",
-        "note": "Pick dots (Shift + drag, or stylemap-drag-box / stylemap-drag-lasso then drag; Shift + click toggles one): the bar stylemap-selbar shows the count (stylemap-selbar-count) and sends the pictures to stylemap-sel-batch (Add to batch: new / template / recent, the library's batch menu), stylemap-sel-censor (Censor; GIFs and videos go to the media censor), stylemap-sel-dataset (new dataset batch), stylemap-sel-library (the Library shows exactly those pictures under pinned-banner, pinned-back or Esc shows everything) and stylemap-sel-clear (also Esc)"
-      },
-      "next": {
-        "at": "#/library",
-        "open": [
-          "[data-testid=\"next-place-stylemap\"]"
-        ],
-        "find": "[data-testid=\"stylemap-sel-library\"]",
-        "needs": "dots picked on the map",
-        "note": "The same tool page and bar as Vopus; the /next/ library shows the pinned pictures under the same pinned-banner"
-      }
+      ]
     },
     {
       "id": "dataset.steps",
@@ -3399,19 +1615,7 @@
         "#dataset-tab-import",
         "#dataset-tab-workbench",
         "#dataset-tab-export"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "find": "[data-testid=\"step-rail\"]",
-        "needs": "batch",
-        "note": "Dataset batch steps: pick, tag, edit, check, export; step buttons rail-step"
-      },
-      "next": {
-        "at": "#/batch",
-        "find": "[data-testid=\"step-rail\"]",
-        "needs": "batch",
-        "note": "dataset batch: Pick, Tag, Edit, Check, Export; new one: new-batch > Dataset, or home-start-dataset"
-      }
+      ]
     },
     {
       "id": "dataset.projects",
@@ -3425,17 +1629,7 @@
         "#btn-dataset-project-archive",
         "#btn-dataset-project-restore",
         "#btn-dataset-project-delete"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "find": "[data-testid=\"show-archived\"]",
-        "note": "Per batch-row: rename, batch-copy (save as), archive / unarchive, delete; V3.5 projects in v35-project-row"
-      },
-      "next": {
-        "at": "#/batch",
-        "find": "[data-testid=\"batch-list\"]",
-        "note": "rename (batch-name), Save as (batch-copy), archive / restore (show-archived), delete (batch-delete-dialog); saving is automatic"
-      }
+      ]
     },
     {
       "id": "dataset.clear",
@@ -3444,26 +1638,7 @@
       "zh": "清空数据集制作队列",
       "classic": [
         "#btn-dataset-clear"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]"
-        ],
-        "find": "[data-testid=\"pick-select-all\"]",
-        "needs": "batch",
-        "note": "Select all then pick-remove-selected"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]",
-          "[data-testid=\"pick-select-all\"]"
-        ],
-        "find": "[data-testid=\"pick-remove-selected\"]",
-        "needs": "batch",
-        "note": "select all + remove"
-      }
+      ]
     },
     {
       "id": "dataset.import",
@@ -3480,25 +1655,7 @@
         "#btn-dataset-folder-import-more",
         "#btn-dataset-audit-run",
         "#btn-dataset-audit-download"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]"
-        ],
-        "find": "[data-testid=\"add-from-library\"]",
-        "needs": "batch",
-        "note": "add-from-folder, add-files"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]"
-        ],
-        "find": "[data-testid=\"add-from-folder\"]",
-        "needs": "batch",
-        "note": "add-from-library, add-from-folder, add-files"
-      }
+      ]
     },
     {
       "id": "dataset.audit-hints",
@@ -3510,25 +1667,7 @@
         "#dataset-audit-check-tokens",
         "#btn-dataset-audit-quality-stop",
         "#btn-dataset-audit-tokens-prepare"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"check\"]"
-        ],
-        "find": "[data-testid=\"check-step\"]",
-        "needs": "batch",
-        "note": "blurry / flat and too-long issues in check-issues; the tokenizer download is check-tokenizers-download"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"check\"]"
-        ],
-        "find": "[data-testid=\"check-issues\"]",
-        "needs": "batch",
-        "note": "check-issues"
-      }
+      ]
     },
     {
       "id": "dataset.queue",
@@ -3544,25 +1683,7 @@
         "#btn-dataset-queue-select-all",
         "#btn-dataset-queue-remove-selected",
         "#dataset-queue-caption-filter"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]"
-        ],
-        "find": "[data-testid=\"pick-grid\"]",
-        "needs": "batch",
-        "note": "Grid only; filter bar batch-filter with condition and only-favorites; select and remove in pick-bar"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]"
-        ],
-        "find": "[data-testid=\"pick-grid\"]",
-        "needs": "batch",
-        "note": "batch-filter for tag / prompt conditions, pick-select-all, pick-remove-selected"
-      }
+      ]
     },
     {
       "id": "dataset.compare-zoom",
@@ -3574,25 +1695,7 @@
         "#btn-dataset-zoom-out",
         "#btn-dataset-zoom-in",
         "#btn-dataset-zoom-reset"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-compare\"]",
-        "needs": "batch",
-        "note": "edit-zoom-in"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-compare\"]",
-        "needs": "batch",
-        "note": "edit-zoom-in"
-      }
+      ]
     },
     {
       "id": "dataset.caption-type",
@@ -3603,24 +1706,7 @@
         "#btn-dataset-captype-selected",
         "#btn-dataset-captype-all",
         "#btn-dataset-captype-auto"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-type-booru\"]",
-        "needs": "batch",
-        "note": "edit-type-both, edit-type-nl"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid^=\"edit-type-\"]",
-        "needs": "batch"
-      }
+      ]
     },
     {
       "id": "dataset.masks",
@@ -3637,25 +1723,7 @@
         "#mask-tool-auto",
         "#mask-editor-save",
         "#mask-editor-delete"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"check\"]"
-        ],
-        "find": "[data-testid=\"check-masks\"]",
-        "needs": "batch",
-        "note": "Opens mask-editor (mask-edit); auto masks mask-all"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"check\"]"
-        ],
-        "find": "[data-testid=\"check-masks\"]",
-        "needs": "batch",
-        "note": "mask-edit, mask-all, mask-auto in the editor"
-      }
+      ]
     },
     {
       "id": "dataset.caption-history",
@@ -3666,23 +1734,7 @@
         "#btn-dataset-save-caption-version",
         "#btn-dataset-caption-history",
         "#btn-dataset-annotation-history-more"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-history-open\"]",
-        "needs": "batch"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-history-open\"]",
-        "needs": "batch"
-      }
+      ]
     },
     {
       "id": "dataset.editor",
@@ -3696,25 +1748,7 @@
         "#btn-dataset-undo-caption",
         "#btn-dataset-drop-image",
         "#btn-dataset-remove-image"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-prev\"]",
-        "needs": "batch",
-        "note": "edit-next, edit-undo, edit-restart"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-panel\"]",
-        "needs": "batch",
-        "note": "edit-prev, edit-next, edit-undo, edit-restart"
-      }
+      ]
     },
     {
       "id": "dataset.trigger-quality",
@@ -3725,25 +1759,7 @@
         "#btn-dataset-quickfill-trigger",
         "#btn-dataset-quickfill-quality",
         "#btn-dataset-cleanup-trigger"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"dataset-settings-open\"]"
-        ],
-        "find": "[data-testid=\"dataset-trigger\"]",
-        "needs": "batch",
-        "note": "Quality tags: dataset-common"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"dataset-settings-open\"]"
-        ],
-        "find": "[data-testid=\"dataset-trigger\"]",
-        "needs": "batch",
-        "note": "dataset settings strip: trigger word, common tags"
-      }
+      ]
     },
     {
       "id": "dataset.target-model",
@@ -3753,25 +1769,7 @@
       "classic": [
         "#btn-dataset-target-model-apply",
         "#btn-dataset-anime-defaults"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"dataset-settings-open\"]"
-        ],
-        "find": "[data-testid=\"dataset-model\"]",
-        "needs": "batch",
-        "note": "Also dataset-purpose"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"dataset-settings-open\"]"
-        ],
-        "find": "[data-testid=\"dataset-purpose\"]",
-        "needs": "batch",
-        "note": "dataset-model, dataset-template"
-      }
+      ]
     },
     {
       "id": "dataset.tagging",
@@ -3781,25 +1779,7 @@
       "classic": [
         "#btn-dataset-smart-tag",
         "#btn-dataset-tag-all"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"tag\"]"
-        ],
-        "find": "[data-testid=\"tag-start\"]",
-        "needs": "batch",
-        "note": "tag-describer for Smart Tag"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"tag\"]"
-        ],
-        "find": "[data-testid=\"tag-start\"]",
-        "needs": "batch",
-        "note": "tag-describe-setup for Smart Tag / describer"
-      }
+      ]
     },
     {
       "id": "dataset.to-collection",
@@ -3808,27 +1788,7 @@
       "zh": "数据集图片加入收藏集",
       "classic": [
         "#btn-dataset-add-to-collection"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]",
-          "[data-testid=\"pick-select-all\"]"
-        ],
-        "find": "[data-testid=\"pick-add-to-batch\"]",
-        "needs": "batch",
-        "note": "A batch is V Opus's group of images (classic collections open as batches): the pick step's selection goes into a new, template or recent batch"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]",
-          "[data-testid=\"pick-select-all\"]"
-        ],
-        "find": "[data-testid=\"pick-add-to-batch\"]",
-        "needs": "batch",
-        "note": "same pick step as V Opus"
-      }
+      ]
     },
     {
       "id": "dataset.vocab",
@@ -3839,25 +1799,7 @@
         "#btn-dataset-vocab-refresh",
         "#dataset-vocab-search",
         "#btn-dataset-refresh-zh-aid"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-zh\"]",
-        "needs": "batch",
-        "note": "Chinese aid selector; vocabulary browsing is the Lexicon tool (#/tools/lexicon)"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]"
-        ],
-        "find": "[data-testid=\"edit-zh\"]",
-        "needs": "batch",
-        "note": "Chinese aid; tag info edit-tag-info; library vocabulary in Tag & prompt library"
-      }
+      ]
     },
     {
       "id": "dataset.lora-prune",
@@ -3867,27 +1809,7 @@
       "classic": [
         "#btn-dataset-lora-prune-apply",
         "#btn-dataset-lora-prune-clear"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]",
-          "[data-testid=\"edit-mode-bulk\"]"
-        ],
-        "find": "[data-testid=\"freq-table\"]",
-        "needs": "batch",
-        "note": "freq-blacklist per tag; dataset-blacklist in settings"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]",
-          "[data-testid=\"edit-mode-bulk\"]"
-        ],
-        "find": "[data-testid=\"freq-table\"]",
-        "needs": "batch",
-        "note": "freq-blacklist per tag row; dataset-blacklist in settings"
-      }
+      ]
     },
     {
       "id": "dataset.tag-cleanup",
@@ -3900,27 +1822,7 @@
         "#btn-dataset-reset-template",
         "#btn-dataset-apply-tag-category-order",
         "#btn-dataset-find-replace"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]",
-          "[data-testid=\"edit-mode-bulk\"]"
-        ],
-        "find": "[data-testid=\"bulk-panel\"]",
-        "needs": "batch",
-        "note": "bulk-dedupe, bulk-find / bulk-replace, bulk-sort; template in dataset-template"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"edit\"]",
-          "[data-testid=\"edit-mode-bulk\"]"
-        ],
-        "find": "[data-testid=\"bulk-dedupe\"]",
-        "needs": "batch",
-        "note": "bulk-find, bulk-replace, bulk-sort"
-      }
+      ]
     },
     {
       "id": "dataset.sepcon",
@@ -3941,25 +1843,7 @@
         "#sepcon-issue-filter",
         "#sepcon-search",
         "#sepcon-sort"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"check\"]"
-        ],
-        "find": "[data-testid=\"check-step\"]",
-        "needs": "batch",
-        "note": "check-issues; TIPO in the Edit step (edit-tipo-open)"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"check\"]"
-        ],
-        "find": "[data-testid=\"check-issues\"]",
-        "needs": "batch",
-        "note": "check-tag-audit, edit-tipo-open for TIPO"
-      }
+      ]
     },
     {
       "id": "dataset.ccip",
@@ -3970,24 +1854,7 @@
         "#ccip-run",
         "#ccip-cancel",
         "#ccip-prepare"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"check\"]"
-        ],
-        "find": "[data-testid=\"check-purity\"]",
-        "needs": "batch",
-        "note": "check-purity-run"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"check\"]"
-        ],
-        "find": "[data-testid=\"check-purity-run\"]",
-        "needs": "batch"
-      }
+      ]
     },
     {
       "id": "dataset.readiness",
@@ -3999,24 +1866,7 @@
         "#btn-dataset-readiness-cancel",
         "#btn-dataset-confirm-recheck",
         "#btn-dataset-confirm-go"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"export\"]"
-        ],
-        "find": "[data-testid=\"ds-preflight\"]",
-        "needs": "batch",
-        "note": "ds-problem / ds-blocked list the issues"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"export\"]"
-        ],
-        "find": "[data-testid=\"ds-preflight\"]",
-        "needs": "batch"
-      }
+      ]
     },
     {
       "id": "dataset.export",
@@ -4030,25 +1880,7 @@
         "#dataset-output-folder",
         "#btn-dataset-open-folder",
         "#btn-dataset-trainer-contract-retry"
-      ],
-      "vopus": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"export\"]"
-        ],
-        "find": "[data-testid=\"ds-export-step\"]",
-        "needs": "batch",
-        "note": "ds-export-folder, ds-export-run, ds-result-open"
-      },
-      "next": {
-        "at": "#/batch",
-        "open": [
-          "[data-testid=\"rail-step\"][data-step-id=\"export\"]"
-        ],
-        "find": "[data-testid=\"ds-export-folder\"]",
-        "needs": "batch",
-        "note": "ds-export-run, ds-result-open after the export"
-      }
+      ]
     },
     {
       "id": "settings.general",
@@ -4061,35 +1893,7 @@
         "#btn-settings-entry-hero-toggle",
         "#btn-settings-comfort-zen",
         "#settings-ui-scale"
-      ],
-      "vopus": {
-        "at": "#/settings/appearance",
-        "find": "[data-testid=\"setting-sound\"]",
-        "note": "Settings > Appearance: first screen setting-start, film setting-film, UI scale setting-scale, sort sound setting-sound and focus mode setting-focus (the same stored values as the Sort page options sort-sound-option, sort-focus-option)"
-      },
-      "next": {
-        "at": "#/settings/appearance",
-        "find": "[data-testid=\"setting-scale\"]",
-        "note": "first screen: setting-start; hero film: setting-film; sound setting-sound and focus mode setting-focus here too (same values as sort-sound-option, sort-focus-option on #/sort)"
-      }
-    },
-    {
-      "id": "settings.interface",
-      "area": "settings",
-      "en": "Switch interface (classic / Vopus)",
-      "zh": "切换界面（经典 / Vopus）",
-      "classic": [
-        "#btn-settings-interface"
-      ],
-      "vopus": {
-        "at": "#/settings/appearance",
-        "find": "[data-testid=\"setting-interface\"]"
-      },
-      "next": {
-        "at": "#/settings/appearance",
-        "find": "[data-testid=\"next-interface-note\"]",
-        "note": "links to the classic and Vopus interfaces; also More menu items classic, vopus"
-      }
+      ]
     },
     {
       "id": "settings.refresh-ui",
@@ -4098,15 +1902,7 @@
       "zh": "强制刷新界面",
       "classic": [
         "#btn-refresh-ui"
-      ],
-      "vopus": {
-        "at": "#/settings/about",
-        "find": "[data-testid=\"hard-refresh-button\"]"
-      },
-      "next": {
-        "at": "#/settings/about",
-        "find": "[data-testid=\"hard-refresh-button\"]"
-      }
+      ]
     },
     {
       "id": "settings.background-models",
@@ -4116,17 +1912,7 @@
       "classic": [
         "#settings-background-idle",
         "#btn-settings-background-unload"
-      ],
-      "vopus": {
-        "at": "#/settings/models",
-        "find": "[data-testid=\"background-idle\"]",
-        "note": "also background-unload"
-      },
-      "next": {
-        "at": "#/settings/models",
-        "find": "[data-testid=\"background-idle\"]",
-        "note": "also background-unload"
-      }
+      ]
     },
     {
       "id": "settings.output-root",
@@ -4136,17 +1922,7 @@
       "classic": [
         "#btn-settings-output-root-browse",
         "#btn-settings-output-root-reset"
-      ],
-      "vopus": {
-        "at": "#/settings/disk",
-        "find": "[data-testid=\"output-root-input\"]",
-        "note": "also output-root-browse, output-root-reset"
-      },
-      "next": {
-        "at": "#/settings/disk",
-        "find": "[data-testid=\"output-root-input\"]",
-        "note": "also output-root-browse, output-root-reset"
-      }
+      ]
     },
     {
       "id": "settings.ai-defaults",
@@ -4156,17 +1932,7 @@
       "classic": [
         "#btn-settings-save-ai-defaults",
         "#btn-settings-reset-ai-defaults"
-      ],
-      "vopus": {
-        "at": "#/settings/ai",
-        "find": "[data-testid=\"ai-defaults-save\"]",
-        "note": "Settings > AI > AI defaults: save the tagger and style finder settings as the defaults (V3.5's own keys), reset them, Undo"
-      },
-      "next": {
-        "at": "#/settings/ai",
-        "find": "[data-testid=\"ai-defaults-save\"]",
-        "note": "same Settings > AI page as Vopus; the style finder's own Reset for its settings stays on its tool page"
-      }
+      ]
     },
     {
       "id": "settings.reset-all",
@@ -4175,15 +1941,7 @@
       "zh": "重置全部设置",
       "classic": [
         "#btn-settings-reset-all"
-      ],
-      "vopus": {
-        "at": "#/settings/appearance",
-        "find": "[data-testid=\"reset-all-open\"]"
-      },
-      "next": {
-        "at": "#/settings/appearance",
-        "find": "[data-testid=\"reset-all-open\"]"
-      }
+      ]
     },
     {
       "id": "settings.models",
@@ -4193,17 +1951,7 @@
       "classic": [
         "[data-settings-tab=\"models\"]",
         "#btn-bulk-download-models"
-      ],
-      "vopus": {
-        "at": "#/settings/models",
-        "find": "[data-testid=\"model-center\"]",
-        "note": "Download all: bulk-open"
-      },
-      "next": {
-        "at": "#/settings/models",
-        "find": "[data-testid=\"bulk-open\"]",
-        "note": "tab settings-tab-models; model-center page"
-      }
+      ]
     },
     {
       "id": "settings.network-proxy",
@@ -4212,17 +1960,7 @@
       "zh": "网络代理：一个端口，模型下载、装包和检查更新都走它，并可测试连接",
       "classic": [
         "#network-proxy-section"
-      ],
-      "vopus": {
-        "at": "#/settings/models",
-        "find": "[data-testid=\"network-proxy\"]",
-        "note": "On the Model Center page, below the download source"
-      },
-      "next": {
-        "at": "#/settings/models",
-        "find": "[data-testid=\"network-proxy\"]",
-        "note": "Same Model Center page as Vopus"
-      }
+      ]
     },
     {
       "id": "settings.metadata-repair",
@@ -4232,18 +1970,7 @@
       "classic": [
         "#btn-metadata-reread-comfyui",
         "#btn-metadata-reparse"
-      ],
-      "vopus": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"repair-comfy-start\"]",
-        "note": "Settings > Library > Repair prompts and text: recover missing text (repair-recover-start) and read every ComfyUI prompt again (repair-comfy-start), each a job with progress and a result line; the rail fixes and the card Read again remain"
-      },
-      "next": {
-        "at": "#/settings/library",
-        "find": "[data-testid=\"repair-comfy-start\"]",
-        "needs": "",
-        "note": "same Settings > Library section; footer rows Read again and Recover text; per image: Read again on the card"
-      }
+      ]
     },
     {
       "id": "settings.audit",
@@ -4253,17 +1980,7 @@
       "classic": [
         "[data-settings-tab=\"audit\"]",
         "#btn-health-refresh"
-      ],
-      "vopus": {
-        "at": "#/settings/about",
-        "find": "[data-testid=\"about-system\"]",
-        "note": "GPU, RAM, CPU facts; library health is the library report (status-report-open)"
-      },
-      "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-footer-report\"]",
-        "note": "opens library-report (report-refresh)"
-      }
+      ]
     },
     {
       "id": "settings.disk",
@@ -4272,16 +1989,7 @@
       "zh": "磁盘占用",
       "classic": [
         "[data-settings-tab=\"disk\"]"
-      ],
-      "vopus": {
-        "at": "#/settings/disk",
-        "find": "[data-testid=\"disk-settings\"]"
-      },
-      "next": {
-        "at": "#/settings/disk",
-        "find": "[data-testid=\"disk-index\"]",
-        "note": "tab settings-tab-disk"
-      }
+      ]
     },
     {
       "id": "settings.look",
@@ -4290,13 +1998,7 @@
       "zh": "界面外观（经典或专业预览）",
       "classic": [
         "#settings-look"
-      ],
-      "vopus": {
-        "missing": "the professional look is designed on the classic interface first (goal 2026-11-08)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "assistant.panel",
@@ -4305,13 +2007,7 @@
       "zh": "内置助手（聊天面板：找图、显示结果，确认后打标签、评星、放入收藏集）",
       "classic": [
         "#btn-assistant"
-      ],
-      "vopus": {
-        "missing": "The assistant was built for the classic interface first (2026-11-11); V Opus has no chat panel yet"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "gallery.pose_view",
@@ -4320,13 +2016,7 @@
       "zh": "按姿势或视角找图（图库里这两类标签的列表）",
       "classic": [
         "#btn-pose-view"
-      ],
-      "vopus": {
-        "missing": "Built for the classic interface first (2026-11-11); V Opus filters by tag but has no pose / angle list"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "gallery.pick_varied",
@@ -4335,13 +2025,7 @@
       "zh": "从选中的图片里挑出差别最大的 N 张（用于做多样的训练集）",
       "classic": [
         "#btn-pick-varied"
-      ],
-      "vopus": {
-        "missing": "Built for the classic interface first (2026-11-11)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "gallery.compare_two",
@@ -4350,13 +2034,7 @@
       "zh": "比较选中的两张图片（差在哪里：提示词、设置、LoRA）",
       "classic": [
         "#btn-compare-selected"
-      ],
-      "vopus": {
-        "missing": "Built for the classic interface first (2026-11-11)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "similar.wander",
@@ -4368,13 +2046,7 @@
         "#btn-wander-from-selection",
         "#btn-wander-more",
         "#btn-wander-to-gallery"
-      ],
-      "vopus": {
-        "missing": "Built for the classic interface first (2026-11-11)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "viewer.reference-window",
@@ -4383,13 +2055,7 @@
       "zh": "浮动参考图：把一张图放进始终置顶的小窗口（缩放、镜像、灰度）",
       "classic": [
         "#btn-modal-reference"
-      ],
-      "vopus": {
-        "missing": "Built for the classic interface first (2026-11-11)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "home.new-pictures",
@@ -4398,13 +2064,7 @@
       "zh": "新图片：只看上次挑选之后生成的图片，可逐张留 / 汰或全部标为已看过",
       "classic": [
         "#entry-mission-new"
-      ],
-      "vopus": {
-        "missing": "Built for the classic interface first (2026-11-11)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "dataset.next-step",
@@ -4413,13 +2073,7 @@
       "zh": "还差什么：数据集制作页标题下的一行，说明导出前还缺什么，并带你去对应的页签",
       "classic": [
         "#btn-dataset-next"
-      ],
-      "vopus": {
-        "missing": "Built for the classic interface first (2026-11-11)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "gallery.describe-search",
@@ -4428,13 +2082,7 @@
       "zh": "改用含义搜索：文字搜索没有结果时，用同样的词按含义找出最接近的图片并作为一组打开",
       "classic": [
         "#empty-state-describe-btn"
-      ],
-      "vopus": {
-        "missing": "Built for the classic interface first (2026-11-11)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "library.eagle-import",
@@ -4447,13 +2095,7 @@
         "#btn-eagle-preview",
         "#btn-eagle-run",
         "#eagle-import-close"
-      ],
-      "vopus": {
-        "missing": "Built for the classic interface first (2026-11-11)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     },
     {
       "id": "library.recent-moves",
@@ -4462,13 +2104,7 @@
       "zh": "最近的移动：最近的移动和复制，每一次都可以撤销，提示消失之后也可以",
       "classic": [
         "#nav-tools-recent-moves"
-      ],
-      "vopus": {
-        "missing": "Built for the classic interface first (2026-11-11)"
-      },
-      "next": {
-        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
-      }
+      ]
     }
   ],
   "not_entrances": [
@@ -4586,5 +2222,28 @@
       ]
     }
   ],
-  "removed": []
+  "removed": [
+    {
+      "id": "interface.vopus",
+      "interface": "vopus",
+      "date": "2026-11-12",
+      "reason": "Two more interfaces on the same backend meant every feature was built and tested twice, and both had fallen behind the classic interface. The owner chose to keep one. Source archived outside the repo (_archive/sd-image-sorter-vopus-2026-11-12) and in git history (e87be995).",
+      "owner_words": "刪"
+    },
+    {
+      "id": "interface.next",
+      "interface": "next",
+      "date": "2026-11-12",
+      "reason": "Two more interfaces on the same backend meant every feature was built and tested twice, and both had fallen behind the classic interface. The owner chose to keep one. Source archived outside the repo (_archive/sd-image-sorter-vopus-2026-11-12) and in git history (e87be995).",
+      "owner_words": "刪"
+    },
+    {
+      "id": "settings.interface",
+      "interface": "classic",
+      "selector": "#btn-settings-interface",
+      "date": "2026-11-12",
+      "reason": "The Settings row that switched to V Opus: there is no second interface to switch to.",
+      "owner_words": "刪"
+    }
+  ]
 }

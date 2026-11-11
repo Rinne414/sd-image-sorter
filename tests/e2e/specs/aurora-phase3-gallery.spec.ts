@@ -14,7 +14,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test } from '../fixtures/click-ledger'
-import { cleanupImages, seedImages } from '../fixtures/v4-seed'
+import { cleanupImages, seedImages } from '../fixtures/seed-images'
 import { scanAndWait } from '../fixtures/scan-wait'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')

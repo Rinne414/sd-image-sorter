@@ -13,9 +13,9 @@ close to it (hue wraps around, so 355 and 5 degrees are the same red), and each
 group is shown by the average of its largest bin, so the colour shown is one
 the picture really has.
 
-Keep in step with frontend/js/modules/utils/hsv-palette.js and
-frontend-v4/src/lib/hsvPalette.ts: backend/tests/fixtures/hsv_palette_vectors.json
-holds the answers all three must give. Standard library only.
+Keep in step with frontend/js/modules/utils/hsv-palette.js:
+backend/tests/fixtures/hsv_palette_vectors.json holds the answers both must
+give. Standard library only.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@ import { expect, test } from '../fixtures/click-ledger'
 import { markModelsReady } from '../fixtures/model-status'
 import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 import { isIntentionalAbort } from '../fixtures/request-noise'
-import { cleanupImages, seedImages } from '../fixtures/v4-seed'
+import { cleanupImages, seedImages } from '../fixtures/seed-images'
 
 // The gallery toolbar (search help, filters) folds while the library is empty:
 // this file brings its own pictures instead of relying on what earlier specs left.

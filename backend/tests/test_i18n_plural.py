@@ -1,10 +1,8 @@
 """English counts in the classic UI read right when the count is 1.
 
 ``I18n.format`` (frontend/js/i18n.js) writes "1 image is" for the pack text
-"{count} images are"; Vopus does the same with frontend-v4/src/i18n/plural.ts.
-These tests run the real i18n.js under node, keep the two word lists equal,
-and hold every English count in lang/en.js to them (the same rules as
-frontend-v4/src/i18n/packs.test.ts, part d).
+"{count} images are". These tests run the real i18n.js under node and hold
+every English count in lang/en.js to its word lists.
 """
 
 from __future__ import annotations
@@ -19,7 +17,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 HARNESS = Path(__file__).with_name("i18n_plural_harness.cjs")
-VOPUS_PLURAL = ROOT / "frontend-v4" / "src" / "i18n" / "plural.ts"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is required")
 
@@ -129,36 +126,6 @@ def test_a_count_of_one_takes_singular_words():
 def test_values_are_written_verbatim_everywhere():
     cases = [("{name} / {name}", {"name": "a$&b$1"}), ("no params", {})]
     assert _format(cases) == ["a$&b$1 / a$&b$1", "no params"]
-
-
-def _vopus_lists() -> dict:
-    text = VOPUS_PLURAL.read_text(encoding="utf-8")
-
-    def block(start: str) -> str:
-        head = text.index(start)
-        return text[
-            head : text.index("\n}", head)
-            if "Record" in start
-            else text.index("])", head)
-        ]
-
-    plurals = dict(
-        re.findall(r"^\s+(\w+): '([\w-]+)',$", block("export const PLURALS"), re.M)
-    )
-    modifiers = re.findall(r"'([\w-]+)'", block("export const MODIFIERS"))
-    verbs = dict(
-        re.findall(r"^\s+(\w+): '([\w-]+)',$", block("export const VERBS"), re.M)
-    )
-    return {"PLURALS": plurals, "MODIFIERS": modifiers, "VERBS": verbs}
-
-
-def test_the_word_lists_match_vopus(data):
-    vopus = _vopus_lists()
-    rules = data["rules"]
-    assert len(vopus["PLURALS"]) > 40 and len(vopus["VERBS"]) > 5
-    assert rules["PLURALS"] == vopus["PLURALS"]
-    assert sorted(rules["MODIFIERS"]) == sorted(vopus["MODIFIERS"])
-    assert rules["VERBS"] == vopus["VERBS"]
 
 
 def _count_problems(text: str, plurals: dict, modifiers: set) -> list[str]:

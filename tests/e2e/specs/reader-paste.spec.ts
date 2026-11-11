@@ -3,7 +3,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { test, expect, type Page } from '../fixtures/click-ledger'
-import { tmpRoot } from '../fixtures/v4-seed'
+import { tmpRoot } from '../fixtures/seed-images'
 
 // Tiny 1x1 PNG (base64), used to simulate a clipboard image payload.
 const TINY_PNG_BASE64 =

@@ -10,6 +10,11 @@ wrong — see `docs/AI_PRINCIPLES.md` for the authority order.
 
 ## §redesign-2026-10 — The frontend redesign (owner, 2026-10-22)
 
+> **2026-11-12:** the owner retired V Opus and the `/next/` trial; the program
+> has one interface. What this section says about Vopus, `/next/`,
+> `frontend-v4` and `docs/DESIGN_VOPUS.md` is history (source archived, and in
+> git at e87be995).
+
 The owner: "I want to redesign the sorter, don't make them rules... I still
 thinking the sorter frontend is far to a 'suitable product'." So today's look
 (top bar, silver accent, 10/12/14/16 px radii, font stack, rules 12, 15 and 22
