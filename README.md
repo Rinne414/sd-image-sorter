@@ -392,7 +392,7 @@ run.bat
 |:--|:--|:--|
 | 第一次 `run.bat` 后直接可用 | 扫描 / 导入图库、浏览、筛选、搜索、批量选择、自动分类、WASD 手动分类、Prompt Helper、元数据读取、手动打码编辑器、导出同名 sidecar | 只依赖轻量核心包；不会在启动时主动拉 Torch / SAM3 / NudeNet / Ultralytics / FastEmbed。用到对应功能时再下载该模型，并显示安装进度。 |
 | 需要下载模型文件，但不需要额外 Python 包 | WD14 / Camie / PixAI / DanbooruTagQuery / OppaiOracle / CL Tagger v2 ONNX 打标 | 点击 **功能准备 / Prepare** 或首次打标时下载模型文件；ONNX Runtime 已在核心依赖里。CL Tagger v2 需先接受 Hugging Face 条款。 |
-| 需要 Prepare / Download，可能要求重启 | CLIP 相似搜索、美学评分、画师识别、NudeNet、Privacy YOLO、SAM3、ToriiGate | 如果准备过程安装了 Python 包，界面会提示重启。一般 Torch 功能在 macOS 上仅支持 macOS 14+ Apple Silicon；SAM3 仍需 Windows/Linux 的 NVIDIA CUDA。ToriiGate 首次模型约 5 GB，SAM3 / Torch 也会占用较多空间。 |
+| 需要 Prepare / Download，可能要求重启 | CLIP 相似搜索、美学评分、画师识别、NudeNet、Privacy YOLO、SAM3、ToriiGate | 如果准备过程安装了 Python 包，界面会提示重启。一般 Torch 功能在 macOS 上仅支持 macOS 14+ Apple Silicon；SAM3 仍需 Windows/Linux 的 NVIDIA CUDA。ToriiGate 首次模型约 9.6 GB，SAM3 / Torch 也会占用较多空间。 |
 
 缩略图缓存默认上限是 **500 MB**。它只删可重新生成的缩略图，不会删原图；你可以在 **功能准备 → 磁盘占用 → 缩略图缓存上限** 改大小，填 `0` 可关闭持久缩略图缓存。界面会提示取舍：上限越低越省磁盘，但大图库滚动时可能更常重建缩略图，CPU / 硬盘 IO 会更忙。
 
@@ -886,7 +886,7 @@ cd sd-image-sorter
 |:--|:--|:--|
 | Ready after first launch | Scan/import, gallery browsing, metadata reading, filters/search, batch selection, auto-separate, WASD manual sort, Prompt Helper, manual censor editor, sidecar export | Uses only the lightweight core install. It does not pull Torch / SAM3 / NudeNet / Ultralytics / FastEmbed at startup. Using a feature downloads that model with install progress. |
 | Needs model files only | WD14 / Camie / PixAI / DanbooruTagQuery / OppaiOracle / CL Tagger v2 ONNX tagging | Click **Setup Now / Prepare** or start tagging to download model files; ONNX Runtime is already part of core. CL Tagger v2 requires accepting Hugging Face terms. |
-| Needs Prepare / Download and may need restart | CLIP similarity, aesthetic scoring, Artist ID, NudeNet, Privacy YOLO, SAM3, ToriiGate | If Prepare installs Python packages, restart before using that feature. General Torch-backed features on macOS require macOS 14+ Apple Silicon; SAM3 still requires NVIDIA CUDA on Windows/Linux. ToriiGate is about 5 GB; SAM3 / Torch can also be large. |
+| Needs Prepare / Download and may need restart | CLIP similarity, aesthetic scoring, Artist ID, NudeNet, Privacy YOLO, SAM3, ToriiGate | If Prepare installs Python packages, restart before using that feature. General Torch-backed features on macOS require macOS 14+ Apple Silicon; SAM3 still requires NVIDIA CUDA on Windows/Linux. ToriiGate is about 9.6 GB; SAM3 / Torch can also be large. |
 
 Thumbnail cache is capped at **500 MB** by default. It only removes regeneratable thumbnails, never original images. Change it in **Setup Now → Disk Usage → Thumbnail cache limit**; set `0` to disable persistent thumbnail caching. The UI explains the trade-off: lower limits save disk, but large-gallery scrolling can spend more CPU / disk I/O regenerating thumbnails.
 
