@@ -149,6 +149,7 @@ from services.video_index import get_video_indexer
 from routers import background_models
 from routers import network
 from routers import local_picture
+from routers import eagle as eagle_router
 from routers import assistant as assistant_router
 from model_residency import start_idle_sweeper, stop_idle_sweeper
 
@@ -453,6 +454,7 @@ app.include_router(browser_extension.ext_router)
 app.include_router(browser_extension.router)
 app.include_router(collect.router)
 app.include_router(local_picture.router)
+app.include_router(eagle_router.router)
 app.include_router(videos.router)
 app.include_router(file_manager.router)
 app.include_router(image_lookup.router)

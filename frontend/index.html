@@ -6867,6 +6867,10 @@
                     <span class="collect-paste-copy" data-i18n="collect.pasteRowHint">A picture or a picture address on the clipboard? Paste it into the gallery (Ctrl+V); it is saved in collected/&lt;date&gt; in your output folder.</span>
                     <button type="button" class="btn btn-secondary btn-small" id="btn-paste-picture" data-i18n="collect.pasteButton">Paste picture</button>
                 </div>
+                <div class="collect-paste-row">
+                    <span class="collect-paste-copy" data-i18n="eagle.rowHint">Coming from Eagle? Bring a library in without copying it: stars, notes, tags and folders come along.</span>
+                    <button type="button" class="btn btn-secondary btn-small" id="btn-scan-from-eagle" data-i18n="eagle.rowButton">From an Eagle library…</button>
+                </div>
                 <details class="guided-advanced-panel" id="scan-advanced-options">
                     <summary class="guided-advanced-summary">
                         <span data-i18n="scan.advancedSummary">Advanced options</span>
@@ -6944,6 +6948,31 @@
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-cancel-scan" aria-label="Cancel scan" data-i18n-aria="a11y.cancelScan" data-i18n="modal.cancel">Cancel</button>
                     <button class="btn btn-primary" id="btn-start-scan" aria-label="Start importing folder" data-i18n-aria="a11y.startImportingFolder" data-i18n="modal.startScan">Start Import</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bring an Eagle library in (js/modules/eagle-import.js) -->
+        <div class="modal" id="eagle-import-modal" role="dialog" aria-modal="true" aria-labelledby="eagle-import-title" data-initial-focus="#eagle-import-path">
+            <div class="modal-backdrop" aria-hidden="true"></div>
+            <div class="modal-content modal-medium eagle-import-content">
+                <button type="button" class="modal-close" id="eagle-import-close" aria-label="Close" data-i18n-aria="common.close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+                <h3 id="eagle-import-title" data-i18n="eagle.title">Bring an Eagle library in</h3>
+                <p class="modal-description" data-i18n="eagle.description">Choose the library folder (its name ends in .library). The pictures stay where Eagle keeps them; stars, notes, tags, folders and source pages come along. Nothing in the Eagle folder is changed.</p>
+                <div class="form-group">
+                    <label for="eagle-import-path" data-i18n="eagle.folderLabel">Eagle library folder</label>
+                    <div class="folder-path-row">
+                        <input type="text" id="eagle-import-path" class="input-field" placeholder="D:\Eagle\Art.library" autocomplete="off" spellcheck="false" data-folder-browser-container="eagle-folder-browser-container">
+                        <button type="button" class="btn-browse" id="btn-eagle-browse" aria-label="Browse for folder" data-i18n-aria="a11y.browseForFolder" title="Browse folders" data-i18n-title="tip.browseFolders" data-i18n="scan.browse">Browse</button>
+                    </div>
+                    <div id="eagle-folder-browser-container"></div>
+                </div>
+                <p class="eagle-import-status" id="eagle-import-status" role="status" aria-live="polite"></p>
+                <div class="eagle-import-box" id="eagle-import-summary" hidden></div>
+                <div class="eagle-import-box" id="eagle-import-result" hidden></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="btn-eagle-preview" data-i18n="eagle.look">See what it holds</button>
+                    <button type="button" class="btn btn-primary" id="btn-eagle-run" disabled data-i18n="eagle.run">Bring it in</button>
                 </div>
             </div>
         </div>
@@ -9321,6 +9350,7 @@
     <script src="/static/js/modules/dataset-next-step.js"></script>
     <script src="/static/js/modules/gallery-describe.js"></script>
     <script src="/static/js/folder-tree-drop.js"></script>
+    <script src="/static/js/modules/eagle-import.js"></script>
     <script src="/static/js/modules/compare-two.js"></script>
     <script src="/static/js/reference-view/view.js"></script>
     <script src="/static/js/modules/reference-window.js"></script>

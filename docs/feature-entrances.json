@@ -4435,6 +4435,25 @@
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
       }
+    },
+    {
+      "id": "library.eagle-import",
+      "area": "library",
+      "en": "Bring an Eagle library in without copying it: pictures indexed in place, with stars, notes, tags, folders (as collections) and source pages",
+      "zh": "不复制就带入 Eagle 资源库：图片原地建立索引，星级、备注、标签、文件夹（变成合集）和来源网页一起带入",
+      "classic": [
+        "#btn-scan-from-eagle",
+        "#btn-eagle-browse",
+        "#btn-eagle-preview",
+        "#btn-eagle-run",
+        "#eagle-import-close"
+      ],
+      "vopus": {
+        "missing": "Built for the classic interface first (2026-11-11)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [

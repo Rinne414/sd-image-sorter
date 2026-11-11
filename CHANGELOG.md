@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added / 新增
 
+- **Bring an Eagle library in (new, not yet tried on a real Eagle library)**: the Import dialog has "From an Eagle library…". Choose the library folder, see what it holds, then bring it in: the pictures are indexed where Eagle keeps them (nothing is copied, nothing in the Eagle folder is changed), and stars, notes, tags (as your own tags), folders (as collections, nested the same way) and source pages come along. Nothing a picture already has here is overwritten, so it can be run again after adding to the Eagle library. Bookmarks, items in the Eagle trash and its thumbnails are passed over and counted. It was built from public notes on the Eagle folder layout and tested on libraries made to that layout; Billfish libraries are not read.
+  - **带入 Eagle 资源库（新功能，尚未在真实的 Eagle 资源库上试过）**：导入窗口里多了“从 Eagle 资源库…”。选择资源库文件夹，先看看里面有什么，再带进来：图片在 Eagle 存放的位置原地建立索引（不复制，也不改动 Eagle 文件夹），星级、备注、标签（作为你自己的标签）、文件夹（变成合集，嵌套关系相同）和来源网页一起带过来。图片在这里已有的内容不会被覆盖，所以往 Eagle 资源库加了东西之后可以再运行一次。书签、Eagle 回收站里的项目和它的缩略图会跳过并计数。它是根据公开的 Eagle 文件夹结构说明做的，并在按该结构制作的资源库上测试过；不读取 Billfish 资源库。
 - **Drop pictures on a folder to move them**: in the browser, a picture dragged from the Gallery (or the whole selection, when the dragged picture is part of it) can be dropped on a folder in the sidebar. The folder lights up, the program asks the same question as "Move…" (how many files, where to), and the move has the same progress bar and Undo. In the desktop program a drag hands the files to other programs instead, so use "Move…" there.
   - **把图片拖到文件夹上即可移动**：在浏览器里，可以把图库里的一张图片（如果它在已选中的图片里，则是整个选择）拖到侧栏的文件夹上。文件夹会高亮，程序会像“移动…”一样先问一遍（多少个文件、移到哪里），移动时同样有进度条和撤销。桌面版里拖动是把文件交给其他程序，所以请在那里使用“移动…”。
 - **Search by meaning from the Gallery**: when the Gallery's search finds no picture, the empty page offers "Search by meaning instead". The same words go to the picture-meaning search (the one on Find Similar), and the 60 closest pictures open in the Gallery as one set to select and act on. It needs the similarity index and says so when it is missing.
@@ -60,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Ctrl K closes the feature list again**: the list puts the cursor in its own search field when it opens, and the second Ctrl K was ignored there as "typing in a field", so it only closed with Esc or the X. It closes now; typing in any other field still keeps the key.
+  - **Ctrl K 可以再次关闭功能目录**：功能目录打开时光标会落在它自己的搜索框里，第二次按 Ctrl K 被当成“正在输入”而忽略，只能用 Esc 或 X 关闭。现在可以关闭了；在其他输入框里打字时仍然不会被抢键。
 - **Prompt Helper picture picker**: the picker listed only the newest 200 pictures and 200 search hits; it now goes on through the whole library as you scroll. A picture picked from a search that was not among the newest 200 was silently dropped (the box went back to "nothing chosen"); it is kept now. A failed load says why instead of showing "no images matched".
   - **提示词助手的选图窗口**：原来只列出最新的 200 张和 200 条搜索结果，现在向下滚动可以一直看到整个图库。以前从搜索结果里选中一张不在最新 200 张里的图，会被悄悄丢掉（选择框回到“未选择”），现在会保留。加载失败时会说明原因，而不是显示“没有匹配的图片”。
 - **Manual Sort: typing in a text field no longer sorts pictures**: while a sorting session was running, letters typed into a search box or a dialog (W, A, S, D, space, Z, Y) were taken as sorting keys and moved or skipped pictures. Keys typed into any text field are now left to that field.

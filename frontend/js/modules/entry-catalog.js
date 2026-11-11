@@ -225,10 +225,12 @@
         if (event.key !== 'k' && event.key !== 'K') return;
         if (event.ctrlKey === event.metaKey || event.altKey || event.shiftKey) return;
         if (event.repeat || event.isComposing || event.defaultPrevented) return;
-        if (isTypingTarget(event.target)) return;
         const catalog = document.getElementById('entry-catalog-modal');
         if (!catalog) return;
         const isOpen = catalog.classList.contains('visible');
+        // Typing elsewhere keeps the key; the catalog's own search field does not:
+        // it has the focus whenever the catalog is open, and the second press must close it.
+        if (isTypingTarget(event.target) && !(isOpen && catalog.contains(event.target))) return;
         if (!isOpen && document.querySelector('.modal.visible')) return;
         event.preventDefault();
         if (isOpen) close(); else open();

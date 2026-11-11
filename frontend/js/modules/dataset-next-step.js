@@ -19,7 +19,7 @@
 (function initDatasetNextStep(global) {
     'use strict';
 
-    const REFRESH_DELAY_MS = 250;
+    const TYPING_DELAY_MS = 250;
     const tr = (key, fallback, params) => (
         typeof global.appT === 'function' ? global.appT(key, fallback, params) : fallback
     );
@@ -74,9 +74,21 @@
         button.dataset.tab = step.tab;
     }
 
+    let frame = 0;
+
+    /** Draw on the next frame: a change of pictures or tab must not move the page later on. */
     function refreshSoon() {
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+            frame = 0;
+            render();
+        });
+    }
+
+    /** Typing a caption changes the count at most once per pause. */
+    function refreshAfterTyping() {
         clearTimeout(timer);
-        timer = setTimeout(render, REFRESH_DELAY_MS);
+        timer = setTimeout(render, TYPING_DELAY_MS);
     }
 
     function wire() {
@@ -89,7 +101,7 @@
         // The dataset changed, a caption was typed, tagging ended, another tab or language was chosen.
         global.addEventListener('dataset:changed', refreshSoon);
         ['taggingCompleted', 'vlmBatchCompleted', 'languageChanged'].forEach((name) => document.addEventListener(name, refreshSoon));
-        page.addEventListener('input', refreshSoon);
+        page.addEventListener('input', refreshAfterTyping);
         page.addEventListener('change', refreshSoon);
         page.addEventListener('click', refreshSoon);
         new MutationObserver(refreshSoon).observe(page, { attributes: true, attributeFilter: ['data-active-tab'] });
@@ -105,7 +117,7 @@
             if (!global.DatasetMaker) return;
             clearInterval(waiting);
             render();
-        }, 500);
+        }, 100);
     }
 
     global.DatasetNextStep = Object.freeze({ render, assess });

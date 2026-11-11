@@ -260,6 +260,15 @@ Get one image with its tags.
 #### GET /api/images/{image_id}/changes
 Query: `against` (optional picture id). What differs between two pictures' generation data. Without `against` the picture is compared with the one made just before it: the nearest earlier picture (by library time, then id) that carries a prompt. Returns `{before: {id, filename}, after, comparable, same, picked, seed: {before, after, same}, settings: [{key, before, after}], loras: {added, removed, reweighted}, prompt: {added, removed}, negative_prompt: {added, removed}}`. `settings` lists only keys that differ (`model`, `steps`, `sampler`, `scheduler`, `cfg`, `denoise`, `clip_skip`, `size`); prompt words are compared without weights, order or underscores. `before` is `null` and `comparable` false when there is no earlier picture to compare with. 404 when either picture does not exist.
 
+#### POST /api/eagle/preview
+Body: `{path}` (an Eagle library folder, `<Name>.library`, or its `images` folder). Reads the library and returns what it holds: `{library, name, items, with_tags, with_stars, with_notes, in_folders, with_source, distinct_tags, folders, skipped_deleted, skipped_no_file, skipped_unreadable, unreadable_examples}`. 400 when the folder is not an Eagle library. Reads only.
+
+#### POST /api/eagle/import
+Body: `{path}`. Starts bringing the library into the open library in the background: the pictures are indexed where they lie, then `star` becomes the user's stars, `annotation` the note, `tags` the user's own tags, `folders` nested collections and `url` the source page; nothing a picture already has is overwritten. Returns the same object as `GET /api/eagle/import`. 409 while an import is running.
+
+#### GET /api/eagle/import
+`{status}` is `idle`, `running` (with `step` = `index` or `details`, `current`, `total`), `done` (with `result`: `indexed`, `not_indexed`, `stars_set`, `notes_set`, `tags_added`, `sources_set`, `collections_created`, `collection_memberships`, `found`) or `error` (with `error`).
+
 #### GET /api/new-pictures
 Query: `after?` (a `newest_time` from an earlier answer, or a local `YYYY-MM-DD HH:MM:SS`). The open library's pictures made after that moment, newest first, by the picture's own time (the key of the newest-first order), not by when it was last indexed. Returns `{after, ids, count, newest_time}`; `newest_time` is the library's newest picture and is the marker to remember for next time. Without `after` every picture counts.
 

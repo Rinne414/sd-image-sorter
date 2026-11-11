@@ -203,3 +203,54 @@
     max-height: 120px;
     overflow: auto;
 }
+
+/* Bring an Eagle library in (js/modules/eagle-import.js): the two rows of the Import dialog sit apart. */
+.collect-paste-row + .collect-paste-row {
+    margin-top: 8px;
+}
+
+.eagle-import-status {
+    min-height: 22px;
+    margin: 4px 0 10px;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.eagle-import-status[data-tone="error"] {
+    color: var(--danger);
+}
+
+.eagle-import-status[data-tone="success"] {
+    color: var(--text);
+}
+
+.eagle-import-box {
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctl, 10px);
+    background: var(--surface-1);
+}
+
+.eagle-import-box[hidden] {
+    display: none;
+}
+
+.eagle-import-facts {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 16px;
+    margin: 0;
+    font-size: 14px;
+}
+
+.eagle-import-facts dt {
+    color: var(--muted);
+}
+
+.eagle-import-facts dd {
+    margin: 0;
+    color: var(--text);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}

@@ -25,6 +25,8 @@ test('Ctrl K opens the catalog from the gallery and a second press closes it', a
   await page.keyboard.press('Control+k')
   await expect(catalog(page)).toHaveClass(/visible/)
   await expect(page.locator('#entry-catalog-body .catalog-group-title').first()).toBeVisible()
+  // The catalog's search field has the focus by now; the second press still closes it.
+  await expect(page.locator('#entry-catalog-search')).toBeFocused()
   await page.keyboard.press('Control+k')
   await expect(catalog(page)).not.toHaveClass(/visible/)
 })
