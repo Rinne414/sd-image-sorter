@@ -117,6 +117,17 @@
         return true;
     }
 
+    /** True when the library has a folder that is not watched (or the list could not be read: say nothing extra). */
+    async function hasUnwatchedFolder() {
+        try {
+            const listed = await app().API.get('/api/library-roots');
+            const roots = Array.isArray(listed?.roots) ? listed.roots : [];
+            return roots.some((root) => Number(root.enabled) !== 0 && Number(root.watch) !== 1);
+        } catch (_error) {
+            return false;
+        }
+    }
+
     /** Manual Sort, Keep / Reject, over the set the Gallery is showing. */
     function cull() {
         const api = app();
@@ -139,12 +150,19 @@
             return false;
         }
         if (!found.count) {
+            // Pictures made since may simply not have been read in yet: a folder
+            // that is not watched is only looked at from time to time.
+            const unwatched = await hasUnwatchedFolder();
             api.showToast?.(
-                tr('newPictures.none', 'Nothing new {since}.', { since: sinceText(found) }),
+                unwatched
+                    ? tr('newPictures.noneUnwatched', 'Nothing new {since}. Your folders are only checked now and then: switch on "Watch for new pictures" to see them as they are made.', { since: sinceText(found) })
+                    : tr('newPictures.none', 'Nothing new {since}.', { since: sinceText(found) }),
                 'info',
                 global.LibraryRootsUI?.open ? {
-                    // Pictures made since may simply not have been read in yet.
-                    actionLabel: tr('newPictures.checkFolders', 'Check the folders'),
+                    duration: unwatched ? 12000 : undefined,
+                    actionLabel: unwatched
+                        ? tr('newPictures.openFolders', 'Open the folder list')
+                        : tr('newPictures.checkFolders', 'Check the folders'),
                     onAction: () => global.LibraryRootsUI.open(),
                 } : {},
             );

@@ -122,13 +122,19 @@ test('with a marker only later pictures count, and "nothing new" says since when
       localStorage.setItem(key, JSON.stringify({ main: time }))
     }
   }, [MARKER_KEY, NEWEST])
+  // One folder that is not watched: new pictures in it are only found now and then.
+  await page.route('**/api/library-roots', (route) => route.fulfill({ json: { roots: [{ id: 1, path: 'L:/out', enabled: 1, watch: 0 }] } }))
   await openHome(page)
 
   await expect(page.locator('#entry-mission-new-count')).toHaveText('Nothing new since 2026-11-10 21:15')
   expect(library.stored()).toBe(NEWEST)
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) || '{}'), MARKER_KEY)).toEqual({})
   await page.locator('#entry-mission-new').click()
-  await expect(page.locator('.toast').filter({ hasText: 'Nothing new since 2026-11-10 21:15.' })).toBeVisible()
+  const nothing = page.locator('.toast').filter({ hasText: 'Nothing new since 2026-11-10 21:15.' })
+  await expect(nothing).toBeVisible()
+  // It says why that may be, and where to change it.
+  await expect(nothing).toContainText('Your folders are only checked now and then')
+  await expect(nothing.locator('button', { hasText: 'Open the folder list' })).toBeVisible()
   await expect(page.locator('#entry-page')).toBeVisible()
   expect(library.pinned()).toEqual([])
 

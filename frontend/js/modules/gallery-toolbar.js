@@ -306,9 +306,35 @@
                 .filter((part) => part.kind === 'free')
                 .map((part) => part.tokenIndex));
             host.appendChild(chip);
+            addMeaningSearch(host, free);
         }
 
         host.hidden = host.childElementCount <= 1;
+    }
+
+    /**
+     * Beside the words that are searched as text: the same words as a
+     * description of the picture (gallery-describe.js). It was only offered once
+     * the text search had found nothing, so a search with a few chance hits
+     * never showed it.
+     */
+    function addMeaningSearch(host, words) {
+        if (!window.GalleryDescribe?.run || app()?.AppState?.filters?.collectionId != null) return;
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'gsq-meaning-link';
+        link.id = 'gallery-search-by-meaning';
+        link.textContent = t('describe.link', 'Search by meaning instead');
+        link.title = t('describe.linkHint', 'Find the pictures that look like these words, whatever their prompt says');
+        link.addEventListener('click', async () => {
+            link.disabled = true;
+            try {
+                await window.GalleryDescribe.run(words);
+            } finally {
+                link.disabled = false;
+            }
+        });
+        host.appendChild(link);
     }
 
     /**

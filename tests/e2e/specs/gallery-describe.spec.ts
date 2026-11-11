@@ -143,3 +143,35 @@ test('a Chinese description is not answered by the English-only model: the multi
   await expect.poll(() => gallery.pinned()).toEqual([[63]])
   expect(await page.evaluate(() => (window as any).__asked)).toEqual(['clip-multilingual', '490 MB'])
 })
+
+test('the link beside the read-as chips searches by meaning even when the words found pictures, and an empty index leads to the Similar page', async ({ page }) => {
+  const gallery = await mockGallery(page, { body: { query: 'book', results: [], count: 0, total: 0, has_more: false } })
+  // This time the words are in the prompts: the text search has hits, so the empty page never shows.
+  await page.route('**/api/images?**', async (route) => {
+    await route.fulfill({ json: { images: library, total: library.length, has_more: false, next_cursor: null } })
+  })
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.addInitScript(() => {
+    localStorage.setItem('aurora-entry-skip', '1')
+    localStorage.setItem('sd-image-sorter-lang', 'en')
+  })
+  await page.goto('/')
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
+  // A filter alone is not a description: no link.
+  await page.locator('#gallery-search-input').fill('steps:20')
+  await expect(page.locator('#gallery-search-preview')).toBeVisible()
+  await expect(page.locator('#gallery-search-by-meaning')).toHaveCount(0)
+
+  await page.locator('#gallery-search-input').fill('book steps:20')
+  const link = page.locator('#gallery-search-by-meaning')
+  await expect(link).toHaveText('Search by meaning instead')
+  await expect(link).toBeInViewport({ ratio: 1 })
+  await link.click()
+
+  // Only the words go, not the filter.
+  await expect.poll(() => gallery.asked().map((body) => body.query)).toEqual(['book'])
+  const none = page.locator('.toast').filter({ hasText: 'The similarity index has no picture to compare with "book".' })
+  await expect(none).toBeVisible()
+  await none.locator('button', { hasText: 'Open the Similar page' }).click()
+  await expect(page.locator('#view-similar')).toBeVisible()
+})

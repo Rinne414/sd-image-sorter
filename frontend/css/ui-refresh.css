@@ -12783,6 +12783,32 @@ html.lang-zh #view-censor .queue-action-btn span {
     flex-shrink: 0;
 }
 
+/* The same words as a description (gallery-toolbar.js addMeaningSearch): a link, after the chips. */
+.gsq-meaning-link {
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    color: var(--accent-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+    font: inherit;
+    font-size: var(--fs-label);
+    padding: 2px 6px;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.gsq-meaning-link:hover {
+    background: var(--bg-hover);
+}
+.gsq-meaning-link:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 1px;
+}
+.gsq-meaning-link:disabled {
+    cursor: progress;
+    opacity: 0.6;
+}
+
 .gsq-chip {
     display: inline-flex;
     align-items: center;

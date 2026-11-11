@@ -63,7 +63,15 @@
         }
         const ids = (Array.isArray(result?.results) ? result.results : []).map((row) => Number(row.id)).filter(Boolean);
         if (!ids.length) {
-            api.showToast?.(tr('describe.none', 'The similarity index has no picture to compare with "{words}". Build it on the Similar page first.', { words: query }), 'info');
+            api.showToast?.(
+                tr('describe.none', 'The similarity index has no picture to compare with "{words}". Build it on the Similar page first.', { words: query }),
+                'info',
+                {
+                    duration: 12000,
+                    actionLabel: tr('describe.openSimilar', 'Open the Similar page'),
+                    onAction: () => api.switchView?.('similar'),
+                },
+            );
             return false;
         }
         // The words found nothing as text, so left in the box they would hide the set too.
