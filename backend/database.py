@@ -169,6 +169,7 @@ from db_images_write import (
     set_image_captions,
     update_image_caption,
     set_user_rating,
+    set_image_note,
     update_image_colors,
     update_image_path,
     update_image_metadata,

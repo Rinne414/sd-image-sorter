@@ -217,6 +217,8 @@ _PROMPT_NORMALIZED_SQL = "LOWER(REPLACE(COALESCE(i.prompt, ''), '_', ' '))"
 _SIDECAR_CAPTION_NORMALIZED_SQL = (
     "LOWER(REPLACE(COALESCE(i.sidecar_caption, ''), '_', ' '))"
 )
+# The user's own note on a picture (migration 069), searched like a caption.
+_NOTE_NORMALIZED_SQL = "LOWER(REPLACE(COALESCE(i.note, ''), '_', ' '))"
 _CHARACTER_PROMPT_TEXT_NORMALIZED_SQL = (
     "LOWER(REPLACE(COALESCE(json_extract(i.metadata_json, "
     "'$._parsed.character_prompt_text'), ''), '_', ' '))"
@@ -279,8 +281,10 @@ def _apply_search_filter(conditions: List[str], params: List[Any],
         caption_clause = (
             f" OR {_SIDECAR_CAPTION_NORMALIZED_SQL} LIKE ? ESCAPE '\\'"
             f" OR {_CHARACTER_PROMPT_TEXT_NORMALIZED_SQL} LIKE ? ESCAPE '\\'"
+            f" OR {_NOTE_NORMALIZED_SQL} LIKE ? ESCAPE '\\'"
         )
         like = f"%{escape_like_pattern(normalized_search)}%"
+        caption_params.append(like)
         caption_params.append(like)
         caption_params.append(like)
 

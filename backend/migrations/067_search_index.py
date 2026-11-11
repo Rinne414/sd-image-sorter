@@ -52,7 +52,12 @@ _WATCHED_COLUMNS = (
 )
 
 
-def _doc_sql(row: str) -> str:
+def _has_note(conn: sqlite3.Connection) -> bool:
+    """Whether ``images.note`` exists yet (migration 069 adds it)."""
+    return any(row[1] == "note" for row in conn.execute("PRAGMA table_info(images)").fetchall())
+
+
+def _doc_sql(row: str, with_note: bool = False) -> str:
     """The searchable text of one picture, as a SQL expression over ``row``.
 
     ``row`` is a table alias (backfill) or NEW (trigger). The five parts match
@@ -70,6 +75,8 @@ def _doc_sql(row: str) -> str:
         f"REPLACE(COALESCE(CASE WHEN json_valid({row}.metadata_json) "
         f"THEN json_extract({row}.metadata_json, '$._parsed.character_prompt_text') END, ''), "
         f"'_', ' ')"
+        # The user's own note on the picture (migration 069), searched like a caption.
+        + (f" || char(10) || REPLACE(COALESCE({row}.note, ''), '_', ' ')" if with_note else "")
     )
 
 
@@ -98,21 +105,23 @@ def _create_text_index(conn: sqlite3.Connection) -> None:
     conn.execute(
         f"CREATE VIRTUAL TABLE IF NOT EXISTS {TEXT_FTS} USING fts5(body, tokenize='trigram')"
     )
+    with_note = _has_note(conn)
     images = conn.execute("SELECT COUNT(*) FROM images").fetchone()[0]
     indexed = conn.execute(f"SELECT COUNT(*) FROM {TEXT_FTS}").fetchone()[0]
     if images != indexed:
         conn.execute(f"DELETE FROM {TEXT_FTS}")
         conn.execute(
-            f"INSERT INTO {TEXT_FTS}(rowid, body) SELECT i.id, {_doc_sql('i')} FROM images i"
+            f"INSERT INTO {TEXT_FTS}(rowid, body) SELECT i.id, {_doc_sql('i', with_note)} FROM images i"
         )
 
-    watched = ", ".join(_WATCHED_COLUMNS)
-    changed = " OR ".join(f"OLD.{c} IS NOT NEW.{c}" for c in _WATCHED_COLUMNS)
+    columns = _WATCHED_COLUMNS + (("note",) if with_note else ())
+    watched = ", ".join(columns)
+    changed = " OR ".join(f"OLD.{c} IS NOT NEW.{c}" for c in columns)
     conn.execute(
         f"""
         CREATE TRIGGER IF NOT EXISTS trg_{TEXT_FTS}_insert AFTER INSERT ON images
         BEGIN
-            INSERT INTO {TEXT_FTS}(rowid, body) VALUES (NEW.id, {_doc_sql("NEW")});
+            INSERT INTO {TEXT_FTS}(rowid, body) VALUES (NEW.id, {_doc_sql("NEW", with_note)});
         END
         """
     )
@@ -122,7 +131,7 @@ def _create_text_index(conn: sqlite3.Connection) -> None:
         WHEN {changed}
         BEGIN
             DELETE FROM {TEXT_FTS} WHERE rowid = OLD.id;
-            INSERT INTO {TEXT_FTS}(rowid, body) VALUES (NEW.id, {_doc_sql("NEW")});
+            INSERT INTO {TEXT_FTS}(rowid, body) VALUES (NEW.id, {_doc_sql("NEW", with_note)});
         END
         """
     )

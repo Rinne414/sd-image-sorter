@@ -80,6 +80,8 @@ _IMAGE_COLUMNS_BASE_FIELDS = (
     "aesthetic_anime_grade",
     # v3.3.2 user star rating (FF-2): INTEGER 0-5, NOT NULL DEFAULT 0 (0 = unrated).
     "user_rating",
+    # The user's own note on the picture (migration 069); nullable.
+    "note",
     # Color analysis (migration 010, v3.2.1). All nullable until backfill.
     "dominant_colors",
     "avg_brightness",

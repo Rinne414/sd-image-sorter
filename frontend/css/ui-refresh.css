@@ -14249,3 +14249,45 @@ html:not([data-look-variant="b"]) #pro-library-views {
     width: 16px;
     height: 16px;
 }
+
+/* Picture viewer: the user's note. The field takes the column's width; one
+   quiet line under it says what it is, or that it was saved. */
+.modal-note-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+#modal-note-text {
+    width: 100%;
+    min-height: 52px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong, #3A3A3E);
+    border-radius: var(--r-ctl, 10px);
+    background: var(--bg, #0E0E0F);
+    color: var(--text, #E8E8EA);
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+#modal-note-text:focus-visible {
+    border-color: var(--accent-line, rgba(214, 216, 220, 0.45));
+    outline: none;
+}
+
+.modal-note-status {
+    min-height: 18px;
+    margin: 0;
+    color: var(--muted, #8A8A90);
+    font-size: 12.5px;
+}
+
+.modal-note-status[data-tone="ok"] {
+    color: var(--success, #5FB37E);
+}
+
+.modal-note-status[data-tone="error"] {
+    color: var(--danger, #DE6B66);
+}

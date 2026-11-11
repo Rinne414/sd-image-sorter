@@ -876,5 +876,6 @@ from db_images_write_attributes import (
     update_image_caption,
     set_image_captions,
     set_user_rating,
+    set_image_note,
     update_image_colors,
 )

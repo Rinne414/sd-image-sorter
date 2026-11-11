@@ -617,6 +617,7 @@ ${String(value)}`)
         this._restoreModalInfoScrollState(this._pendingModalInfoScrollState);
         // What differs from the picture made just before (gallery/modal-changes.js).
         window.ModalChanges?.show(image);
+        window.ModalNote?.show(image);
 
         // Extract and display color distribution
         this._extractColorDistribution($('#modal-image'));

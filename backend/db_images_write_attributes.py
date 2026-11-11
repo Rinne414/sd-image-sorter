@@ -85,6 +85,24 @@ def set_user_rating(image_id: int, stars: int) -> bool:
         )
         return int(cursor.rowcount or 0) > 0
 
+MAX_NOTE_CHARS = 4000
+
+
+def set_image_note(image_id: int, note: Optional[str]) -> bool:
+    """Store the user's note on one picture; empty text clears it.
+
+    Returns True when a row was updated, False when no image has ``image_id``.
+    The text search index follows through its trigger.
+    """
+    text = str(note or "").strip()[:MAX_NOTE_CHARS]
+    with get_db() as conn:
+        cursor = conn.execute(
+            "UPDATE images SET note = ? WHERE id = ?",
+            (text or None, image_id),
+        )
+        return int(cursor.rowcount or 0) > 0
+
+
 def update_image_colors(image_id: int, color_data: Dict[str, Any]) -> None:
     """Update color analysis columns for an image (v3.2.1).
 
