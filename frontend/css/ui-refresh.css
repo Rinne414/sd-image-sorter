@@ -14481,3 +14481,10 @@ html:not([data-look-variant="b"]) #pro-library-views {
 .filter-summary-compact .summary-item[hidden] {
     display: none;
 }
+
+/* Sidebar folders: the row under a dragged picture (js/folder-tree-drop.js), like a collection row. */
+#folder-tree .folder-row.is-drop-target {
+    border-radius: 8px;
+    background: rgba(var(--accent-primary-rgb), 0.14);
+    box-shadow: inset 0 0 0 1px var(--accent-primary);
+}

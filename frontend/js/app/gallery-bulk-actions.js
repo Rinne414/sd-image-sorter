@@ -348,7 +348,9 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
     const operationLabel = normalizedOperation === 'copy'
         ? appT('selection.copyVerb', 'Copy')
         : appT('selection.moveVerb', 'Move');
-    const destination = await showInputModal(
+    // A drop on a sidebar folder names the destination itself (folder-tree-drop.js);
+    // the question that follows is the same either way.
+    const destination = options.destination || await showInputModal(
         isSingleContext
             ? (normalizedOperation === 'copy'
                 ? appT('gallery.contextCopyPromptTitle', 'Copy image')

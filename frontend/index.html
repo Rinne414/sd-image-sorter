@@ -1438,6 +1438,10 @@
                                 <button class="btn btn-primary" id="empty-state-scan-btn">
                                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span> <span data-i18n="action.scanFolder">Import Images</span>
                                 </button>
+                                <!-- Word search found nothing: the same words as a description (js/modules/gallery-describe.js) -->
+                                <button class="btn btn-secondary" id="empty-state-describe-btn" type="button" hidden>
+                                    <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg> <span></span>
+                                </button>
                             </div>
                             <!-- Owner review: keep getting-started steps open — empty gallery has room, and collapsed tips are never opened. -->
                             <ol class="onboarding-steps" aria-label="Getting started" data-i18n-aria="a11y.gettingStarted">
@@ -4349,6 +4353,12 @@
                         </button>
                     </header>
                     <div class="dataset-project-missing" data-testid="dataset-project-missing" hidden></div>
+                    <!-- What is left before export, and where to do it (js/modules/dataset-next-step.js) -->
+                    <div class="dataset-next" id="dataset-next" role="status" hidden>
+                        <span class="dataset-next-label" data-i18n="datasetNext.label">What is left</span>
+                        <span class="dataset-next-text" id="dataset-next-text"></span>
+                        <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-next" hidden></button>
+                    </div>
 
                     <!-- Tab 1: Import + Audit (merged) -->
                     <div class="dataset-tab-import-content" id="dataset-tab-import-content">
@@ -9308,6 +9318,9 @@
     <script src="/static/js/modules/pose-view-chooser.js"></script>
     <script src="/static/js/modules/pick-varied.js"></script>
     <script src="/static/js/modules/new-pictures.js"></script>
+    <script src="/static/js/modules/dataset-next-step.js"></script>
+    <script src="/static/js/modules/gallery-describe.js"></script>
+    <script src="/static/js/folder-tree-drop.js"></script>
     <script src="/static/js/modules/compare-two.js"></script>
     <script src="/static/js/reference-view/view.js"></script>
     <script src="/static/js/modules/reference-window.js"></script>

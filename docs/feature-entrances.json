@@ -4405,6 +4405,36 @@
       "next": {
         "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
       }
+    },
+    {
+      "id": "dataset.next-step",
+      "area": "dataset",
+      "en": "What is left: one line under the Dataset Maker header that says what is missing before export and leads to the tab where it is done",
+      "zh": "还差什么：数据集制作页标题下的一行，说明导出前还缺什么，并带你去对应的页签",
+      "classic": [
+        "#btn-dataset-next"
+      ],
+      "vopus": {
+        "missing": "Built for the classic interface first (2026-11-11)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
+    },
+    {
+      "id": "gallery.describe-search",
+      "area": "gallery",
+      "en": "Search by meaning instead: when a word search finds nothing, the same words find the closest pictures by meaning and open them as a set",
+      "zh": "改用含义搜索：文字搜索没有结果时，用同样的词按含义找出最接近的图片并作为一组打开",
+      "classic": [
+        "#empty-state-describe-btn"
+      ],
+      "vopus": {
+        "missing": "Built for the classic interface first (2026-11-11)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
     }
   ],
   "not_entrances": [

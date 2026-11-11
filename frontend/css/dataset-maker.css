@@ -3496,3 +3496,34 @@
 #view-dataset .dataset-queue-grid-mode .dataset-queue-badge-untagged {
     display: none;
 }
+
+/* "What is left" line under the header (js/modules/dataset-next-step.js). */
+#view-dataset .dataset-next {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 46px;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctl, 10px);
+    background: var(--surface-1);
+    font-size: 14px;
+}
+
+#view-dataset .dataset-next[hidden],
+#view-dataset .dataset-next [hidden] {
+    display: none;
+}
+
+#view-dataset .dataset-next-label {
+    flex: none;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+#view-dataset .dataset-next-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text);
+}

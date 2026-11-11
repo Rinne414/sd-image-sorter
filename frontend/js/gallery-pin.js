@@ -23,6 +23,7 @@
         rejected: ['galleryPin.titleRejected', '{n} you rejected'],
         wander: ['galleryPin.titleWander', '{n} seen while wandering'],
         new: ['galleryPin.titleNew', '{n} new pictures'],
+        described: ['galleryPin.titleDescribed', '{n} closest to your description'],
     };
 
     const app = () => global.App || null;

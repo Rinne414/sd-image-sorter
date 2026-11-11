@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added / 新增
 
+- **Drop pictures on a folder to move them**: in the browser, a picture dragged from the Gallery (or the whole selection, when the dragged picture is part of it) can be dropped on a folder in the sidebar. The folder lights up, the program asks the same question as "Move…" (how many files, where to), and the move has the same progress bar and Undo. In the desktop program a drag hands the files to other programs instead, so use "Move…" there.
+  - **把图片拖到文件夹上即可移动**：在浏览器里，可以把图库里的一张图片（如果它在已选中的图片里，则是整个选择）拖到侧栏的文件夹上。文件夹会高亮，程序会像“移动…”一样先问一遍（多少个文件、移到哪里），移动时同样有进度条和撤销。桌面版里拖动是把文件交给其他程序，所以请在那里使用“移动…”。
+- **Search by meaning from the Gallery**: when the Gallery's search finds no picture, the empty page offers "Search by meaning instead". The same words go to the picture-meaning search (the one on Find Similar), and the 60 closest pictures open in the Gallery as one set to select and act on. It needs the similarity index and says so when it is missing.
+  - **在图库里按含义搜索**：图库搜索没有结果时，空白页会提供“改用含义搜索”。同样的词会交给按画面含义的搜索（就是“相似”页的那个），最接近的 60 张图片会作为一组在图库中打开，可以直接选中和操作。它需要相似索引，缺少时会说明。
+- **Dataset Maker says what is left**: one line under the Dataset Maker header, on every tab, says what is still missing before export (no pictures, how many pictures have no caption, or the export's own reason) and its button leads to the tab where that is done.
+  - **数据集制作页会说明还差什么**：标题下方的一行在每个页签都可见，说明导出前还缺什么（还没有图片、有多少张没有标注、或导出自己给出的原因），按钮会带你去对应的页签。
 - **New Pictures**: Home has a fourth mission beside Pixiv Set Publishing. It opens the Gallery on only the pictures made since your last cull (the first time: the last 7 days) and offers "Keep / Reject them", which starts Manual Sort over exactly that set, or "Mark all as seen". The tile shows how many are waiting. The marker moves only when you finish that cull or mark the set as seen, never by looking, and marking can be undone. Also in the function catalog (Ctrl K).
   - **新图片**：首页在“Pixiv 成套发布”旁边多了第四个任务。它在图库里只显示上次挑选之后生成的图片（第一次是最近 7 天），并提供“逐张决定留 / 汰”（对这一组直接开始手动整理）或“全部标为已看过”。磁贴上会显示还有多少张待挑选。只有挑完或标为已看过时记号才会前移，光是看不会；标记可以撤销。功能目录（Ctrl K）里也有。
 - **Pixiv mission: the last step leads**: on the Censor page, once every picture in the queue has been censored, "To Publish Set" becomes the main button and "Save All" steps back. Outside the mission, or while a picture is still untouched, nothing changes.

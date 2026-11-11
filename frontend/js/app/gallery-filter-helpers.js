@@ -82,6 +82,8 @@ function _syncWholeCollectionButton(emptyState, isNarrowed) {
 
 function _applyGalleryEmptyStateVariant(emptyState) {
     if (!emptyState) return;
+    // Words that found nothing may still describe a picture: offer the meaning search.
+    window.GalleryDescribe?.syncEmptyState?.();
     // v3.3.1 FEAT-COLLECTIONS: when the gallery is scoped to a collection
     // (or Favorites), an empty result means "this collection has no images
     // yet" — NOT "import a folder". Show a friendly, context-aware message
