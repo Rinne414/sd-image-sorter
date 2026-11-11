@@ -1188,3 +1188,82 @@ body.entry-active {
     outline: 2px solid var(--blue);
     outline-offset: 2px;
 }
+
+/* Home: the find box, first in the column. One row: icon, field, button. */
+.entry-find {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 6px 6px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: var(--r-card, 12px);
+    background: rgba(18, 18, 20, 0.93);
+}
+
+.entry-find:focus-within {
+    border-color: var(--accent-line, rgba(214, 216, 220, 0.45));
+}
+
+.entry-find .icon {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    color: var(--muted, #8A8A90);
+}
+
+.entry-find-input {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text, #E8E8EA);
+    font: inherit;
+    font-size: 15px;
+}
+
+.entry-find-input::placeholder {
+    color: var(--muted, #8A8A90);
+}
+
+.entry-find-go {
+    flex: none;
+    height: 36px;
+    padding: 0 16px;
+    border: 1px solid var(--border-strong, #3A3A3E);
+    border-radius: var(--r-ctl, 10px);
+    background: var(--surface-3, #232326);
+    color: var(--text, #E8E8EA);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.entry-find-go:hover {
+    background: var(--surface-2, #1C1C1E);
+    border-color: var(--accent-line, rgba(214, 216, 220, 0.45));
+}
+
+.entry-find-go:focus-visible {
+    outline: 2px solid var(--accent-line, rgba(214, 216, 220, 0.45));
+    outline-offset: 1px;
+}
+
+/* Short windows (1280x720, 1366x768): the column carries one more row now, so
+   its rows sit a little closer and the find row is lower; nothing is cut off. */
+@media (max-height: 800px) {
+    .entry-mosaic {
+        gap: 6px;
+    }
+
+    .entry-find {
+        padding-top: 3px;
+        padding-bottom: 3px;
+    }
+
+    .entry-find-input,
+    .entry-find-go {
+        height: 30px;
+    }
+}

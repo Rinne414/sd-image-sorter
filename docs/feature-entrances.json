@@ -660,7 +660,8 @@
       "zh": "搜索框与联想",
       "classic": [
         "#gallery-search-input",
-        "#gallery-search-clear"
+        "#gallery-search-clear",
+        "#entry-find-go"
       ],
       "vopus": {
         "at": "#/library",

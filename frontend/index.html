@@ -199,6 +199,15 @@
         </header>
 
         <div class="entry-mosaic">
+            <!-- Find a picture from Home: the most frequent job starts on the first screen.
+                 The words go to the Gallery's own search (js/entry-page.js). -->
+            <form class="entry-find" id="entry-find" role="search" autocomplete="off">
+                <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+                <input type="search" id="entry-find-input" class="entry-find-input" aria-label="Find a picture" data-i18n-aria="entry.findLabel"
+                       placeholder="Find a picture: words from the prompt, a tag, a model, a LoRA" data-i18n-placeholder="entry.findPlaceholder">
+                <button type="submit" class="entry-find-go" id="entry-find-go" data-i18n="entry.findGo">Find</button>
+            </form>
+
             <article class="entry-anchor" id="entry-anchor" hidden>
                 <div class="anchor-meta">
                     <span class="anchor-badge" data-i18n="entry.continueBadge">In progress</span>

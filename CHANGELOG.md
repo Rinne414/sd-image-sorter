@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added / 新增
 
+- **Find a picture from the Home page**: the first screen has a find box. Type words from the prompt, a tag, a model or a LoRA name (Chinese tag names work) and press Enter: the Gallery opens on the result, with everything its own search understands.
+  - **在首页就能找图**：首页多了一个查找框。输入提示词里的词、标签、模型或 LoRA 的名字（中文标签名也可以），按回车，图库就会打开并显示结果；图库搜索支持的写法这里都能用。
 - **Search by sampler, steps and CFG**: the Gallery search understands `sampler:"euler a"`, `steps:28`, `steps:20..30`, `steps>=30`, `cfg:7`, `cfg<=5.5`, alone or beside ordinary words (`rain sampler:euler steps>=28`). They work everywhere the search text is used: counts, select all matching, Auto-Separate, Manual Sort, bulk tagging and export. The search help lists them, and the Chinese keys 采样器 and 步数 work too.
   - **按采样器、步数和 CFG 搜索**：图库搜索认得 `sampler:"euler a"`、`steps:28`、`steps:20..30`、`steps>=30`、`cfg:7`、`cfg<=5.5`，可以单独用，也可以和普通词一起用（`rain sampler:euler steps>=28`）。凡是用到搜索文字的地方都生效：数量、全选匹配项、自动分类、手动分类、批量打标和导出。搜索帮助里已列出，也可以用中文的“采样器”“步数”。
 - **Keep / Reject finishes the job**: a Keep / Reject session marked pictures and touched no file, so getting the rejects off the disk took about ten more clicks somewhere else. When a session ends, the line "Kept 31, rejected 58. No file was touched yet." now offers: move the kept to a folder (with Undo), look at the rejected in the Gallery, or send the rejected to the recycle bin (asked first, with the count). This works whatever the reject destination was, also with "Don't save".

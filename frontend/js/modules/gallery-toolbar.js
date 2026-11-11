@@ -1001,7 +1001,18 @@
         boot();
     }
 
+    /** Search the Gallery for `text`, as if it had been typed into the box and entered. */
+    function search(text) {
+        const input = document.getElementById('gallery-search-input');
+        if (!input) return;
+        input.value = String(text || '');
+        syncClearButton(input, document.getElementById('gallery-search-clear'));
+        renderSearchPreview(input.value, parseQuery(input.value));
+        applySearch(input.value);
+    }
+
     window.GalleryToolbar = {
+        search,
         syncActionBar,
         syncFromFilters,
         consumeTagSelectionIds,

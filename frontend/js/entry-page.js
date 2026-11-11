@@ -851,6 +851,20 @@
             if (window.NavMissions) window.NavMissions.exit();
             navigate(view);
         };
+        // The find box: its words go to the Gallery's own search, so everything the
+        // search understands (tags, model:, lora:, Chinese tag names) works from Home.
+        document.getElementById('entry-find')?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const input = document.getElementById('entry-find-input');
+            const words = String(input?.value || '').trim();
+            freeNavigate('gallery');
+            if (!words) {
+                document.getElementById('gallery-search-input')?.focus();
+                return;
+            }
+            window.GalleryToolbar?.search?.(words);
+            if (input) input.value = '';
+        });
         const clicks = {
             'entry-mission-lora': () => {
                 enterMission('lora');
