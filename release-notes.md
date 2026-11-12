@@ -1,73 +1,75 @@
-## v3.10.2 — 桌面程序修复 + 更新说明 / Desktop Fixes + What's New
+## v3.11.0 — 日常整理 + 找图 + 单一界面 / Organise + Find + One Interface
 
-桌面程序能新建、重命名图库；询问都用程序自己的对话框；更新后说明改了什么。
+新图片与留汰收尾、文件夹改名与拖放、含义搜索、Eagle 导入、内置助手；只保留一套界面。
 
-Desktop program creates and renames libraries; questions use its own dialogs; updates say what's new.
+New Pictures, folder rename, meaning search, Eagle import, assistant; one interface.
 
 ---
 
 ## Fixed / 修复
 
-- **New library and Rename library work in the desktop program / 桌面程序里能新建和重命名图库**: Both asked for the name with the browser's prompt box, which the desktop program does not have (it throws "prompt() is not supported"), so the buttons did nothing there. They, and naming a collection or a sorting section, now ask in the program's own dialog. A check fails if a page uses the browser prompt box again.
-  - 这两个按钮用浏览器自带的输入框询问名称，而桌面程序没有这种输入框（会报错 "prompt() is not supported"），所以在桌面程序里按了没反应。现在它们，以及给合集或整理分组命名，都改用程序自己的对话框。如果再有页面使用浏览器输入框，检查会失败。
-- **Every question is asked in the program's own dialog / 所有询问都用程序自己的对话框**: Deleting a library, trashing duplicates, removing images from a dataset or an audit, overwriting captions with Smart Tag, changing tags on every image of a batch export and selecting more than 10,000 filtered images asked with the browser's own box ("127.0.0.1:8487 says", buttons not translated; a plain system box in the desktop program). They now ask in the program's dialog: Escape answers no, and a question that removes or overwrites something starts on Cancel. When Smart Tag cannot start, the message is now translated. A check fails if a page uses the browser's confirm or alert box again.
-  - 删除图库、把重复图片移到回收站、从数据集或审查结果里移除图片、用智能打标覆盖已有标注、批量导出时给所有图片增删标签、选中超过 1 万张筛选结果，以前都用浏览器自带的确认框询问（显示“127.0.0.1:8487 显示”，按钮没有翻译；桌面程序里是系统自带的对话框）。现在都改用程序自己的对话框：按 Esc 等于“取消”，会删除或覆盖内容的询问默认停在“取消”上。智能打标无法启动时的提示现在也有中文。如果再有页面使用浏览器的确认框或提示框，检查会失败。
-- **After an update the program says what changed / 更新后会说明改了什么**: The first time the program opens after an update (classic or V Opus; seen in one counts for both), a notice shows the new version's summary from its release notes, in the interface language, with a Full notes link; it shows once and leaves after 15 seconds. A fresh install shows nothing. An install updated from a version before this notice existed still gets it when its library holds pictures.
-  - 更新后第一次打开程序时（经典界面或 V Opus，在一个里看过就不会在另一个里再出现），会显示新版本发布说明里的摘要（跟随界面语言），并附“完整说明”链接；只显示一次，15 秒后自动消失。全新安装不会显示。从还没有这个提示的旧版本更新上来时，只要图库里有图片，也会显示。
-- **Settings has an About section / 设置里有了“关于”**: Classic Settings now shows the version, a Check for updates button, and the two support actions, Copy diagnostics and Open log folder, which were reachable only from the card a stalled import shows. V Opus already had them under Settings > About.
-  - 经典界面的设置里现在显示版本号，有“检查更新”按钮，还有两个反馈问题时用的操作：复制诊断信息、打开日志文件夹。以前它们只出现在导入卡住时的卡片上。V Opus 的“设置 > 关于与更新”本来就有。
-- **Settings says where the desktop program is / 设置会说明桌面程序在哪里**: In-app updates never install the desktop program, so an install from before 3.8.0 that was updated in the program has no `SD Image Sorter.exe`, and nothing said so. Opened in a browser on Windows, classic Settings > General and V Opus Settings > Desktop now say whether the program folder holds it; when it does not, they say how to get it (quit, extract the full Windows package over the same folder; the `data` folder is not in the package, so the library, settings and models stay) and link the download page.
-  - 程序内更新从不安装桌面程序，所以 3.8.0 之前装的、一直在程序里更新的，文件夹里没有 `SD Image Sorter.exe`，而且没有任何提示。现在在 Windows 上用浏览器打开时，经典界面的「设置 > 常规」和 V Opus 的「设置 > 桌面版」会说明程序文件夹里有没有它；没有时，会说明怎么获取（退出程序，把完整的 Windows 包解压到原来的文件夹并覆盖；`data` 文件夹不在包里，图库、设置和模型都会保留），并附上下载页链接。
-- **The Reader's paste button reads the clipboard / 读图的粘贴按钮直接读取剪贴板**: The classic Reader's "Paste from Clipboard" button only said "Ready. Press Ctrl+V now."; it now reads the clipboard at once, and waits for Ctrl+V only where the browser does not allow reading it. V Opus's Paste button already did. Win+V needs neither: picking a picture there sends it to the Reader like Ctrl+V (checked on Windows 11), and the hint now says so.
-  - 经典界面读图的“从剪贴板粘贴”按钮以前只会提示“准备好了，现在按 Ctrl+V”；现在会直接读取剪贴板，只有浏览器不允许读取时才等你按 Ctrl+V。V Opus 的“粘贴”按钮本来就会直接读取。Win+V 两样都不需要：在里面选一张图，会像 Ctrl+V 一样送进读图（已在 Windows 11 上实测），提示文字现在也写明了。
-- **The empty gallery fits the screen / 空图库的引导完整显示**: While the library has no pictures, the generator chips, search, filters, sort and zoom fold away (they have nothing to act on yet and come back with the first picture; a filter with no result keeps them), so the whole card fits a 1366 x 768 screen. The four getting-started steps sat as three plus a lone fourth with empty space beside it; they are now two by two. The hint no longer leaves one character on its own line, and on large screens the gallery panel reaches the bottom instead of ending mid-screen.
-  - 图库里还没有图片时，生成器标签、搜索、筛选、排序和缩放先收起来（还没有可操作的对象，第一张图进来就会回来；筛选后没有结果时不会收起），整张卡片在 1366 x 768 的屏幕上能完整显示。四个新手步骤原来排成三个加孤零零的第四个，旁边一片空白；现在排成两行两列。提示文字不再剩一个字单独一行；大屏幕上图库面板一直延伸到底部，不再在半屏处断开。
-- **The guide names places as the program shows them / 引导里的名字和程序里一致**: The first-run guide sent users to a "Settings & Models" gear that is called Settings, with models in Model Center, and listed tabs (Picture library, Sort pictures, Censor edit) the top bar does not show. The gear, its dialog and the guide now use the top bar's and Settings' own names, and a check fails when a label changes without the guide.
-  - 新手引导让用户去点「设置与模型」齿轮，但它其实叫「设置」，模型在「模型中心」；列出的页面（图片库、整理图片、打码编辑）顶栏上也没有。现在齿轮、它的窗口和引导都用顶栏和设置里的真实名字；以后改了名字却没改引导，检查会失败。
-- **Pasted pictures are named "pasted" again in V Opus / V Opus 粘贴的图片重新以 pasted 命名**: Since 3.10.1, V Opus's Paste picture button saved a picture from the clipboard as clipboard.png instead of pasted.png (as before, and as classic does). Found by the full browser test run.
-  - 从 3.10.1 起，V Opus 的“粘贴图片”按钮把剪贴板里的图片存成 clipboard.png，而不是以前（和经典界面一样）的 pasted.png。由完整的浏览器测试发现。
+- **New Pictures, and Keep / Reject that finishes the job / “新图片”，以及做到底的留 / 汰**: Home has a New Pictures mission: only the pictures made since your last cull, with Keep / Reject one press away. When a session ends, one line offers what to do with the files: move the kept to a folder (with Undo), look at the rejected, or send the rejected to the recycle bin (asked first, with the count). The last result stays on the Keep / Reject setup page after that line is closed.
+  - 首页多了“新图片”任务：只看上次挑选之后生成的图，一按就能逐张决定留 / 汰。一轮结束时，会有一行让你处理文件：把保留的移到文件夹（可撤销）、查看剔除的、或把剔除的送进回收站（会先确认并写明数量）。这一行关掉之后，留 / 汰的设置页还留着上一次的结果。
+- **Folders you can work with / 可以直接操作的文件夹**: each folder in the sidebar has a menu (the dots, or a right-click): Rename renames the folder on your disk and its pictures keep their tags, ratings and sets, with Undo; "Move the selection to a new folder here" makes a folder and moves the selected pictures in. Pictures can be dragged onto a folder to move them, rows show how many pictures they hold, and More > Recent moves lists the last moves and copies, each with Undo. Auto-Separate can be undone too.
+  - 侧栏里每个文件夹都有菜单（行尾的三个点，或右键）：“重命名”会在磁盘上改名，里面图片的标签、评分和合集都保留，可以撤销；“把选中的图片移到这里的新文件夹”会新建文件夹并把选中的图移进去。图片可以直接拖到文件夹上移动，每行显示图片数量，“更多 > 最近的移动”列出最近的移动和复制，每一次都能撤销。自动分类现在也能撤销。
+- **Search that finds more / 更会找的搜索**: the Gallery search reads Chinese and Japanese tag names (猫耳 is read as `cat_ears`), part of a LoRA or model name, and `sampler:`, `steps:` and `cfg:`. Beside any word search there is "Search by meaning instead", which finds pictures that look like your words whatever their prompt says; with the optional multilingual model it reads Chinese and 50+ other languages. It says how many pictures are not in the similarity index yet and can index them. Home has a search box, and "Find by pose or camera angle" lists the pose tags your library really has.
+  - 图库搜索读得懂中文和日文的标签名（猫耳会当作 `cat_ears`）、LoRA 或模型名的一部分，以及 `sampler:`、`steps:`、`cfg:`。用词语搜索时，旁边都有“改用含义搜索”：找画面像这些词的图，不管提示词里写了什么；装上可选的多语言模型后能读中文和另外 50 多种语言。它会写出还有多少张图不在相似索引里，并可以一键建立索引。首页有搜索框；“按姿势或镜头角度找图”会列出图库里实际有的姿势标签。
+- **Reuse what you made / 重用自己做过的图**: the picture viewer says what changed from the picture made just before (prompt words, settings, LoRAs, seed), two selected pictures can be compared side by side, and a picture can carry a note that the search finds. "Pick the most different" cuts a selection down to the number you ask for, and a picture can float above other programs as a reference.
+  - 看图窗口会写出和上一张相比改了什么（提示词、参数、LoRA、种子）；选中两张可以并排比较；图片可以写备注，搜索能找到。“挑出差别最大的”能把一堆候选图减到你要的张数；图片还能浮在其他程序上方当参考。
+- **A built-in assistant / 内置助手**: a chat panel (the Assistant button in the top bar). Say what you want and it searches, shows the result in the Gallery, selects pictures or opens the right page. Tagging, rating, notes and collections show a card first and happen only after you confirm; it never moves, renames or deletes a file. It uses a chat model you choose: one on this computer (Ollama, LM Studio) or an online service with your own key.
+  - 顶栏的“助手”按钮会打开一个对话面板。说出你想做的事，它会搜索、在图库里显示结果、选中图片或打开对应的页面。打标签、评分、写备注、放进合集都会先给你一张确认卡片，确认后才执行；它不会移动、重命名或删除任何文件。它使用你选的对话模型：本机的（Ollama、LM Studio），或用你自己密钥的在线服务。
+- **Bring an Eagle library in (not yet tried on a real Eagle library) / 带入 Eagle 资源库（尚未在真实的 Eagle 资源库上试过）**: Import > "From an Eagle library…" indexes the pictures where Eagle keeps them and brings stars, notes, tags, folders (as nested collections) and source pages along. Nothing is copied and nothing in the Eagle folder is changed. It was built from public notes on the folder layout and tested on libraries made to that layout.
+  - “导入 > 从 Eagle 资源库…”会在 Eagle 存放的位置原地索引图片，并带上星级、备注、标签、文件夹（变成嵌套的合集）和来源页面。不复制文件，也不改动 Eagle 文件夹里的任何东西。它是按公开的文件夹结构说明做的，只在按这个结构造出来的资源库上测过。
+- **Collections inside collections, Group runs, Wander / 合集里的合集、同批合并、漫游**: a collection can hold other collections and takes pictures dragged onto it. Group runs (off by default) shows one generation run as a stack. Find Similar has a Wander tab for looking around: each batch is somewhat like the last one and never repeats a picture.
+  - 合集可以放其他合集，也能接收拖上来的图片。“同批合并”（默认关闭）把同一批生成的图显示成一叠。“相似”页多了“漫游”标签，用来随便看看：每一批都和上一批有点像，而且不重复。
+- **Faster in a large library / 大图库更快**: measured with 100,000 pictures: the search box about ten times faster (1.2 s to about 0.1 s), a `steps:` search 1.7 s to 0.3 s, a page in the middle of a name-sorted Gallery 5 to 6 s to about 0.5 s, the first page in random order about 1 s to 0.35 s. The program idles at 147 MB instead of 880 MB and holds no graphics memory, and after a fast scroll the screen fills in about 1 s (it stayed blank for 9.7 s with large pictures).
+  - 用 10 万张图实测：搜索框快约十倍（1.2 秒降到约 0.1 秒），`steps:` 搜索从 1.7 秒降到 0.3 秒，按名称排序时翻到中间一页从 5 到 6 秒降到约 0.5 秒，随机排序的第一页从约 1 秒降到 0.35 秒。程序空闲时占 147 MB 内存（原来 880 MB），不再占用显存；快速滚动后屏幕约 1 秒填满（大图时以前要空白 9.7 秒）。
+- **An action that names its pictures acts on those pictures (data safety) / 点名哪些图，就只动哪些图（数据安全）**: a set opened in the Gallery arrives fully selected, and "Rejected to the recycle bin", Move to Trash or Remove on one right-clicked picture then took the whole selection instead of the pictures they named. They act on the named pictures now.
+  - 在图库里打开的一组图是全选状态；这时“把剔除的送进回收站”，或对一张图右键“移到回收站”“从图库移除”，以前会作用于整个选择，而不是点名的那些图。现在只作用于点名的图。
+- **Moves that used to fail or do nothing / 以前会失败或没反应的移动**: moving a picture to a place an old record of a missing file still claimed failed and put the file back; it works now. In the desktop program, dragging pictures onto a sidebar folder or collection did nothing; the sidebar now knows what such a drag carries (checked in a browser with the desktop side imitated, not yet with a real drag in the packaged program).
+  - 把图片移到一个还留着“文件丢失”旧记录的位置，以前会失败并把文件放回去，现在可以了。在桌面程序里把图片拖到侧栏的文件夹或合集上，以前没有反应；现在侧栏认得这种拖动（已在浏览器里模拟桌面程序一侧验证，还没有在打包后的桌面程序里真正拖过）。
+- **Network proxy, automatic update check, Ctrl K / 网络代理、自动检查更新、Ctrl K**: Model Center takes the port of Clash, v2rayN or a similar tool once, and downloads, installs and update checks use it. The program checks for a new version once a day and only reminds (off switch in Settings). Ctrl K opens the list of every feature anywhere, and a reload returns to the page you were on.
+  - 模型中心里填一次 Clash、v2rayN 之类工具的端口，模型下载、依赖安装和检查更新都会走它。程序每天检查一次新版本，只提醒（设置里可以关）。Ctrl K 在任何地方都能打开全部功能的列表；刷新后回到原来的页面。
+- **Professional look (preview) / “专业”外观（预览）**: Settings › Appearance has a second look, off by default: one accent colour, flat sidebar rows, one corner shape, the picture count as a title. Many pages were also gone over for cut-off text, unnamed buttons and laptop heights.
+  - “设置 › 外观”里多了第二种外观，默认关闭：一个强调色、扁平的侧栏行、统一的圆角、把图片数量当标题。很多页面也一并检查过：被截断的文字、没有名字的按钮、笔记本屏幕高度下的排版。
+- **One interface / 只保留一套界面**: V Opus and the trial interface are retired. The program had three interfaces over one library and only one of them kept getting new features. The Interface row in Settings is gone; the old addresses open the program.
+  - V Opus 和试验界面已停用。以前程序在同一个图库上有三套界面，而新功能只进了其中一套。设置里的“界面”一项已移除；旧地址会直接打开程序。
 
 ---
 
 ## Upgrading / 升级注意
 
-- Nothing to do. An install from before 3.8.0 that was always updated inside the program has no desktop program (`SD Image Sorter.exe`): in-app updates never install it. Settings now says so; to get it, quit and extract the full Windows package over the same folder (your library, settings and models stay).
-  - 无需操作。3.8.0 之前安装、一直在程序里更新的，文件夹里没有桌面程序（`SD Image Sorter.exe`），因为程序内更新从不安装它。现在设置里会说明；想要的话，退出程序，把完整的 Windows 包解压到原来的文件夹并覆盖（图库、设置和模型都会保留）。
+- The first start upgrades the database (search index, notes, nested collections) and saves a copy to `data/backups` first. Older versions cannot open the upgraded database; to go back, restore that copy.
+  - 第一次启动会升级数据库（搜索索引、备注、嵌套合集），升级前先在 `data/backups` 留一份副本。旧版本打不开升级后的数据库；想退回旧版时，请用这份副本。
+- If you had chosen V Opus as the interface, the program now opens its one interface. Your library, settings and files are not touched, and bookmarks to `/vopus/` still open the program.
+  - 如果以前把界面选成了 V Opus，现在会打开唯一的这套界面。图库、设置和文件都不受影响，`/vopus/` 的书签仍然能打开程序。
+- Folders are not watched unless you switch it on: Folders > Manage > "Watch for new pictures". Without it, New Pictures only sees pictures after the folder was checked again.
+  - 文件夹默认不会自动收入新图：在“文件夹 > 管理”里打开“自动收入新图”。不打开的话，“新图片”要等文件夹被再次检查之后才看得到新图。
 
 ---
 
 ## Validation / 验证
 
-GitHub CI run 41002289936 (Linux full suite with browser tests and click coverage, macOS, Windows, Linux portable x86_64 and aarch64): 5 of 5 green; backend 9,302 passed; browser tests 2,187 passed, 0 failed, 0 flaky; V Opus unit tests 1,487 passed. On a fresh 3.10.2 Windows package: in the desktop program, New library asked in the program's own dialog and created the library, and every top-bar page, each Settings tab, the import dialog, Help, the update check and the tag library opened with no console error, no failed request and no browser box. In the browser, classic in English and Chinese, V Opus and the new interface opened with no console errors; Settings > About showed 3.10.2; an empty library folded the gallery toolbar and the whole card fitted 1366x768 in both languages; a fresh install showed no after-update notice. Win+V was checked by hand on Windows 11: the picked picture reaches the page like Ctrl+V.
-  - GitHub CI（41002289936：Linux 完整测试含浏览器测试和点击覆盖、macOS、Windows、Linux 便携版 x86_64 与 aarch64）5 项中 5 项通过；后端 9,302 通过；浏览器测试 2,187 通过、0 失败、0 个偶发；V Opus 单元测试 1,487 通过。在全新的 3.10.2 Windows 包里：在桌面程序中，“新建图库”用程序自己的对话框询问并建好了图库；顶栏每个页面、设置的每个分页、导入对话框、帮助、检查更新和标签库都能打开，没有控制台错误、没有失败的请求、没有浏览器对话框。在浏览器里，经典界面中英文、V Opus 和新界面都没有控制台错误；“设置 > 关于”显示 3.10.2；空图库会收起图库工具栏，引导卡片在 1366x768 下中英文都完整显示；全新安装不会显示更新说明。Win+V 已在 Windows 11 上人工实测：选中的图会像 Ctrl+V 一样送进页面。
+VALIDATION_PENDING
 
 ---
 
 ## ⬇️ Which file should I download? / 我该下载哪一个？
 
-**Windows → `sd-image-sorter-v3.10.2-windows-portable.zip`** — extract, double-click `SD Image Sorter.exe` (desktop program) or `run-portable.bat` (browser mode).
+**Windows → `sd-image-sorter-v3.11.0-windows-portable.zip`** — extract, double-click `SD Image Sorter.exe` (desktop program) or `run-portable.bat` (browser mode).
 
-**Linux portable x86_64 → `sd-image-sorter-v3.10.2-linux-portable-x86_64.tar.gz`** — extract, run `./run-portable.sh`.
+**Linux portable x86_64 → `sd-image-sorter-v3.11.0-linux-portable-x86_64.tar.gz`** — extract, run `./run-portable.sh`.
 
-**Linux portable aarch64 → `sd-image-sorter-v3.10.2-linux-portable-aarch64.tar.gz`** — for ARM Linux, Raspberry Pi 5, and Graviton.
+**Linux portable aarch64 → `sd-image-sorter-v3.11.0-linux-portable-aarch64.tar.gz`** — for ARM Linux, Raspberry Pi 5, and Graviton.
 
-**Linux source install → `sd-image-sorter-v3.10.2-linux.tar.gz`** — for systems with Python 3.12+.
+**Linux source install → `sd-image-sorter-v3.11.0-linux.tar.gz`** — for systems with Python 3.12+.
 
 **Do NOT download / 不要下载：**
-- `sd-image-sorter-v3.10.2-app-patch.zip` — in-app updater only / 仅供更新器
-- `sd-image-sorter-v3.10.2-release-manifest.json` — updater metadata / 更新器元数据
+- `sd-image-sorter-v3.11.0-app-patch.zip` — in-app updater only / 仅供更新器
+- `sd-image-sorter-v3.11.0-release-manifest.json` — updater metadata / 更新器元数据
 
 ---
 
 ## Checksums
 
-| Asset | SHA-256 |
-|---|---|
-| `sd-image-sorter-v3.10.2-windows-portable.zip` | `59ec39001d428e0392207317c1ad592f1000faf1fd82004e128f990b9f5fe90b` |
-| `sd-image-sorter-v3.10.2-app-patch.zip` | `a82fddb25cdb2e4e7b868db23987376cedc09259821e572b17a059590ef2ee6e` |
-| `sd-image-sorter-v3.10.2-linux.tar.gz` | `7936f2f6f9b3c827a182e53c3317641bf012ff017d25d7cc0c3f9ccd39644b57` |
-| `sd-image-sorter-v3.10.2-linux-portable-x86_64.tar.gz` | `4761908dbd1d0ab95ca9abec6fc8873b602718bb23570d0a529a91f70eecf0e9` |
-| `sd-image-sorter-v3.10.2-linux-portable-aarch64.tar.gz` | `b409d9704a450047f1d965f2c3538966d00c55e2ff4620bcd68ca8e96d2b1451` |
-| `sd-image-sorter-v3.10.2-release-manifest.json` | `fc6740b2725364513cf6710a9f5af45be490c1eb76d18897dbf93c0a869dad99` |
-
-The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
+CHECKSUMS_PENDING

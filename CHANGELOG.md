@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.11.0] - 2026-11-12
+
 ### Added / 新增
 
 - **Rename a folder, or make a new one, from the sidebar**: each folder in the sidebar has a small menu (the dots at the end of its row, or a right-click). "Rename…" renames the folder on your disk and every picture in it keeps its tags, rating and sets, with an Undo; until now a folder could only be renamed outside the program, after which its pictures counted as missing. "Move the selection to a new folder here…" makes a folder inside it and moves the selected pictures in. Folders inside an Eagle library are left to Eagle.
@@ -14,32 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The last Keep / Reject result is remembered**: the line at the end of a cull (move the kept, look at the rejected, rejected to the recycle bin) was the only place its two lists lived; once it was closed or replaced, a reject list that was not saved to a collection was gone. The Keep / Reject setup page now says what the last result was and offers the same actions again; it is in the function catalog too. Kept in this browser, per library.
   - **记住上一次留 / 汰的结果**：以前整理结束时的那一行（移动保留的、查看剔除的、剔除的送进回收站）是这两份名单唯一存在的地方；关掉或被别的提示顶掉之后，没有存进合集的剔除名单就没了。现在留 / 汰的设置页会写出上一次的结果，并能再次给出同样的操作；功能目录里也有。保存在这个浏览器里，每个图库各记一份。
-
-### Changed / 变更
-
-- **Search by meaning is offered whenever you search with words**: it used to appear only when the text search found nothing. A link now sits beside the "Understood as" chips; when the similarity index is empty, the message has a button to the Similar page.
-  - **只要用词语搜索，就能改用含义搜索**：以前只有文字搜索一张都没找到时才出现。现在“解析为”那一行后面有一个链接；相似索引为空时，提示里带有去“相似”页的按钮。
-- **Search by meaning says what it did not look at**: the search only covers pictures in the similarity index. When some are not in it yet, the answer says how many and offers to index them in the background.
-  - **含义搜索会说明没看到哪些图**：含义搜索只覆盖相似索引里的图片。有图片还没进索引时，结果会写出有多少张，并可以一键在后台建立索引。
-- **New Pictures says why there may be nothing new**: when a folder is not watched, the message says that folders are only checked now and then and leads to the folder list where "Watch for new pictures" is switched on.
-  - **“新图片”会说明为什么可能没有新图**：有文件夹没开自动收入时，提示会说明文件夹只是隔一段时间检查一次，并带你去文件夹列表打开“自动收入新图”。
-- **Random order is faster in a large library**: with 100,000 pictures the first shuffled page took about 1 second and a page half-way down about 9 seconds; they now take about 0.35 and 0.4 seconds. The order itself is unchanged.
-  - **大图库里随机排序更快**：10 万张图时，随机排序的第一页要约 1 秒，翻到中间的一页要约 9 秒；现在分别约 0.35 秒和 0.4 秒。顺序本身不变。
-
-### Fixed / 修复
-
-- **Desktop program: dragging pictures onto a folder or a collection in the sidebar (not yet tried in the packaged program)**: in the desktop program a card drag is a drag of the real files, which the sidebar did not recognise, so dropping on a folder or collection did nothing. The sidebar now knows which pictures such a drag stands for. Checked in a browser with the desktop program's side imitated; a real drag in the packaged program has not been run.
-  - **桌面程序：把图片拖到侧栏的文件夹或合集上（尚未在打包后的桌面程序里试过）**：在桌面程序里，拖动卡片拖的是真实文件，侧栏认不出来，所以拖到文件夹或合集上没有反应。现在侧栏知道这样的拖动代表哪些图片。已在浏览器里模拟桌面程序一侧验证；还没有在打包后的桌面程序里真正拖过。
-- **Moving a picture back to where an old record still pointed**: when a picture had been moved out of a folder outside the program, the library kept a record of the missing file. Moving a picture to that same place and name then failed and the file was put back. The old record now gives way to the picture that is really there.
-  - **把图片移回旧记录还指着的位置**：如果图片是在程序外被移出文件夹的，图库里会留下一条“文件丢失”的记录；之后再把图片移到同一个位置、同一个名字，移动会失败，文件被放回原处。现在旧记录会让位给真正在那里的图片。
-
-### Removed / 移除
-
-- **One interface: V Opus and the trial interface are retired**: the program had three interfaces over one library, and only the classic one got new features (none of this version's additions reached the other two). On the owner's decision the program now has one interface. The Interface row in Settings and the V Opus entry in the function catalog are gone; the old addresses `/vopus/`, `/v4/` and `/next/` open the program. Your library, settings and files are not touched. A source install no longer needs Node.js to start, and packages are smaller.
-  - **只保留一套界面：V Opus 和试验界面已停用**：以前程序在同一个图库上有三套界面，而新功能只进了经典界面（这个版本新增的功能在另外两套里一个也没有）。按所有者的决定，程序现在只有一套界面。设置里的“界面”一项和功能目录里的 V Opus 入口已移除；旧地址 `/vopus/`、`/v4/`、`/next/` 会直接打开程序。图库、设置和文件都不受影响。从源码运行不再需要 Node.js，安装包也更小。
-
-### Added / 新增
-
 - **Recent moves**: a move or copy could be undone only from its result message, which went away after twelve seconds or with the page. "Recent moves" (More menu, and the function catalog) lists the last runs, newest first, with when, how many files and where to, and an Undo for each one not undone yet. It covers the Gallery's Move and Copy, a drop on a folder and Auto-Separate; the program keeps the last 100 runs.
   - **最近的移动**：以前移动或复制只能从结果提示里撤销，而提示十二秒后或者换页就消失了。“最近的移动”（在“更多”菜单和功能目录里）按时间从新到旧列出最近的操作：什么时候、多少个文件、移到哪里，没撤销过的都可以撤销。图库的移动和复制、拖到文件夹、自动分类都算在内；程序保留最近 100 次。
 - **Bring an Eagle library in (new, not yet tried on a real Eagle library)**: the Import dialog has "From an Eagle library…". Choose the library folder, see what it holds, then bring it in: the pictures are indexed where Eagle keeps them (nothing is copied, nothing in the Eagle folder is changed), and stars, notes, tags (as your own tags), folders (as collections, nested the same way) and source pages come along. Nothing a picture already has here is overwritten, so it can be run again after adding to the Eagle library. Bookmarks, items in the Eagle trash and its thumbnails are passed over and counted. It was built from public notes on the Eagle folder layout and tested on libraries made to that layout; Billfish libraries are not read.
@@ -66,8 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **在首页就能找图**：首页多了一个查找框。输入提示词里的词、标签、模型或 LoRA 的名字（中文标签名也可以），按回车，图库就会打开并显示结果；图库搜索支持的写法这里都能用。
 - **Search by sampler, steps and CFG**: the Gallery search understands `sampler:"euler a"`, `steps:28`, `steps:20..30`, `steps>=30`, `cfg:7`, `cfg<=5.5`, alone or beside ordinary words (`rain sampler:euler steps>=28`). They work everywhere the search text is used: counts, select all matching, Auto-Separate, Manual Sort, bulk tagging and export. The search help lists them, and the Chinese keys 采样器 and 步数 work too.
   - **按采样器、步数和 CFG 搜索**：图库搜索认得 `sampler:"euler a"`、`steps:28`、`steps:20..30`、`steps>=30`、`cfg:7`、`cfg<=5.5`，可以单独用，也可以和普通词一起用（`rain sampler:euler steps>=28`）。凡是用到搜索文字的地方都生效：数量、全选匹配项、自动分类、手动分类、批量打标和导出。搜索帮助里已列出，也可以用中文的“采样器”“步数”。
-- **Keep / Reject finishes the job**: a Keep / Reject session marked pictures and touched no file, so getting the rejects off the disk took about ten more clicks somewhere else. When a session ends, the line "Kept 31, rejected 58. No file was touched yet." now offers: move the kept to a folder (with Undo), look at the rejected in the Gallery, or send the rejected to the recycle bin (asked first, with the count). This works whatever the reject destination was, also with "Don't save". After each of these the remaining ones are offered again; once the line is dismissed, the list of rejects is gone unless a reject collection was chosen.
-  - **“保留 / 剔除”可以一步收尾**：以前“保留 / 剔除”只是给图片做记号，文件一个都没动，想把剔除的图从硬盘上清掉还要到别处再点十来下。现在一轮结束时会出现一行“保留 31 张，剔除 58 张，文件都还没动。”，可以：把保留的移到文件夹（可撤销）、在图库里查看剔除的图，或把剔除的移到回收站（会先确认并写明数量）。不管剔除的去向选的是什么（包括“不保存”）都可以用。每做完一个，剩下的会再次出现；这一行被关掉之后，除非事先选了“淘汰”合集，否则淘汰清单就没有了。
+- **Keep / Reject finishes the job**: a Keep / Reject session marked pictures and touched no file, so getting the rejects off the disk took about ten more clicks somewhere else. When a session ends, the line "Kept 31, rejected 58. No file was touched yet." now offers: move the kept to a folder (with Undo), look at the rejected in the Gallery, or send the rejected to the recycle bin (asked first, with the count). This works whatever the reject destination was, also with "Don't save". After each of these the remaining ones are offered again, and the Keep / Reject setup page brings the last result back after the line is closed.
+  - **“保留 / 剔除”可以一步收尾**：以前“保留 / 剔除”只是给图片做记号，文件一个都没动，想把剔除的图从硬盘上清掉还要到别处再点十来下。现在一轮结束时会出现一行“保留 31 张，剔除 58 张，文件都还没动。”，可以：把保留的移到文件夹（可撤销）、在图库里查看剔除的图，或把剔除的移到回收站（会先确认并写明数量）。不管剔除的去向选的是什么（包括“不保存”）都可以用。每做完一个，剩下的会再次出现；这一行关掉之后，留 / 汰的设置页还能把上一次的结果找回来。
 - **A note on a picture**: the picture viewer has a Note field: why you kept it, what to fix, whom it is for. It is saved when you leave the field (or with Ctrl+Enter), and the Gallery's search finds its words, like a caption's.
   - **给图片写备注**：图片查看器里多了“备注”一栏：为什么留下它、要修哪里、给谁用。离开输入框时自动保存（也可以按 Ctrl+Enter），图库搜索也能搜到备注里的字，和标注一样。
 - **Pick the most different pictures from a selection**: cutting a pile of candidates down to a training set by eye is slow and keeps near-duplicates. Select the pile, open More in the selection bar and choose "Pick the most different…": say how many, and the Gallery shows exactly those, all selected, ready for the Dataset Maker or a collection. The pick starts from the most typical picture and keeps adding the one least like anything picked so far; a picture that resembles nothing else in the pile (a screenshot, a broken render) waits until the others are used. It uses the similarity index: pictures not in it cannot take part, and the result says how many that was.
@@ -92,13 +68,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **图库里移动或复制之后可以撤销**：移动或复制完成的提示上有“撤销”按钮，保留 12 秒。它会把每张移动过的图片放回原来的位置，或删除刚复制出的副本。之后又被移动或改动过的图片会保持现状，并在结果里写明数量。提示上的按钮（撤销、打开文件夹、查看）改成了看得清的描边按钮；以前在今天的外观里是浅色底配白字。
 - **Search: part of a LoRA or model name is enough**: `lora:detail` now finds `detail_tweaker`, `add_detail` and every other LoRA whose name contains it, and `model:anima` works the same way (also with a minus in front). A whole name still means only that one. The filter list on the left shows the names that were matched.
   - **搜索：LoRA 或模型名只写一部分也能找到**：`lora:detail` 现在会找出 `detail_tweaker`、`add_detail` 等所有名字里带这段字的 LoRA，`model:anima` 同理（前面加减号排除也一样）。写完整名字时仍然只匹配那一个。左侧的筛选器会列出实际匹配到的名字。
+- **All features can be searched**: the list behind "Find a feature... Ctrl K" has a search field. Type a word to narrow the list, press Enter to open the first match, use the arrow keys to move between rows.
+  - **“所有功能”可以搜索了**：“查找功能… Ctrl K”打开的清单顶部有搜索框。输入一个词就会筛选，按 Enter 打开第一项，方向键在各行之间移动。
+- **Gallery keys**: the arrow keys start at the first picture on screen without a click first; `/` puts the cursor in the search box; in select mode Ctrl+A selects everything in the current filter.
+  - **图库快捷键**：不用先点一下，方向键就会从屏幕上的第一张图开始；`/` 把光标放进搜索框；选择模式下 Ctrl+A 选中当前筛选的全部图片。
+- **Search terms can be removed one by one**: each term on the "Understood as" line under the search box has a small remove button; pressing it takes that term out of the box and searches again.
+  - **搜索条件可以逐个移除**：搜索框下方“解析为”一行的每个条件都有一个小的移除按钮，点一下就把这个条件从搜索框里拿掉并重新搜索。
+- **Favourite and rate from the picture viewer**: a heart beside "Your rating" favourites the open picture; with the viewer open, the keys 1 to 5 set the stars and 0 clears them.
+  - **看图窗口里可以直接收藏和评分**：“我的评分”旁边多了一个爱心按钮，用来收藏当前这张图；看图窗口打开时，按 1 到 5 设置星级，按 0 清除。
+- **Keyboard shortcuts in the Help menu** (Professional look): the shortcuts panel could only be opened with the `?` key; Help now lists it, and the panel includes the newer keys (Ctrl+K, `/`, the arrow keys, Space, Ctrl+A in select mode, 1 to 5 in the viewer).
+  - **“帮助”菜单里有了键盘快捷键**（专业外观）：快捷键面板以前只能按 `?` 打开；现在“帮助”里能直接点开，面板里也补上了新的按键（Ctrl+K、`/`、方向键、空格、选择模式下的 Ctrl+A、看图时的 1 到 5）。
+- **Interface look: Professional (preview)** (Settings › Appearance, off by default): the start of the new look. The owner's brand magenta as the one accent, flat sidebar rows of one height with quiet counts, one corner shape, the picture count as a title (kept on laptop widths), no box around the toolbar or the grid, and only the source tabs the library has pictures from. Settings › Reset also clears it, the Group runs switch and folded collections.
+  - **界面外观：专业（预览）**（“设置 › 外观”，默认关闭）：新外观的开始。用作者品牌的洋红作为唯一强调色，侧栏每行一样高、数量安静靠右，统一圆角，图片数量作为标题（笔记本宽度也显示），工具栏和图片区不再有外框，只显示图库里真的有图片的来源。“设置 › 重置”也会清除它、“同批合并”开关和收起的合集。
+- **Professional look: every page, not only the gallery**: Read Image, Organize, Censor, Find Similar, Dataset Maker, Reverse Prompt, Prompt Helper, Style Finder and Style Map now share one frame: the same content width, one panel style, one switch for the tools inside a page, regular-weight buttons and fields of one height. Boxes inside boxes became sections parted by a line, counts at the top of a page are a line of text, labels that ran at 8 to 11 px are 12 px or more, and the yellow "start here" pills and typed arrows are gone. Today's look is unchanged.
+  - **专业外观：不只图库，每一页都换上了**：读图、整理、打码、相似、数据集、反推提示词、提示词助手、画风识别和画风地图现在共用一套版面：同样的内容宽度、同一种面板、同一种页内工具切换、常规字重的按钮、同样高度的输入框。盒子套盒子改成用细线分段，页面顶部的数字改成一行文字，原来只有 8 到 11 px 的标签放大到 12 px 以上，黄色的“从这里开始”标签和打字箭头都拿掉了。默认外观不变。
+- **Organize: the empty preview has its own start button**, and Reverse Prompt says why its button is off ("Drop a picture above first"). In the Professional look a main button that is off is plain grey, Organize lines up with the other pages, the More button is no longer marked together with the page it opened, and the dataset's repeated step strip and Organize's repeated settings line are gone.
+  - **整理：空的预览区有了自己的“预览结果”按钮**，反推提示词会说明按钮为什么不能按（“先在上面放进一张图”）。专业外观下，不能按的主按钮是普通灰色，整理页和其他页面左右对齐，“更多”不再和它打开的页面同时高亮，数据集重复的步骤条和整理页重复的设置摘要也拿掉了。
+- **Professional look: fewer holes and unnamed buttons**: Prompt Helper's statistics put the long tag list on the left and the other cards beside it (cards with nothing to show yet are one line tall); Reverse Prompt shows where the answer will appear; the three Censor detect buttons carry words (Detect this, Detect all, Settings); Organize's main button sits right under its options.
+  - **专业外观：少了空洞和没名字的按钮**：提示词助手的统计把长标签列表放在左边，其他卡片排在旁边（还没内容的卡片只占一行）；反推提示词会标出结果将显示的位置；打码页三个检测按钮有了文字（检测这张、检测全部、设置）；整理页的主按钮紧跟在选项下面。
+- **Professional look: readable small text and controls that line up**: no text under 12 px on the other pages; buttons that are off stay readable; the Censor sliders start at one place; Prompt Helper opens with its name and one sentence on what it is for; the dataset's quick-drop button says how it differs from Remove ("X, Z undoes").
+  - **专业外观：小字看得清，控件对得齐**：其他页面不再有小于 12 px 的文字；不能按的按钮仍然看得清；打码页的滑杆从同一位置开始；提示词助手开头有页名和一句用途说明；数据集的“快速剔除”按钮写明了它和“移除”的区别（“X，Z 撤销”）。
+- **Professional look: the filter dialog**: the counts at the top are one line instead of nine boxes, the accent labels above each panel are gone, and tiles, fields and buttons use the same sizes as the pages.
+  - **专业外观：筛选对话框**：顶部的统计从九个方块改成一行，每个面板上方的强调色小标拿掉了，选项块、输入框和按钮用和页面一样的尺寸。
+- **Professional look: the other dialogs**: Smart Tag, batch export, the tag editor, rename, save options, the VLM settings and the smaller dialogs share one field, one drop-down and one button weight; a chosen option is lifted instead of outlined in the accent.
+  - **专业外观：其他对话框**：智能打标、批量导出、批量标签编辑、重命名、保存选项、VLM 设置和几个小对话框共用同一种输入框、下拉框和按钮字重；选中的选项用抬起的底色表示，不再用强调色描边。
+- **Professional look: Manual Sort shows the picture large**: the picture being sorted was 500 px on any screen; it now uses the room between the four folder cards (about 650 px on a 1080p screen, about 1,000 px at 1440p).
+  - **专业外观：手动排序时图片更大**：以前排序中的图片在任何屏幕上都只有 500 px；现在会用满四个文件夹卡片之间的空间（1080p 约 650 px，1440p 约 1000 px）。
+- **Professional look: the library at a glance**: the sidebar opens with Quick views (All pictures, Not tagged yet, Last 7 days) with live counts. With no picture under the pointer, the details panel shows how many pictures wait for tagging with a button to start, the models, LoRAs and tags used most (a click shows only those pictures) and All statistics, which opens the statistics dialog in the same look. The toolbar's controls share one shape. Its top bar keeps one filled button (Import Images): All features is a "Find a feature" field, the page guide and the language switch share a Help menu, and AI tagging sits with the gallery's tools.
+  - **专业外观：一眼看懂图库**：侧栏最上面是“快速查看”（全部图片、未打标签、最近 7 天），带实时数量。鼠标没有指着图片时，右边的详情栏会显示还有多少张图没打标签和“开始打标签”按钮、最常用的模型、LoRA 和标签（点一下只看这些图），以及“全部统计”，打开同一外观的统计窗口。工具栏的按钮统一成一种样式。顶栏只留一个实心按钮（导入图片）：“全部功能”变成“查找功能”输入框，本页使用指南和切换语言放进“帮助”菜单，AI 打标移到图库工具栏。
+- **Not tagged yet filter** (every look): a quick filter chip and the search word `no:tags` show the pictures no AI tagging run or tag edit has touched, the same pictures AI tagging works on by default.
+  - **“未打标签”筛选**（所有外观）：快捷筛选和搜索词 `no:tags` 会只显示还没跑过 AI 打标、也没改过标签的图，也就是 AI 打标默认会处理的那些图。
+- **Folder counts** (every look): each folder row shows how many pictures it holds with its sub-folders, like collections, and a library scanned from one folder opens on its sub-folders instead of one folded row.
+  - **文件夹数量**（所有外观）：每个文件夹会像合集一样显示它和子文件夹里共有几张图；从一个文件夹扫描进来的图库，会直接展开它的子文件夹，不再只显示一行收起的文件夹。
+- **Network proxy** (Model Center): enter the port of Clash, v2rayN or a similar tool once, and model downloads, package installs and update checks all use it, so TUN mode is not needed. Includes a connection test and one click for the system proxy; local addresses never use it.
+  - **网络代理**（模型中心）：填一次 Clash、v2rayN 等工具的端口，模型下载、装包和检查更新都会走它，不用开 TUN 模式。可以测试连接，也可以一键用系统代理；本机地址不走代理。
+- **One banner when the program's server stops**: instead of failing requests one by one, the page says the server stopped; refreshing a folder and the preview give a reason and a Retry.
+  - 程序的服务器停止时，页面会用一条横幅说明，不再让请求一个个失败；刷新文件夹和预览失败时会说明原因并提供“重试”。
+- **Ctrl K opens the feature catalog anywhere**, with a button in the top bar.
+  - 在任何页面按 Ctrl K 都能打开功能目录，顶栏也有按钮。
+- **Automatic update check**: once a day the program checks for a new version and only reminds; nothing changes until you press update. Off switch in Settings.
+  - **自动检查更新**：每天检查一次新版本，只提醒，不按“更新”就什么都不会变。可以在设置里关闭。
+- **A reload returns to the page you were on** instead of the Gallery.
+  - 刷新页面后会回到原来所在的页面，而不是回到图库。
+- **Group runs** (off by default): pictures from one generation run (same prompt, negative prompt, model and size, each made within 10 minutes of the previous) show as one stack with a count; the count opens the run in place and Fold closes it. Selecting a stack selects every picture in it, preview still walks every picture, and batch actions work on pictures as before. Runs are grouped only when the gallery is sorted by date. The switch sits next to the view buttons and is remembered.
+  - **同批合并**（默认关闭）：同一批生成的图片（提示词、负面提示词、模型和尺寸相同，每张与上一张相隔不到 10 分钟）显示成一叠，带张数；点张数就地展开，点“收起”合回去。选中一叠就是选中其中每一张，预览照样一张张翻，批量操作照常按图片执行。只有按日期排序时才合并。开关在视图按钮旁边，会记住你的选择。
+- **Collections inside collections**: a collection can hold other collections, like folders. Make one with a row's More (⋯) > New collection inside, drag a collection onto another to put it inside, drag it onto the strip that appears below the list to bring it back to the top, or use More > Move to…. A parent folds with its arrow and stays folded. Pictures dragged from the gallery onto a collection are added to it (a picked picture brings every pick). A parent shows its own pictures; deleting it moves the collections inside it up one level. A row's buttons now appear over its end on hover, so names are no longer cut short in the narrow sidebar.
+  - **合集里的合集**：合集可以像文件夹一样放其他合集。在一行的“更多”（⋯）里选“在里面新建合集…”，把一个合集拖到另一个上就放进去，拖到列表下方出现的那一条就移回最上层，也可以用“更多”>“移到…”。上层合集可以点箭头收起，会记住。从图库把图片拖到合集上就会加入（拖已选中的图片会带上所有选中的）。上层合集只显示它自己的图片；删掉它时，里面的合集会往上移一层。每行的按钮改成鼠标移上去时盖在行尾，窄侧栏里的名字不再被截断。
+
+### Changed / 变更
+
+- **Search by meaning is offered whenever you search with words**: it used to appear only when the text search found nothing. A link now sits beside the "Understood as" chips; when the similarity index is empty, the message has a button to the Similar page.
+  - **只要用词语搜索，就能改用含义搜索**：以前只有文字搜索一张都没找到时才出现。现在“解析为”那一行后面有一个链接；相似索引为空时，提示里带有去“相似”页的按钮。
+- **Search by meaning says what it did not look at**: the search only covers pictures in the similarity index. When some are not in it yet, the answer says how many and offers to index them in the background.
+  - **含义搜索会说明没看到哪些图**：含义搜索只覆盖相似索引里的图片。有图片还没进索引时，结果会写出有多少张，并可以一键在后台建立索引。
+- **New Pictures says why there may be nothing new**: when a folder is not watched, the message says that folders are only checked now and then and leads to the folder list where "Watch for new pictures" is switched on.
+  - **“新图片”会说明为什么可能没有新图**：有文件夹没开自动收入时，提示会说明文件夹只是隔一段时间检查一次，并带你去文件夹列表打开“自动收入新图”。
+- **Random order is faster in a large library**: with 100,000 pictures the first shuffled page took about 1 second and a page half-way down about 9 seconds; they now take about 0.35 and 0.4 seconds. The order itself is unchanged.
+  - **大图库里随机排序更快**：10 万张图时，随机排序的第一页要约 1 秒，翻到中间的一页要约 9 秒；现在分别约 0.35 秒和 0.4 秒。顺序本身不变。
+- **One icon style**: the right-click menu, the feature catalog (Ctrl K), the help guide and the shortcut sheet used multi-colour emoji next to the line icons of the top bar; they all use the same line icons now. The sparkle icon that marked "AI" buttons is gone: each button shows what it does (tag, star, brush, target, search). Colour emoji in front of labels and messages (model, size, "done", tour, categories) are gone too; collection rows use the line folder.
+  - **统一图标风格**：右键菜单、功能目录（Ctrl K）、帮助引导和快捷键表以前用彩色表情图标，和顶栏的线条图标混在一起；现在全部用同一套线条图标。标记“AI”按钮的闪光图标已去掉，每个按钮改用说明它作用的图标（标签、星、画笔、靶心、搜索）。标签和提示文字前面的彩色表情（模型、尺寸、“完成”、引导、分类）也已去掉；合集行改用线条文件夹图标。
+- **Search at 100,000 pictures**: a text index makes the search box and prompt filters about ten times faster on large libraries (prompt search 1.2 s to about 0.1 s), with the same results. A word nearly every picture contains, such as `1girl`, still takes about 0.2 s to count exactly.
+  - **10 万张图的搜索**：新增的文本索引让搜索框和提示词筛选在大图库上快了约十倍（提示词搜索从 1.2 秒降到约 0.1 秒），结果完全相同。像 `1girl` 这种几乎每张图都有的词，精确计数仍要约 0.2 秒。
+- **Model Center puts the model cards first**: download source, model folders and the proxy fold into one line that says their state, and it opens by itself when something there needs a look.
+  - **模型中心先显示模型卡片**：下载源、模型文件夹和代理收进一行，直接写明状态；其中有需要处理的问题时会自动展开。
+- **The picture preview and the Reader show each fact once**: duplicated fields are folded.
+  - 图片预览和读图里每项信息只显示一次，重复的字段折叠起来。
+- **A chain of single-child folders is one row** in the gallery's folder tree.
+  - 图库文件夹树里，只有一个子文件夹的连续层级合并成一行。
+- **Neutral silver accent**: the interface accent is a neutral silver, so colour on screen comes from the pictures and data. Data colours are unchanged.
+  - **中性银色强调色**：强调色改为中性银色，屏幕上的颜色只来自图片和数据。数据颜色不变。
 
 ### Fixed / 修复
 
+- **Desktop program: dragging pictures onto a folder or a collection in the sidebar (not yet tried in the packaged program)**: in the desktop program a card drag is a drag of the real files, which the sidebar did not recognise, so dropping on a folder or collection did nothing. The sidebar now knows which pictures such a drag stands for. Checked in a browser with the desktop program's side imitated; a real drag in the packaged program has not been run.
+  - **桌面程序：把图片拖到侧栏的文件夹或合集上（尚未在打包后的桌面程序里试过）**：在桌面程序里，拖动卡片拖的是真实文件，侧栏认不出来，所以拖到文件夹或合集上没有反应。现在侧栏知道这样的拖动代表哪些图片。已在浏览器里模拟桌面程序一侧验证；还没有在打包后的桌面程序里真正拖过。
+- **Moving a picture back to where an old record still pointed**: when a picture had been moved out of a folder outside the program, the library kept a record of the missing file. Moving a picture to that same place and name then failed and the file was put back. The old record now gives way to the picture that is really there.
+  - **把图片移回旧记录还指着的位置**：如果图片是在程序外被移出文件夹的，图库里会留下一条“文件丢失”的记录；之后再把图片移到同一个位置、同一个名字，移动会失败，文件被放回原处。现在旧记录会让位给真正在那里的图片。
 - **New Pictures remembers in one place**: where you left off was kept in the browser, so the browser and the desktop program each had their own idea of what is new. The program keeps it now, one marker per library; a marker an earlier version kept in the browser is taken over the first time.
   - **“新图片”的记号只存一处**：以前“看到哪里了”存在浏览器里，所以浏览器和桌面版各有各的“新图片”。现在由程序保存，每个图库一个；旧版本留在浏览器里的记号会在第一次使用时接过来。
-- **Faster in a large library (measured at 100,000 pictures)**: a `steps:` search took about 1.7 s per request and now takes 0.3 s; a page in the middle of a name-sorted Gallery took 5 to 6 s and now takes about 0.5 s; `sampler:` and `cfg:` searches went from about 1.8 s to 1.3 to 1.4 s. The first page of the newest-first Gallery is unchanged at under 0.1 s. Four indexes are added at the next start (about 3 s per 100,000 pictures, once). Measured through the program on one PC with copies of real records; random order still takes about 1.5 s per page at that size.
-  - **大图库更快（在 10 万张图片上实测）**：`steps:` 搜索每个请求约 1.7 秒，现在 0.3 秒；按名称排序时翻到中间一页要 5 到 6 秒，现在约 0.5 秒；`sampler:` 和 `cfg:` 搜索从约 1.8 秒降到 1.3 到 1.4 秒。按最新排序的第一页不变，不到 0.1 秒。下次启动时会新增四个索引（每 10 万张约 3 秒，只做一次）。这些数字是在一台电脑上、用真实记录的副本通过程序实测的；随机排序在这个规模下每页仍约 1.5 秒。
+- **Faster in a large library (measured at 100,000 pictures)**: a `steps:` search took about 1.7 s per request and now takes 0.3 s; a page in the middle of a name-sorted Gallery took 5 to 6 s and now takes about 0.5 s; `sampler:` and `cfg:` searches went from about 1.8 s to 1.3 to 1.4 s. The first page of the newest-first Gallery is unchanged at under 0.1 s. Four indexes are added at the next start (about 3 s per 100,000 pictures, once). Measured through the program on one PC with copies of real records.
+  - **大图库更快（在 10 万张图片上实测）**：`steps:` 搜索每个请求约 1.7 秒，现在 0.3 秒；按名称排序时翻到中间一页要 5 到 6 秒，现在约 0.5 秒；`sampler:` 和 `cfg:` 搜索从约 1.8 秒降到 1.3 到 1.4 秒。按最新排序的第一页不变，不到 0.1 秒。下次启动时会新增四个索引（每 10 万张约 3 秒，只做一次）。这些数字是在一台电脑上、用真实记录的副本通过程序实测的。
 - **One name, one dialog**: describing a picture in words was "Semantic search" on Find Similar and "Search by meaning" in the Gallery, with different numbers of results; both are "Search by meaning" now and start with the same 100. Right-clicking two selected pictures opened a separate tool that showed only a likeness percentage, while More > Compare these two showed what differs in the recipe: both open the same dialog now, and it also says how alike the two look.
   - **同一个名字，同一个窗口**：用文字描述找图，在“相似”页叫“语义搜索”，在图库叫“含义搜索”，结果数量也不一样；现在两处都叫“按含义搜索”，第一页都是 100 张。在两张选中的图片上右键，以前打开的是只显示相似百分比的另一个工具，而“更多”>“比较这两张”显示的是配方差异：现在两处打开同一个窗口，里面也会写出两张图有多像。
 - **An Eagle library beside this program**: after bringing an Eagle library in, the sidebar showed one folder row per Eagle item (ten thousand items, ten thousand rows) and offered them as places to move pictures to. They are one row now (the library's "images" folder) and are not offered as destinations. Moving a picture out of an Eagle library, or sending it to the recycle bin, says first that Eagle loses it too.
@@ -207,8 +256,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **笔记本高度下的选择模式和画风识别**（1366x768）：选择模式时批量面板占了图库侧栏一半，合集列表在一行中间被截断，看不出下面还有；现在那里会省掉说明文字、两个按钮并排，列表下面还有内容时底部会渐隐。画风识别固定在底部的按钮以前像几张卡片叠在模型设置上；现在那里是一条精简的底栏。“完成选择”改用勾号，不再是闪光图标。
 - **An empty collection says how to fill it**: it showed "No images match your filters, try removing some filters" (the language refresh overwrote its own message); it now says the collection is empty and to drag pictures onto it or use Add to collection, in both languages.
   - **空合集会说明怎么加入图片**：以前显示“没有符合条件的图片，试试去掉几个筛选条件”（语言刷新覆盖了它自己的提示）；现在会说明这个合集还是空的，可以把图片拖进来或用“加入合集”，中英文都一样。
-- **A V Opus page that fails no longer blanks the program**: an error while a page draws now shows what failed, the reason, Reload and Back to the library in place of that page, and the top bar keeps working; errors outside drawing are said in a message. Before, one such error left the whole V Opus window empty.
-  - V Opus 某一页画面出错时不再整个程序变空白：会在那一页的位置说明出了什么错、原因，并提供“刷新”和“回到图库”，顶栏照常能用；画面以外的错误会用提示说明。以前只要出一次这种错，整个 V Opus 窗口就会变成空白。
 - **Main colours**: the gallery, Reader and Censor palettes and the colour filter now find main colours in HSV. RGB filled the top places with light and dark versions of one colour; on 400 real pictures near-duplicate pairs fell from 2.04 to 0.82 per picture and colour-filter tags a picture should have but did not from 54.1% to 15.2%. Pictures analysed before count as needing analysis; their old colours keep working until then.
   - 图库、图片读取器和打码页的色板，以及颜色筛选，现在用 HSV 找主色。RGB 会让同一种颜色的深浅版本占满前几名；在 400 张真实图片上，每张图的近似重复色从 2.04 对降到 0.82 对，该有却没有的颜色标签从 54.1% 降到 15.2%。之前分析过的图会显示为需要分析，分析前旧颜色继续可用。
 - **Install progress**: installing a feature shows the real file, megabytes, percent, speed and time left, for Python packages and Hugging Face downloads alike. Steps with no percentage say what they are doing and the bar moves.
@@ -217,24 +264,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 装包失败会说明原因：文件夹没有写入权限、文件被占用、网络不通、磁盘满了或路径太长，不再只显示“returned non-zero exit status 1”。没有写入权限不再被当成文件被占用而重试。
 - **Starting from a folder without write permission**: the launchers say so before installing anything and offer to open again as administrator, instead of failing one install at a time.
   - 从没有写入权限的文件夹启动时，启动脚本会在安装前说明，并可以用管理员身份重新打开，不再一个个安装失败才发现。
-- **The program starts lighter, and Model Center opens without waiting**: a background hardware check imported PyTorch at every start, which kept about 730 MB of memory and a CUDA context holding graphics memory next to ComfyUI, and Model Center's status started two PyTorch subprocesses on every opening (3.8 to 7.1 s) and loaded transformers to check SAM3. The checks now read the installed files and one cached subprocess answer instead. Measured: server memory at idle 880 MB to 147 MB with no graphics memory held, the first page after a start ready in 1.3 s instead of 6.3 s, Model Center's status 0.15 to 0.5 s. The browser also keeps the classic interface's scripts between starts (about 30% faster start).
-  - **程序启动更轻，模型中心打开不再等待**：以前每次启动时，后台的硬件检测都会加载 PyTorch，占住约 730 MB 内存，还建立 CUDA 上下文占用显存（和 ComfyUI 抢）；模型中心每次打开都要启动两个 PyTorch 子进程（3.8 到 7.1 秒），检查 SAM3 时还会加载 transformers。现在改为查看已安装的文件，并复用一次子进程检查的结果。实测：空闲时服务器内存从 880 MB 降到 147 MB，不再占用显存；启动后第一页从 6.3 秒降到 1.3 秒就能用；模型中心状态 0.15 到 0.5 秒。浏览器也会在两次启动之间保留经典界面的脚本（启动快约 30%）。
-- **A fast scroll through a large library fills the screen at once** (classic and V Opus): flinging the gallery asked for the thumbnail of every card it passed (hundreds in a few seconds), and the pictures left on screen waited behind them: 9.7 s of blank tiles with real 960x1440 pictures. Cards drawn mid-flick now wait until the gallery settles, the nearest load first, and cards that leave the page cancel a thumbnail still on the way: about 1.1 s in classic and 0.4 s in V Opus (was 3 to 4 s there). Scrolling at a reading pace loads as before.
-  - 在大图库里快速滚动时，以前每经过一张卡片都会请求缩略图（几秒内几百个），停下后屏幕上的图要排在它们后面：用 960x1440 的真实图片实测，空白 9.7 秒。现在快速滚动途中画出的卡片会等停下后再加载，离屏幕中央最近的先加载，滚出页面的卡片会取消还没到的缩略图：经典界面约 1.1 秒，V Opus 约 0.4 秒（原来 3 到 4 秒）。正常浏览速度的滚动照常边滚边加载。
+- **The program starts lighter, and Model Center opens without waiting**: a background hardware check imported PyTorch at every start, which kept about 730 MB of memory and a CUDA context holding graphics memory next to ComfyUI, and Model Center's status started two PyTorch subprocesses on every opening (3.8 to 7.1 s) and loaded transformers to check SAM3. The checks now read the installed files and one cached subprocess answer instead. Measured: server memory at idle 880 MB to 147 MB with no graphics memory held, the first page after a start ready in 1.3 s instead of 6.3 s, Model Center's status 0.15 to 0.5 s. The browser also keeps the interface's scripts between starts (about 30% faster start).
+  - **程序启动更轻，模型中心打开不再等待**：以前每次启动时，后台的硬件检测都会加载 PyTorch，占住约 730 MB 内存，还建立 CUDA 上下文占用显存（和 ComfyUI 抢）；模型中心每次打开都要启动两个 PyTorch 子进程（3.8 到 7.1 秒），检查 SAM3 时还会加载 transformers。现在改为查看已安装的文件，并复用一次子进程检查的结果。实测：空闲时服务器内存从 880 MB 降到 147 MB，不再占用显存；启动后第一页从 6.3 秒降到 1.3 秒就能用；模型中心状态 0.15 到 0.5 秒。浏览器也会在两次启动之间保留界面的脚本（启动快约 30%）。
+- **A fast scroll through a large library fills the screen at once**: flinging the gallery asked for the thumbnail of every card it passed (hundreds in a few seconds), and the pictures left on screen waited behind them: 9.7 s of blank tiles with real 960x1440 pictures. Cards drawn mid-flick now wait until the gallery settles, the nearest load first, and cards that leave the page cancel a thumbnail still on the way: about 1.1 s. Scrolling at a reading pace loads as before.
+  - 在大图库里快速滚动时，以前每经过一张卡片都会请求缩略图（几秒内几百个），停下后屏幕上的图要排在它们后面：用 960x1440 的真实图片实测，空白 9.7 秒。现在快速滚动途中画出的卡片会等停下后再加载，离屏幕中央最近的先加载，滚出页面的卡片会取消还没到的缩略图：约 1.1 秒。正常浏览速度的滚动照常边滚边加载。
 - **Gallery pages load faster**: each page checked twice as many pictures on disk as it shows, and resolved every picture's full path one by one, which on Windows opens each file. It now checks only what it shows and resolves each folder once. At 100,000 pictures a page went from about 100 ms to 40 ms in the program (measured in-process); a picture reached through a linked folder is still refused.
   - 图库每一页以前会在磁盘上检查两倍于显示数量的图片，并逐张解析完整路径（在 Windows 上会逐个打开文件）。现在只检查要显示的图片，同一文件夹只解析一次。10 万张图时，一页从约 100 ms 降到 40 ms（在程序内实测）；经由链接文件夹访问的图片仍会被拒绝。
 - **The folder check on Linux**: it told Linux users to move the folder to `D:\SD-Image-Sorter` to stop needing administrator rights; it now says to move it into the home folder (`~/SD-Image-Sorter`) or make it theirs. It also checks the Linux package folders (`lib/python3.x/site-packages`), and when `run.sh` cannot create its environment in a read-only folder it says so instead of suggesting `apt install python3-venv`. Run in WSL with `run.sh` and the real `run-portable.sh`.
   - 文件夹检查以前叫 Linux 用户把文件夹移到 `D:\SD-Image-Sorter`、以后就不用管理员；现在会说移到主文件夹（`~/SD-Image-Sorter`）或改成自己所有。它也会检查 Linux 的包文件夹（`lib/python3.x/site-packages`）；`run.sh` 在只读文件夹里建不了运行环境时，会直接说明原因，不再建议 `apt install python3-venv`。已在 WSL 里用 `run.sh` 和真实的 `run-portable.sh` 实测。
 - **Install progress on slow connections**: large Hugging Face files arrive in steps of about 64 MB (40 s apart at 1.5 MB/s, measured through a slowed proxy), and between steps the speed and the time left disappeared. The speed is now the file's average, the time left counts down between steps, the time so far shows until the first step arrives, "may have stalled" waits for several of the gaps it has seen, and the line is wide enough to stay on one line.
   - Hugging Face 的大文件是一段一段到的（每段约 64 MB；用限速代理实测，1.5 MB/s 时每 40 秒一段），两段之间速度和剩余时间会消失。现在速度按整个文件的平均算，剩余时间在两段之间继续倒数，第一段到之前显示已进行的时间，“可能卡住了”的提醒会按已出现过的间隔放宽，这一行也够宽，不再折成两行。
-- **Messages from the program's server in one language**: the server writes its reasons in English and Chinese together, and toasts and error lines showed both ("代理没有保存成功：Enter an HTTP or mixed port ... / 请填 ..."). Classic and V Opus now show only the half for the interface language.
-  - 服务器写的原因是中英两句连在一起，提示和错误信息以前两句都显示（例如“代理没有保存成功：Enter an HTTP or mixed port ... / 请填 ...”）。经典界面和 V Opus 现在只显示界面语言那一句。
+- **Messages from the program's server in one language**: the server writes its reasons in English and Chinese together, and toasts and error lines showed both ("代理没有保存成功：Enter an HTTP or mixed port ... / 请填 ..."). They now show only the half for the interface language.
+  - 服务器写的原因是中英两句连在一起，提示和错误信息以前两句都显示（例如“代理没有保存成功：Enter an HTTP or mixed port ... / 请填 ...”）。现在只显示界面语言那一句。
 - **A SOCKS proxy address says why it is refused**: it now says SOCKS is not supported because pip and some downloads cannot use it, and to enter the HTTP or mixed port instead.
   - 填 SOCKS 代理地址时，现在会说明不支持 SOCKS 的原因（pip 和部分下载用不了），并提示改填 HTTP 或混合端口。
 - **The library menu keeps your last open or close**: a menu reopened while a new library was being set up closed by itself, and pressing Esc while the menu was loading did not stop it from opening.
   - 新建图库时，如果在设置完成前重新打开图库菜单，菜单会自己关掉；菜单还在加载时按 Esc 也拦不住它弹出来。现在都以你最后一次操作为准。
-- **A renamed or moved library folder says so**: the gallery could show "No images yet" with no notice when its folder had been renamed. It now says the files cannot be found, and Find Moved Files opens on the folder most likely to hold them (classic and V Opus).
-  - 图库文件夹被改名或移走时，图库可能只显示“还没有图片”，没有任何提示。现在会说明找不到这些文件，“查找移动的文件”也会直接填好最可能的文件夹（经典界面和 V Opus）。
+- **A renamed or moved library folder says so**: the gallery could show "No images yet" with no notice when its folder had been renamed. It now says the files cannot be found, and Find Moved Files opens on the folder most likely to hold them.
+  - 图库文件夹被改名或移走时，图库可能只显示“还没有图片”，没有任何提示。现在会说明找不到这些文件，“查找移动的文件”也会直接填好最可能的文件夹。
 - **Dark muted red is brown in the colour filter**: dark hair and shadows such as #3C282D no longer count as red.
   - 颜色筛选里，像 #3C282D 这样的深色头发和阴影不再算作红色，而是棕色。
 - **Escape in the preview's tag or caption editor**: it closes the open editor first and never drops what was typed on a single press.
@@ -244,71 +291,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Labels follow a live language switch**: the library name, gallery card badges, generator hints, the entry page, Similar, Prompt Lab, Artist and video status were written by script and kept the old language until a reload.
   - 图库名称、图库卡片标记、生成器提示、首页、相似图、提示词实验室、画师识别和视频状态这些由脚本写入的文字，以前切换语言后要刷新才会变；现在会立即跟着切换。
 
-### Added / 新增
+### Removed / 移除
 
-- **All features can be searched**: the list behind "Find a feature... Ctrl K" has a search field. Type a word to narrow the list, press Enter to open the first match, use the arrow keys to move between rows.
-  - **“所有功能”可以搜索了**：“查找功能… Ctrl K”打开的清单顶部有搜索框。输入一个词就会筛选，按 Enter 打开第一项，方向键在各行之间移动。
-- **Gallery keys**: the arrow keys start at the first picture on screen without a click first; `/` puts the cursor in the search box; in select mode Ctrl+A selects everything in the current filter.
-  - **图库快捷键**：不用先点一下，方向键就会从屏幕上的第一张图开始；`/` 把光标放进搜索框；选择模式下 Ctrl+A 选中当前筛选的全部图片。
-- **Search terms can be removed one by one**: each term on the "Understood as" line under the search box has a small remove button; pressing it takes that term out of the box and searches again.
-  - **搜索条件可以逐个移除**：搜索框下方“解析为”一行的每个条件都有一个小的移除按钮，点一下就把这个条件从搜索框里拿掉并重新搜索。
-- **Favourite and rate from the picture viewer**: a heart beside "Your rating" favourites the open picture; with the viewer open, the keys 1 to 5 set the stars and 0 clears them.
-  - **看图窗口里可以直接收藏和评分**：“我的评分”旁边多了一个爱心按钮，用来收藏当前这张图；看图窗口打开时，按 1 到 5 设置星级，按 0 清除。
-- **Keyboard shortcuts in the Help menu** (Professional look): the shortcuts panel could only be opened with the `?` key; Help now lists it, and the panel includes the newer keys (Ctrl+K, `/`, the arrow keys, Space, Ctrl+A in select mode, 1 to 5 in the viewer).
-  - **“帮助”菜单里有了键盘快捷键**（专业外观）：快捷键面板以前只能按 `?` 打开；现在“帮助”里能直接点开，面板里也补上了新的按键（Ctrl+K、`/`、方向键、空格、选择模式下的 Ctrl+A、看图时的 1 到 5）。
-- **Interface look: Professional (preview)** (classic, Settings › Appearance, off by default): the start of the new look. The owner's brand magenta as the one accent, flat sidebar rows of one height with quiet counts, one corner shape, the picture count as a title (kept on laptop widths), no box around the toolbar or the grid, and only the source tabs the library has pictures from. Settings › Reset also clears it, the Group runs switch and folded collections.
-  - **界面外观：专业（预览）**（经典界面，“设置 › 外观”，默认关闭）：新外观的开始。用作者品牌的洋红作为唯一强调色，侧栏每行一样高、数量安静靠右，统一圆角，图片数量作为标题（笔记本宽度也显示），工具栏和图片区不再有外框，只显示图库里真的有图片的来源。“设置 › 重置”也会清除它、“同批合并”开关和收起的合集。
-- **Professional look: every page, not only the gallery**: Read Image, Organize, Censor, Find Similar, Dataset Maker, Reverse Prompt, Prompt Helper, Style Finder and Style Map now share one frame: the same content width, one panel style, one switch for the tools inside a page, regular-weight buttons and fields of one height. Boxes inside boxes became sections parted by a line, counts at the top of a page are a line of text, labels that ran at 8 to 11 px are 12 px or more, and the yellow "start here" pills and typed arrows are gone. Today's look is unchanged.
-  - **专业外观：不只图库，每一页都换上了**：读图、整理、打码、相似、数据集、反推提示词、提示词助手、画风识别和画风地图现在共用一套版面：同样的内容宽度、同一种面板、同一种页内工具切换、常规字重的按钮、同样高度的输入框。盒子套盒子改成用细线分段，页面顶部的数字改成一行文字，原来只有 8 到 11 px 的标签放大到 12 px 以上，黄色的“从这里开始”标签和打字箭头都拿掉了。默认外观不变。
-- **Organize: the empty preview has its own start button**, and Reverse Prompt says why its button is off ("Drop a picture above first"). In the Professional look a main button that is off is plain grey, Organize lines up with the other pages, the More button is no longer marked together with the page it opened, and the dataset's repeated step strip and Organize's repeated settings line are gone.
-  - **整理：空的预览区有了自己的“预览结果”按钮**，反推提示词会说明按钮为什么不能按（“先在上面放进一张图”）。专业外观下，不能按的主按钮是普通灰色，整理页和其他页面左右对齐，“更多”不再和它打开的页面同时高亮，数据集重复的步骤条和整理页重复的设置摘要也拿掉了。
-- **Professional look: fewer holes and unnamed buttons**: Prompt Helper's statistics put the long tag list on the left and the other cards beside it (cards with nothing to show yet are one line tall); Reverse Prompt shows where the answer will appear; the three Censor detect buttons carry words (Detect this, Detect all, Settings); Organize's main button sits right under its options.
-  - **专业外观：少了空洞和没名字的按钮**：提示词助手的统计把长标签列表放在左边，其他卡片排在旁边（还没内容的卡片只占一行）；反推提示词会标出结果将显示的位置；打码页三个检测按钮有了文字（检测这张、检测全部、设置）；整理页的主按钮紧跟在选项下面。
-- **Professional look: readable small text and controls that line up**: no text under 12 px on the other pages; buttons that are off stay readable; the Censor sliders start at one place; Prompt Helper opens with its name and one sentence on what it is for; the dataset's quick-drop button says how it differs from Remove ("X, Z undoes").
-  - **专业外观：小字看得清，控件对得齐**：其他页面不再有小于 12 px 的文字；不能按的按钮仍然看得清；打码页的滑杆从同一位置开始；提示词助手开头有页名和一句用途说明；数据集的“快速剔除”按钮写明了它和“移除”的区别（“X，Z 撤销”）。
-- **Professional look: the filter dialog**: the counts at the top are one line instead of nine boxes, the accent labels above each panel are gone, and tiles, fields and buttons use the same sizes as the pages.
-  - **专业外观：筛选对话框**：顶部的统计从九个方块改成一行，每个面板上方的强调色小标拿掉了，选项块、输入框和按钮用和页面一样的尺寸。
-- **Professional look: the other dialogs**: Smart Tag, batch export, the tag editor, rename, save options, the VLM settings and the smaller dialogs share one field, one drop-down and one button weight; a chosen option is lifted instead of outlined in the accent.
-  - **专业外观：其他对话框**：智能打标、批量导出、批量标签编辑、重命名、保存选项、VLM 设置和几个小对话框共用同一种输入框、下拉框和按钮字重；选中的选项用抬起的底色表示，不再用强调色描边。
-- **Professional look: Manual Sort shows the picture large**: the picture being sorted was 500 px on any screen; it now uses the room between the four folder cards (about 650 px on a 1080p screen, about 1,000 px at 1440p).
-  - **专业外观：手动排序时图片更大**：以前排序中的图片在任何屏幕上都只有 500 px；现在会用满四个文件夹卡片之间的空间（1080p 约 650 px，1440p 约 1000 px）。
-- **Professional look: the library at a glance**: the sidebar opens with Quick views (All pictures, Not tagged yet, Last 7 days) with live counts. With no picture under the pointer, the details panel shows how many pictures wait for tagging with a button to start, the models, LoRAs and tags used most (a click shows only those pictures) and All statistics, which opens the statistics dialog in the same look. The toolbar's controls share one shape. Its top bar keeps one filled button (Import Images): All features is a "Find a feature" field, the page guide and the language switch share a Help menu, and AI tagging sits with the gallery's tools.
-  - **专业外观：一眼看懂图库**：侧栏最上面是“快速查看”（全部图片、未打标签、最近 7 天），带实时数量。鼠标没有指着图片时，右边的详情栏会显示还有多少张图没打标签和“开始打标签”按钮、最常用的模型、LoRA 和标签（点一下只看这些图），以及“全部统计”，打开同一外观的统计窗口。工具栏的按钮统一成一种样式。顶栏只留一个实心按钮（导入图片）：“全部功能”变成“查找功能”输入框，本页使用指南和切换语言放进“帮助”菜单，AI 打标移到图库工具栏。
-- **Not tagged yet filter** (every look): a quick filter chip and the search word `no:tags` show the pictures no AI tagging run or tag edit has touched, the same pictures AI tagging works on by default.
-  - **“未打标签”筛选**（所有外观）：快捷筛选和搜索词 `no:tags` 会只显示还没跑过 AI 打标、也没改过标签的图，也就是 AI 打标默认会处理的那些图。
-- **Folder counts** (every look): each folder row shows how many pictures it holds with its sub-folders, like collections, and a library scanned from one folder opens on its sub-folders instead of one folded row.
-  - **文件夹数量**（所有外观）：每个文件夹会像合集一样显示它和子文件夹里共有几张图；从一个文件夹扫描进来的图库，会直接展开它的子文件夹，不再只显示一行收起的文件夹。
-- **Network proxy** (Model Center): enter the port of Clash, v2rayN or a similar tool once, and model downloads, package installs and update checks all use it, so TUN mode is not needed. Includes a connection test and one click for the system proxy; local addresses never use it.
-  - **网络代理**（模型中心）：填一次 Clash、v2rayN 等工具的端口，模型下载、装包和检查更新都会走它，不用开 TUN 模式。可以测试连接，也可以一键用系统代理；本机地址不走代理。
-- **One banner when the program's server stops**: instead of failing requests one by one, the page says the server stopped; refreshing a folder and the preview give a reason and a Retry.
-  - 程序的服务器停止时，页面会用一条横幅说明，不再让请求一个个失败；刷新文件夹和预览失败时会说明原因并提供“重试”。
-- **Ctrl K opens the feature catalog anywhere**, with a button in the top bar.
-  - 在任何页面按 Ctrl K 都能打开功能目录，顶栏也有按钮。
-- **Automatic update check** (classic): once a day the program checks for a new version and only reminds; nothing changes until you press update. Off switch in Settings.
-  - **自动检查更新**（经典界面）：每天检查一次新版本，只提醒，不按“更新”就什么都不会变。可以在设置里关闭。
-- **A reload returns to the page you were on** instead of the Gallery.
-  - 刷新页面后会回到原来所在的页面，而不是回到图库。
-- **Group runs** (classic gallery and V Opus, off by default): pictures from one generation run (same prompt, negative prompt, model and size, each made within 10 minutes of the previous) show as one stack with a count; the count opens the run in place and Fold closes it. Selecting a stack selects every picture in it, preview still walks every picture, and batch actions work on pictures as before. Runs are grouped only when the gallery is sorted by date. The switch sits next to the view buttons in classic and in the View menu (and Ctrl K) in V Opus, and is remembered; in V Opus right-clicking a stack acts on the whole run.
-  - **同批合并**（经典图库和 V Opus，默认关闭）：同一批生成的图片（提示词、负面提示词、模型和尺寸相同，每张与上一张相隔不到 10 分钟）显示成一叠，带张数；点张数就地展开，点“收起”合回去。选中一叠就是选中其中每一张，预览照样一张张翻，批量操作照常按图片执行。只有按日期排序时才合并。经典界面的开关在视图按钮旁边，V Opus 在“显示”菜单里（也可以用 Ctrl K），都会记住你的选择；V Opus 里右键一叠就是对整批操作。
-- **Collections inside collections** (classic): a collection can hold other collections, like folders. Make one with a row's More (⋯) > New collection inside, drag a collection onto another to put it inside, drag it onto the strip that appears below the list to bring it back to the top, or use More > Move to…. A parent folds with its arrow and stays folded. Pictures dragged from the gallery onto a collection are added to it (a picked picture brings every pick). A parent shows its own pictures; deleting it moves the collections inside it up one level. A row's buttons now appear over its end on hover, so names are no longer cut short in the narrow sidebar.
-  - **合集里的合集**（经典界面）：合集可以像文件夹一样放其他合集。在一行的“更多”（⋯）里选“在里面新建合集…”，把一个合集拖到另一个上就放进去，拖到列表下方出现的那一条就移回最上层，也可以用“更多”>“移到…”。上层合集可以点箭头收起，会记住。从图库把图片拖到合集上就会加入（拖已选中的图片会带上所有选中的）。上层合集只显示它自己的图片；删掉它时，里面的合集会往上移一层。每行的按钮改成鼠标移上去时盖在行尾，窄侧栏里的名字不再被截断。
-
-### Changed / 变更
-
-- **One icon style** (classic): the right-click menu, the feature catalog (Ctrl K), the help guide and the shortcut sheet used multi-colour emoji next to the line icons of the top bar; they all use the same line icons now. The sparkle icon that marked "AI" buttons is gone: each button shows what it does (tag, star, brush, target, search). Colour emoji in front of labels and messages (model, size, "done", tour, categories) are gone too; collection rows use the line folder.
-  - **统一图标风格**（经典界面）：右键菜单、功能目录（Ctrl K）、帮助引导和快捷键表以前用彩色表情图标，和顶栏的线条图标混在一起；现在全部用同一套线条图标。标记“AI”按钮的闪光图标已去掉，每个按钮改用说明它作用的图标（标签、星、画笔、靶心、搜索）。标签和提示文字前面的彩色表情（模型、尺寸、“完成”、引导、分类）也已去掉；合集行改用线条文件夹图标。
-- **V Opus has one logo, in the owner's brand colours**: the browser tab icon was a purple-to-cyan gradient grid, a different mark from the top bar's. Both are now one mark: a frame circled by the pick marker on a magenta tile (white, black and magenta from the owner's brand). The "Vopus" badge beside the name is gone (it is the build's code name); the version is in Settings › About.
-  - **V Opus 只用一个标志，用作者的品牌色**：浏览器标签页上的图标以前是紫到青的渐变方格，和顶栏的标志不一样；现在两处统一成同一个：洋红底块上，一格画面被挑选记号圈起来（用作者品牌的白、黑、洋红）。名字旁边的“Vopus”标签已去掉（那是内部代号）；版本号在“设置 › 关于”里。
-- **Search at 100,000 pictures**: a text index makes the search box and prompt filters about ten times faster on large libraries (prompt search 1.2 s to about 0.1 s), with the same results. A word nearly every picture contains, such as `1girl`, still takes about 0.2 s to count exactly.
-  - **10 万张图的搜索**：新增的文本索引让搜索框和提示词筛选在大图库上快了约十倍（提示词搜索从 1.2 秒降到约 0.1 秒），结果完全相同。像 `1girl` 这种几乎每张图都有的词，精确计数仍要约 0.2 秒。
-- **Model Center puts the model cards first**: download source, model folders and the proxy fold into one line that says their state, and it opens by itself when something there needs a look.
-  - **模型中心先显示模型卡片**：下载源、模型文件夹和代理收进一行，直接写明状态；其中有需要处理的问题时会自动展开。
-- **The picture preview and the Reader show each fact once**: duplicated fields are folded.
-  - 图片预览和读图里每项信息只显示一次，重复的字段折叠起来。
-- **A chain of single-child folders is one row** in the gallery's folder tree.
-  - 图库文件夹树里，只有一个子文件夹的连续层级合并成一行。
-- **Neutral silver accent**: the interface accent is a neutral silver in classic and V Opus, so colour on screen comes from the pictures and data. Data colours are unchanged.
-  - **中性银色强调色**：经典界面和 V Opus 的强调色改为中性银色，屏幕上的颜色只来自图片和数据。数据颜色不变。
+- **One interface: V Opus and the trial interface are retired**: the program had three interfaces over one library, and only the classic one got new features (none of this version's additions reached the other two). On the owner's decision the program now has one interface. The Interface row in Settings and the V Opus entry in the function catalog are gone; the old addresses `/vopus/`, `/v4/` and `/next/` open the program. Your library, settings and files are not touched. A source install no longer needs Node.js to start, and packages are smaller.
+  - **只保留一套界面：V Opus 和试验界面已停用**：以前程序在同一个图库上有三套界面，而新功能只进了经典界面（这个版本新增的功能在另外两套里一个也没有）。按所有者的决定，程序现在只有一套界面。设置里的“界面”一项和功能目录里的 V Opus 入口已移除；旧地址 `/vopus/`、`/v4/`、`/next/` 会直接打开程序。图库、设置和文件都不受影响。从源码运行不再需要 Node.js，安装包也更小。
 
 ## [3.10.2] - 2026-10-30
 

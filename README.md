@@ -62,6 +62,17 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.11.0
+
+- **新图片与留 / 汰**：首页的“新图片”只看上次挑选之后生成的图；留 / 汰结束后可以直接把保留的移走、把剔除的送进回收站，上一次的结果会留着。
+- **文件夹**：侧栏里可以给文件夹重命名（图片的标签、评分都保留，可撤销）、把选中的图移到新文件夹、把图拖到文件夹上；“最近的移动”里每一次移动都能撤销。
+- **找图**：搜索读得懂中文和日文标签名；任何词语搜索旁边都能“改用含义搜索”；可以按姿势或镜头角度找图。
+- **重用**：看图窗口写出和上一张相比改了什么；两张图并排比较；图片备注；参考图浮窗。
+- **内置助手**：用一句话让它搜索、显示、选图；改动数据前先确认，不会移动或删除文件。
+- **带入 Eagle 资源库**（尚未在真实的 Eagle 资源库上试过）、合集里的合集、同批合并、漫游。
+- **大图库更快**：10 万张图时搜索快约十倍，空闲内存从 880 MB 降到 147 MB。
+- **只保留一套界面**：V Opus 和试验界面已停用，旧地址会直接打开程序。
+
 ### v3.10.2
 
 - **桌面程序更顺手**：桌面程序里能新建和重命名图库；所有询问都改用程序自己的对话框；更新后第一次打开会说明改了什么；设置里有了“关于”（版本、检查更新、复制诊断信息）。
@@ -708,6 +719,17 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **No hard stops**: caps and export gates became warnings with a choice.
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
+
+### v3.11.0
+
+- **New Pictures and Keep / Reject**: New Pictures on Home shows only what was made since your last cull; when a Keep / Reject session ends you can move the kept and send the rejected to the recycle bin from one line, and the last result is remembered.
+- **Folders**: rename a folder from the sidebar (its pictures keep their tags and ratings, with Undo), move the selection into a new folder, drag pictures onto a folder; Recent moves can undo each move.
+- **Finding**: the search reads Chinese and Japanese tag names; "Search by meaning instead" sits beside every word search; find by pose or camera angle.
+- **Reuse**: the viewer says what changed from the picture before; compare two pictures; notes on pictures; a floating reference window.
+- **A built-in assistant**: ask it to search, show and select; it asks before it changes data and never moves or deletes a file.
+- **Bring an Eagle library in** (not yet tried on a real Eagle library), collections inside collections, Group runs, Wander.
+- **Faster in a large library**: at 100,000 pictures the search is about ten times faster, and idle memory went from 880 MB to 147 MB.
+- **One interface**: V Opus and the trial interface are retired; the old addresses open the program.
 
 ### v3.10.2
 
