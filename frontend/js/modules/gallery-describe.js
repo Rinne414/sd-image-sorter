@@ -80,9 +80,53 @@
         const shown = await global.GalleryPin?.open?.(ids, { source: 'described' });
         if (!shown) restoreSort(api);
         if (shown) {
-            api.showToast?.(tr('describe.shown', 'The {n} pictures closest in meaning to "{words}". The closest come first.', { n: ids.length, words: query }), 'info');
+            const missing = await notIndexed(api);
+            if (missing > 0) {
+                // The search only looked at pictures in the similarity index: say how many it did not see.
+                api.showToast?.(
+                    tr('describe.shownPartly', 'The {n} pictures closest in meaning to "{words}". Not looked at: {missing} pictures that are not in the similarity index yet.', { n: ids.length, words: query, missing }),
+                    'info',
+                    {
+                        duration: 12000,
+                        actionLabel: tr('describe.indexNow', 'Index them now'),
+                        onAction: () => indexTheRest(api),
+                    },
+                );
+            } else {
+                api.showToast?.(tr('describe.shown', 'The {n} pictures closest in meaning to "{words}". The closest come first.', { n: ids.length, words: query }), 'info');
+            }
         }
         return Boolean(shown);
+    }
+
+    /** How many readable pictures of this library the similarity index does not hold (0 when that cannot be read). */
+    async function notIndexed(api) {
+        try {
+            const stats = await api.API.get('/api/similarity/stats');
+            return Math.max(0, Number(stats?.pending_count) || 0);
+        } catch (_error) {
+            return 0;
+        }
+    }
+
+    /** Start indexing every picture that has no entry yet; it runs in the background. */
+    async function indexTheRest(api) {
+        try {
+            const started = await api.API.post('/api/similarity/embed', {});
+            api.showToast?.(
+                started?.status === 'already_running'
+                    ? tr('describe.indexRunning', 'The index is already being built. Search again when it is done.')
+                    : tr('describe.indexStarted', 'Indexing started in the background. Search again when it is done; the Similar page shows how far it is.'),
+                'info',
+                {
+                    duration: 10000,
+                    actionLabel: tr('describe.openSimilar', 'Open the Similar page'),
+                    onAction: () => api.switchView?.('similar'),
+                },
+            );
+        } catch (error) {
+            api.showToast?.(error?.message || String(error), 'error');
+        }
     }
 
     /** The sort the Gallery had before the described set took it over. */

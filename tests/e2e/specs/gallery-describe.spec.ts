@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test'
 const MOCK_IMAGE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#789"/></svg>'
 const library = [61, 62, 63].map((id) => ({ id, filename: `described-${id}.png`, path: `/mock/described-${id}.png`, prompt: '1girl, book, tree', generator: 'nai' }))
 
-async function mockGallery(page: Page, answer: { status?: number; body: Record<string, unknown> }) {
+async function mockGallery(page: Page, answer: { status?: number; body: Record<string, unknown> }, notIndexed = 0) {
   const asked: Array<Record<string, unknown>> = []
   const pinned: number[][] = []
   const sorts: string[] = []
@@ -38,7 +38,16 @@ async function mockGallery(page: Page, answer: { status?: number; body: Record<s
   await page.route('**/api/collections/pinned/9400', async (route) => {
     await route.fulfill({ json: { exists: true, count: 2 } })
   })
-  return { asked: () => [...asked], pinned: () => [...pinned], sorts: () => [...sorts] }
+  // How much of the library the similarity index holds, and a request to index the rest.
+  const indexing: string[] = []
+  await page.route('**/api/similarity/stats', async (route) => {
+    await route.fulfill({ json: { total_images: 3 + notIndexed, embedded_images: 3, pending_count: notIndexed } })
+  })
+  await page.route('**/api/similarity/embed', async (route) => {
+    indexing.push(route.request().method())
+    await route.fulfill({ json: { status: 'started', message: 'Embedding started in background' } })
+  })
+  return { asked: () => [...asked], pinned: () => [...pinned], sorts: () => [...sorts], indexing: () => [...indexing] }
 }
 
 async function searchFor(page: Page, words: string) {
@@ -73,7 +82,11 @@ test('words that match no prompt can be searched by meaning, and the closest pic
   await expect(page.locator('#gallery-pin-banner-title')).toHaveText('2 closest to your description')
   // The words left the search box (as text they found nothing and would hide the set).
   await expect(page.locator('#gallery-search-input')).toHaveValue('')
-  await expect(page.locator('.toast').filter({ hasText: 'closest in meaning to "girl reading under a tree"' })).toBeVisible()
+  const shown = page.locator('.toast').filter({ hasText: 'closest in meaning to "girl reading under a tree"' })
+  await expect(shown).toBeVisible()
+  // Every picture is in the index: nothing was left out, and nothing more is offered.
+  await expect(shown).toContainText('The closest come first.')
+  await expect(shown.locator('button', { hasText: 'Index them now' })).toHaveCount(0)
   await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(3)
 
   // The set is asked for in its own order (closest first), and the sort box says so.
@@ -174,4 +187,19 @@ test('the link beside the read-as chips searches by meaning even when the words 
   await expect(none).toBeVisible()
   await none.locator('button', { hasText: 'Open the Similar page' }).click()
   await expect(page.locator('#view-similar')).toBeVisible()
+})
+
+test('when part of the library is not in the index, the answer says how many pictures it did not look at and offers to index them', async ({ page }) => {
+  const gallery = await mockGallery(page, {
+    body: { query: 'girl reading under a tree', results: [{ id: 62, filename: 'described-62.png', similarity: 0.31 }], count: 1, total: 1, has_more: false },
+  }, 240)
+  await searchFor(page, 'girl reading under a tree')
+  await page.locator('#empty-state-describe-btn').click()
+
+  const partly = page.locator('.toast').filter({ hasText: 'closest in meaning to "girl reading under a tree"' })
+  await expect(partly).toContainText('Not looked at: 240 pictures that are not in the similarity index yet.')
+  await partly.locator('button', { hasText: 'Index them now' }).click()
+
+  await expect.poll(() => gallery.indexing()).toEqual(['POST'])
+  await expect(page.locator('.toast').filter({ hasText: 'Indexing started in the background.' })).toBeVisible()
 })

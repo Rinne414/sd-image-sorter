@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Search by meaning is offered whenever you search with words**: it used to appear only when the text search found nothing. A link now sits beside the "Understood as" chips; when the similarity index is empty, the message has a button to the Similar page.
   - **只要用词语搜索，就能改用含义搜索**：以前只有文字搜索一张都没找到时才出现。现在“解析为”那一行后面有一个链接；相似索引为空时，提示里带有去“相似”页的按钮。
+- **Search by meaning says what it did not look at**: the search only covers pictures in the similarity index. When some are not in it yet, the answer says how many and offers to index them in the background.
+  - **含义搜索会说明没看到哪些图**：含义搜索只覆盖相似索引里的图片。有图片还没进索引时，结果会写出有多少张，并可以一键在后台建立索引。
 - **New Pictures says why there may be nothing new**: when a folder is not watched, the message says that folders are only checked now and then and leads to the folder list where "Watch for new pictures" is switched on.
   - **“新图片”会说明为什么可能没有新图**：有文件夹没开自动收入时，提示会说明文件夹只是隔一段时间检查一次，并带你去文件夹列表打开“自动收入新图”。
 - **Random order is faster in a large library**: with 100,000 pictures the first shuffled page took about 1 second and a page half-way down about 9 seconds; they now take about 0.35 and 0.4 seconds. The order itself is unchanged.
