@@ -523,7 +523,14 @@ def test_extension_folders_differ_only_in_the_manifest(tmp_path):
     assert chrome_manifest["manifest_version"] == 3
     assert chrome_manifest["background"] == {"service_worker": "background.js"}
     assert firefox_manifest["background"]["scripts"][-1] == "background.js"
-    assert firefox_manifest["browser_specific_settings"]["gecko"]["id"]
+    gecko = firefox_manifest["browser_specific_settings"]["gecko"]
+    assert gecko["id"]
+    # addons.mozilla.org requires the declaration; Firefox reads it from 140.
+    assert gecko["data_collection_permissions"] == {
+        "required": ["websiteContent", "browsingActivity"]
+    }
+    assert int(gecko["strict_min_version"].split(".")[0]) >= 140
+    assert "browser_specific_settings" not in chrome_manifest
     # Firefox bug 2052000: a host pattern with a port matches nothing.
     for manifest in (chrome_manifest, firefox_manifest):
         assert "http://127.0.0.1/*" in manifest["host_permissions"]

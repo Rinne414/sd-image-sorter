@@ -22,7 +22,12 @@ from app_info import APP_VERSION
 
 TARGETS = ("chrome", "firefox")
 FIREFOX_ADDON_ID = "sd-image-sorter@rinne414.github.io"
-FIREFOX_MIN_VERSION = "128.0"
+# Firefox 140 is the first to read data_collection_permissions, which
+# addons.mozilla.org requires of every new extension (since 2025-11-03).
+FIREFOX_MIN_VERSION = "140.0"
+# What leaves the browser when the user saves a picture: the picture (website
+# content) and the address of its page, handed to the program on this computer.
+FIREFOX_DATA_COLLECTION = {"required": ["websiteContent", "browsingActivity"]}
 
 
 def source_dir() -> Path:
@@ -52,7 +57,11 @@ def manifest_for(target: str) -> Dict:
         # An event page, not a worker: it loads the shared helper itself.
         manifest["background"] = {"scripts": ["program.js", "background.js"]}
         manifest["browser_specific_settings"] = {
-            "gecko": {"id": FIREFOX_ADDON_ID, "strict_min_version": FIREFOX_MIN_VERSION}
+            "gecko": {
+                "id": FIREFOX_ADDON_ID,
+                "strict_min_version": FIREFOX_MIN_VERSION,
+                "data_collection_permissions": FIREFOX_DATA_COLLECTION,
+            }
         }
     return manifest
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed / 变更
+
+- **Browser extension, ready for the stores**: the options page says what is handed over when you save a picture (the picture and the address of its page, to the program on this computer only) and links to a privacy policy. The Firefox build declares the same to Firefox and needs Firefox 140 or later (it was 128). The policy and the store listing text are in `docs/`.
+  - **浏览器扩展为上架做好准备**：扩展的设置页写明保存图片时会交出什么（图片和它所在网页的地址，只交给本机的程序），并附隐私政策链接。Firefox 版本向 Firefox 作了同样的声明，需要 Firefox 140 或更新（原来是 128）。隐私政策和商店说明文字在 `docs/` 里。
+
 ## [3.11.0] - 2026-11-12
 
 ### Added / 新增

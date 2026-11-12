@@ -131,6 +131,12 @@
   "pairLead": {
     "message": "The program asks \"Allow this browser extension?\" in its own window. Nothing can be saved until you allow it there."
   },
+  "privacyLead": {
+    "message": "When you save a picture, the picture and the address of its page are handed to SD Image Sorter on this computer. What you save is sent to no other server, and there are no statistics."
+  },
+  "privacyLink": {
+    "message": "Privacy policy"
+  },
   "pairButton": {
     "message": "Pair with the program"
   },

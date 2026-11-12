@@ -131,6 +131,12 @@
   "pairLead": {
     "message": "程序会在自己的窗口里询问“允许这个浏览器扩展吗？”。在那里允许之前，什么都不能保存。"
   },
+  "privacyLead": {
+    "message": "保存图片时，这张图片和它所在网页的地址会交给本机上的 SD Image Sorter。你保存的内容不会发给任何其他服务器，也没有统计。"
+  },
+  "privacyLink": {
+    "message": "隐私政策"
+  },
   "pairButton": {
     "message": "与程序配对"
   },
