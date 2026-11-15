@@ -2919,7 +2919,13 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#dataset-common-tags')).toBeInViewport()
     await expect(page.locator('#btn-dataset-smart-tag')).toBeInViewport()
     await expect(page.locator('.dataset-review-card .dataset-card-title')).toBeInViewport()
-    await expect(page.locator('#dataset-step-cleanup > summary')).toBeInViewport()
+    // With Segoe UI the cleanup step's title shows without scrolling. The wider
+    // DejaVu Sans (Linux) wraps five labels and puts it about 15 px below the
+    // window; the panel scrolls, so it must come into view there, unclipped.
+    const cleanup = page.locator('#dataset-step-cleanup > summary')
+    await cleanup.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+    await expect(cleanup).toBeInViewport({ ratio: 1 })
+    expect(await page.evaluate(() => document.documentElement.scrollTop)).toBe(0)
 
     const quickFillFit = await page.locator('#dataset-step-setup > .dataset-quickfill-row').evaluate((row) => {
       const buttons = Array.from(row.querySelectorAll('button'))
