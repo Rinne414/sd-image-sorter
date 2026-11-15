@@ -7,11 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed / 变更
-
-- **Browser extension, ready for the stores**: the options page says what is handed over when you save a picture (the picture and the address of its page, to the program on this computer only) and links to a privacy policy. The Firefox build declares the same to Firefox and needs Firefox 140 or later (it was 128). The policy and the store listing text are in `docs/`.
-  - **浏览器扩展为上架做好准备**：扩展的设置页写明保存图片时会交出什么（图片和它所在网页的地址，只交给本机的程序），并附隐私政策链接。Firefox 版本向 Firefox 作了同样的声明，需要 Firefox 140 或更新（原来是 128）。隐私政策和商店说明文字在 `docs/` 里。
-
 ## [3.11.0] - 2026-11-12
 
 ### Added / 新增
@@ -122,6 +117,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed / 变更
 
+- **Browser extension, ready for the stores**: the options page says what is handed over when you save a picture (the picture and the address of its page, to the program on this computer only) and links to a privacy policy. The Firefox build declares the same to Firefox and needs Firefox 140 or later (it was 128). The policy and the store listing text are in `docs/`.
+  - **浏览器扩展为上架做好准备**：扩展的设置页写明保存图片时会交出什么（图片和它所在网页的地址，只交给本机的程序），并附隐私政策链接。Firefox 版本向 Firefox 作了同样的声明，需要 Firefox 140 或更新（原来是 128）。隐私政策和商店说明文字在 `docs/` 里。
+
 - **Search by meaning is offered whenever you search with words**: it used to appear only when the text search found nothing. A link now sits beside the "Understood as" chips; when the similarity index is empty, the message has a button to the Similar page.
   - **只要用词语搜索，就能改用含义搜索**：以前只有文字搜索一张都没找到时才出现。现在“解析为”那一行后面有一个链接；相似索引为空时，提示里带有去“相似”页的按钮。
 - **Search by meaning says what it did not look at**: the search only covers pictures in the similarity index. When some are not in it yet, the answer says how many and offers to index them in the background.
@@ -144,6 +142,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **中性银色强调色**：强调色改为中性银色，屏幕上的颜色只来自图片和数据。数据颜色不变。
 
 ### Fixed / 修复
+
+- **Linux and slower computers**: on Linux (wider DejaVu fonts) the Gallery's four quick filters fit at 1366 px with videos in the library, and in the Professional look B the More button no longer shifts when the chosen page changes. On a slow computer a fast flick through the Gallery stays a flick: it no longer loads every picture it passes.
+  - **Linux 和较慢的电脑**：在 Linux 上（DejaVu 字体更宽），图库里有视频时四个快速筛选在 1366 宽也放得下；“专业”外观 B 里换页时“更多”按钮不再挪动。在较慢的电脑上快速划过图库仍算快速划过，不会再把划过的每张图都加载一遍。
 
 - **Desktop program: dragging pictures onto a folder or a collection in the sidebar (not yet tried in the packaged program)**: in the desktop program a card drag is a drag of the real files, which the sidebar did not recognise, so dropping on a folder or collection did nothing. The sidebar now knows which pictures such a drag stands for. Checked in a browser with the desktop program's side imitated; a real drag in the packaged program has not been run.
   - **桌面程序：把图片拖到侧栏的文件夹或合集上（尚未在打包后的桌面程序里试过）**：在桌面程序里，拖动卡片拖的是真实文件，侧栏认不出来，所以拖到文件夹或合集上没有反应。现在侧栏知道这样的拖动代表哪些图片。已在浏览器里模拟桌面程序一侧验证；还没有在打包后的桌面程序里真正拖过。

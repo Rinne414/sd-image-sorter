@@ -32,6 +32,8 @@ New Pictures, folder rename, meaning search, Eagle import, assistant; one interf
   - 模型中心里填一次 Clash、v2rayN 之类工具的端口，模型下载、依赖安装和检查更新都会走它。程序每天检查一次新版本，只提醒（设置里可以关）。Ctrl K 在任何地方都能打开全部功能的列表；刷新后回到原来的页面。
 - **Professional look (preview) / “专业”外观（预览）**: Settings › Appearance has a second look, off by default: one accent colour, flat sidebar rows, one corner shape, the picture count as a title. Many pages were also gone over for cut-off text, unnamed buttons and laptop heights.
   - “设置 › 外观”里多了第二种外观，默认关闭：一个强调色、扁平的侧栏行、统一的圆角、把图片数量当标题。很多页面也一并检查过：被截断的文字、没有名字的按钮、笔记本屏幕高度下的排版。
+- **Linux, slower computers and the browser extension / Linux、较慢的电脑和浏览器扩展**: on Linux the Gallery's quick filters fit at 1366 px with videos, and More stays put in the Professional look B; on a slow computer a fast flick no longer loads every picture it passes. The browser extension says what it hands over (the picture and its page address, to this computer only) and links to a privacy policy.
+  - 在 Linux 上，图库有视频时快速筛选在 1366 宽也放得下，“专业”外观 B 里“更多”不再挪动；在较慢的电脑上快速划过图库不会再加载划过的每张图。浏览器扩展写明它交出什么（图片和所在网页的地址，只交给本机），并附隐私政策链接。
 - **One interface / 只保留一套界面**: V Opus and the trial interface are retired. The program had three interfaces over one library and only one of them kept getting new features. The Interface row in Settings is gone; the old addresses open the program.
   - V Opus 和试验界面已停用。以前程序在同一个图库上有三套界面，而新功能只进了其中一套。设置里的“界面”一项已移除；旧地址会直接打开程序。
 
