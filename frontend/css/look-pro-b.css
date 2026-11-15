@@ -46,6 +46,20 @@ html[data-look-variant="b"] .nav-bar .nav-tab.active {
     font-weight: 600;
 }
 
+/* Every tab name reserves the width of its chosen (600) state, so choosing a
+   tab never widens it and More keeps its place. The copy comes from
+   data-label (nav-missions.js) and takes no height. */
+html[data-look-variant="b"] .nav-bar .nav-tab .tab-text::after {
+    content: attr(data-label);
+    display: block;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    font-weight: 600;
+    pointer-events: none;
+    user-select: none;
+}
+
 html[data-look-variant="b"] .pro-inspector-name {
     font-size: 17px;
     font-weight: 700;

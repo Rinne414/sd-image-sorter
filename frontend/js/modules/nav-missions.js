@@ -328,6 +328,13 @@
         });
     }
 
+    function mirrorTabLabels(tabRow) {
+        tabRow.querySelectorAll('.nav-tab .tab-text').forEach((text) => {
+            const label = text.textContent.trim();
+            if (text.dataset.label !== label) text.dataset.label = label;
+        });
+    }
+
     function apply() {
         const missionKey = activeMission();
         if (errandPrimaryId && currentView() !== 'gallery') errandPrimaryId = null;
@@ -568,6 +575,13 @@
                 seenActive = active;
                 window.requestAnimationFrame(apply);
             }).observe(tabRow, { subtree: true, attributes: true, attributeFilter: ['class'] });
+            // Each tab name is copied to data-label so CSS can reserve the
+            // width of its bolder chosen state (look B): a tab keeps its width
+            // when chosen, and More keeps its place (fonts without a 500
+            // weight, such as DejaVu on Linux, moved it by 6 px).
+            mirrorTabLabels(tabRow);
+            new MutationObserver(() => mirrorTabLabels(tabRow))
+                .observe(tabRow, { subtree: true, childList: true, characterData: true });
         }
 
         // The event is dispatched on document and does not bubble to window.

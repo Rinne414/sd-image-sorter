@@ -13925,6 +13925,16 @@ html:not([data-look-variant="b"]) #pro-library-views {
     }
 }
 
+/* With the wider DejaVu Sans (Linux) the four chips were still 24px short in
+   a 1010px row at 1366: the search box gives up 30px more (its placeholder
+   still shows; longer typed text scrolls inside it). */
+@container gallery-search (max-width: 1020px) {
+    .gallery-search-row.has-media-toggle .gallery-search-box {
+        flex-basis: 120px;
+        min-width: 120px;
+    }
+}
+
 /* The remove button on a "read as" search chip (gallery-toolbar.js addChipRemove). */
 .gsq-chip:has(.gsq-chip-remove) {
     display: inline-flex;

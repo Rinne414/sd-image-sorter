@@ -89,7 +89,9 @@ test.describe('Nav — customizable tabs and mission mode', () => {
 test('customize offers every view, and the bar follows the order set with the arrows', async ({ page }) => {
   // Owner 2026-09-30: "we already make it customizable, why limit users?"
   // The checklist used to offer 5 of the 8 views and no order.
-  await page.setViewportSize({ width: 1920, height: 1080 })
+  // 2560 wide: at 1920 a seventh tab fits only with Segoe UI; with the wider
+  // DejaVu Sans (Linux) the width ladder rightly tucks Style Finder into More.
+  await page.setViewportSize({ width: 2560, height: 1440 })
   await page.goto('/')
   await expect(page.locator('#view-gallery')).toBeVisible()
   const barOrder = () => page.evaluate(() =>
