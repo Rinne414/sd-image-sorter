@@ -143,7 +143,14 @@ async function mockLargeGallery(page: Page, count: number, thumbnailDelayMs: num
   })
 }
 
-test('a fast flick asks for few thumbnails, cancels the ones it passed, and fills the screen when it stops', async ({ page }) => {
+// 6x: a slow machine (GitHub's runners), where frames come further apart than
+// the gate's settle time while the flick goes on (CI run 43181606281).
+for (const cpuSlowdown of [1, 6]) {
+test(`a fast flick asks for few thumbnails, cancels the ones it passed, and fills the screen when it stops (cpu x${cpuSlowdown})`, async ({ page }) => {
+  if (cpuSlowdown > 1) {
+    const cdp = await page.context().newCDPSession(page)
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuSlowdown })
+  }
   await page.addInitScript(() => {
     localStorage.setItem('sd-image-sorter-lang', 'en')
     localStorage.setItem('aurora-entry-skip', '1')
@@ -202,3 +209,4 @@ test('a fast flick asks for few thumbnails, cancels the ones it passed, and fill
   // their thumbnails were still on the way: those requests were cancelled.
   expect(cancelled).toBeGreaterThan(0)
 })
+}
