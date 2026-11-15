@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import types
 import urllib.request
 from pathlib import Path
 
@@ -173,7 +175,10 @@ def test_the_system_proxy_is_offered_when_there_is_one(monkeypatch):
         lambda: {"https": "127.0.0.1:7897"},
         raising=False,
     )
-    monkeypatch.setattr(network_proxy.sys, "platform", "win32")
+    # Only network_proxy sees Windows: patching the shared sys module would make
+    # ssl read the Windows certificate store on Linux and macOS.
+    fake_sys = types.SimpleNamespace(platform="win32", modules=sys.modules)
+    monkeypatch.setattr(network_proxy, "sys", fake_sys)
     assert network_proxy.proxy_status() == {
         "proxy": "",
         "system_proxy": "http://127.0.0.1:7897",
