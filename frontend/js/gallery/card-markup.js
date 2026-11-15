@@ -149,6 +149,7 @@ Object.assign(window.Gallery, {
         this._thumbGate = window.GalleryThumbGate.create({
             getScrollTop: () => (isViewport ? window.scrollY : scrollContainer.scrollTop),
             load: (item) => this._loadImage(item),
+            requestFrame: (fn) => window.requestAnimationFrame(fn),
         });
         this._thumbGateContainer = scrollContainer;
         this._thumbGateTarget = isViewport ? window : scrollContainer;

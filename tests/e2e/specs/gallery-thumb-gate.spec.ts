@@ -155,7 +155,8 @@ test(`a fast flick asks for few thumbnails, cancels the ones it passed, and fill
     localStorage.setItem('sd-image-sorter-lang', 'en')
     localStorage.setItem('aurora-entry-skip', '1')
   })
-  await mockLargeGallery(page, 1200, 400)
+  // Each picture takes 400 ms on a normal machine, as long relative to the flick on a slower one.
+  await mockLargeGallery(page, 1200, 400 * cpuSlowdown)
   await page.goto('/')
   await expect(page.locator('#gallery-grid .gallery-item[data-id]').first()).toBeVisible()
   await expect.poll(() => page.evaluate(() => Boolean((window as any).Gallery.useVirtualScroll))).toBe(true)

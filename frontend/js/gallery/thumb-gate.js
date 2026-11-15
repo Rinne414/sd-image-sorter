@@ -19,6 +19,9 @@
     const FAST_PX_PER_MS = 2.5;
     // The gallery counts as settled after this long without a scroll event.
     const SETTLE_MS = 120;
+    // Longer than any busy frame: a gap this long is a pause even if the
+    // settle timer has not run yet.
+    const BUSY_FRAME_MAX_MS = 1000;
     // A flick stays a flick until it has moved slowly for this long: smooth
     // scrolling eases every wheel step in and out, and those slow frames in the
     // middle of a flick must not let cards through.
@@ -32,6 +35,7 @@
      *   setTimer?: (fn: () => void, ms: number) => unknown,
      *   clearTimer?: (id: unknown) => void,
      *   onFlush?: (reason: string, count: number) => void,
+     *   requestFrame?: (fn: () => void) => unknown,
      * }} options
      */
     function create(options) {
@@ -42,6 +46,11 @@
         const clearTimer = options.clearTimer || ((id) => clearTimeout(id));
         // Told why deferred cards were let through: 'settled' or 'slowed' (tests, measurements).
         const onFlush = options.onFlush || null;
+        // The page learns the new scroll position only when a frame is drawn.
+        // On a busy machine frames are further apart than SETTLE_MS, so the
+        // settle check waits for the next frame (the gallery passes
+        // requestAnimationFrame; without it the check runs at once).
+        const requestFrame = options.requestFrame || ((fn) => fn());
 
         let lastTop = null;
         let lastAt = 0;
@@ -76,12 +85,17 @@
         // behind a busy frame (gaps of 166 ms were seen mid-flick): the
         // position tells whether the gallery really stopped.
         function settle() {
-            timer = null;
-            if (lastTop !== null && Math.abs(getScrollTop() - lastTop) > 1) {
-                timer = setTimer(settle, SETTLE_MS);
-                return;
-            }
-            flush('settled');
+            const settleTimer = timer;
+            requestFrame(() => {
+                // A scroll event in the meantime set a new timer: still moving.
+                if (timer !== settleTimer) return;
+                timer = null;
+                if (lastTop !== null && Math.abs(getScrollTop() - lastTop) > 1) {
+                    timer = setTimer(settle, SETTLE_MS);
+                    return;
+                }
+                flush('settled');
+            });
         }
 
         return {
@@ -92,8 +106,12 @@
                 // The first event after a pause starts afresh: a single jump (a
                 // click on the scrollbar, End, a restored position) loads at
                 // once, while dragging the scrollbar thumb sends a stream of
-                // events and counts as a flick.
-                if (lastTop !== null && at > lastAt && at - lastAt <= SETTLE_MS) {
+                // events and counts as a flick. A pause means the settle timer
+                // ran: on a busy machine frames can be further apart than
+                // SETTLE_MS while the flick goes on (CI runners, 2026-11-16).
+                const gap = at - lastAt;
+                const isPaused = gap > BUSY_FRAME_MAX_MS || (timer === null && gap > SETTLE_MS);
+                if (lastTop !== null && at > lastAt && !isPaused) {
                     const speed = Math.abs(top - lastTop) / (at - lastAt);
                     if (speed > FAST_PX_PER_MS) {
                         isFast = true;
