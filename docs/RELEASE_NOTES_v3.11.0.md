@@ -77,11 +77,11 @@ Local Windows gate on the first release commit: backend 9,787 passed (16 skipped
 
 | Asset | SHA-256 |
 |---|---|
-| `sd-image-sorter-v3.11.0-windows-portable.zip` | `fd8132586e1442a7b4815b52c8a15cded4a8629d65060012e6bd2c2eaa8aa989` |
-| `sd-image-sorter-v3.11.0-app-patch.zip` | `702349ccec84e9ca4c571e1ad8a89fa19574faa8d42f18e8087a35429bd7715b` |
-| `sd-image-sorter-v3.11.0-linux.tar.gz` | `4842c39b98d983951c3ef215a9119334a01bea6774e16c509e9375df6ca85b05` |
-| `sd-image-sorter-v3.11.0-linux-portable-x86_64.tar.gz` | `56eac4018eac7ca9e49249b06215cc04a956726b6187b49e51f3e374a6da76a8` |
-| `sd-image-sorter-v3.11.0-linux-portable-aarch64.tar.gz` | `4516ecd1fb69b0eb32f26b3c8742d961ad1ea9a7a6ffa5f6ffe1766af7ee0c63` |
-| `sd-image-sorter-v3.11.0-release-manifest.json` | `522d157abb51f58debe31306f4890118fc1b3d852309eb4f24a37bed0ec9d3e5` |
+| `sd-image-sorter-v3.11.0-windows-portable.zip` | `121da2ecc6bf9f881c705616a8a2327a91b4f1b55cb6590152bde40b86ddf8cc` |
+| `sd-image-sorter-v3.11.0-app-patch.zip` | `f61cc27f9d4dd8760ba8274e5f4a2319a7432422c5a0d7b54f1d2a71575468d8` |
+| `sd-image-sorter-v3.11.0-linux.tar.gz` | `ee1f7fdcdafe2d0f13b15d2e23c9fbddd3d75d223781f0be8fbc833135b8f405` |
+| `sd-image-sorter-v3.11.0-linux-portable-x86_64.tar.gz` | `53be6603a5168fa9ba434263b805c46c6d302af51c0a7e9304cf5a1c3f00c18b` |
+| `sd-image-sorter-v3.11.0-linux-portable-aarch64.tar.gz` | `cdb0ff1f8bcba2a6573cbc377d8ea1e31cc936b4bdb3936b0c3d3d38e469e261` |
+| `sd-image-sorter-v3.11.0-release-manifest.json` | `40185d84b21a40f8a2fbd2e6dc5ae5b5252010a2a41584dee26583cb393a97bd` |
 
 The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
